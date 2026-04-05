@@ -58,9 +58,7 @@ if (!bridge || typeof bridge.startWorker !== 'function') {
   throw new Error('window.bridge is unavailable')
 }
 
-bridge.startWorker(workerSpecifier)
-state.rpc = createRpcClient()
-void bootstrap()
+void startDesktop()
 
 bridge.onWorkerStderr(workerSpecifier, (data) => {
   statusEl.textContent = `Worker error: ${decoder.decode(data)}`
@@ -267,6 +265,22 @@ async function bootstrap() {
     render()
   } catch (error) {
     statusEl.textContent = `Init failed: ${error.message}`
+  }
+}
+
+async function startDesktop() {
+  try {
+    await withTimeout(
+      Promise.resolve(bridge.startWorker(workerSpecifier)),
+      15000,
+      'Worker start request timed out'
+    )
+
+    state.rpc = createRpcClient()
+    statusEl.textContent = 'Worker started. Initializing...'
+    await bootstrap()
+  } catch (error) {
+    statusEl.textContent = `Worker start failed: ${error.message || String(error)}`
   }
 }
 

@@ -6,7 +6,10 @@ async function run() {
   const storage = Bare.argv[2]
   const updaterConfig = JSON.parse(Bare.argv[3] || '{}')
   const baseRoot = updaterConfig.dev ? os.tmpdir() : storage
-  const baseName = updaterConfig.dev ? 'pear-drops-desktop-dev' : 'peardrops'
+  const launchSuffix = String(updaterConfig.launchId || '').replace(/[^a-zA-Z0-9_-]/g, '')
+  const baseName = updaterConfig.dev
+    ? `pear-drops-desktop-dev-${launchSuffix || 'default'}`
+    : 'peardrops'
 
   await bootstrapTransferWorker({
     ipc: Bare.IPC,

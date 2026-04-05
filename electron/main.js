@@ -122,7 +122,8 @@ function getWorker(specifier) {
     version: pkg.version,
     upgrade: pkg.upgrade,
     relayUrl: cmd.flags.relay || 'ws://localhost:49443',
-    storage: path.join(appDir, 'app-storage')
+    storage: path.join(appDir, 'app-storage'),
+    launchId: `${Date.now()}-${process.pid}`
   }
 
   const worker = PearRuntime.run(workerPath, [updaterConfig.storage, JSON.stringify(updaterConfig)])
