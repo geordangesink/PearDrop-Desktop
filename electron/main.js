@@ -29,11 +29,7 @@ function sanitizeCliArgs(argv) {
   for (let i = 0; i < input.length; i++) {
     const value = String(input[i] || '')
 
-    if (
-      value === '--updates' ||
-      value === '--no-updates' ||
-      value.startsWith('--updates=')
-    ) {
+    if (value === '--updates' || value === '--no-updates' || value.startsWith('--updates=')) {
       if (value === '--updates' && i + 1 < input.length && !String(input[i + 1]).startsWith('-')) {
         i++
       }

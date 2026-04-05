@@ -56,50 +56,54 @@ test('backend upload and download flow saves expected file bytes', async (t) => 
   assert.equal(roomOnlyFile, 'desktop transfer payload')
 })
 
-test('cross-backend room join/download works with flockmanager invite flow', { timeout: 60000 }, async (t) => {
-  const tn = await createTestnet(10)
-  const hostDir = await fs.mkdtemp(path.join(os.tmpdir(), 'peardrops-desktop-host-'))
-  const clientDir = await fs.mkdtemp(path.join(os.tmpdir(), 'peardrops-desktop-client-'))
-  const host = new TransferBackend({
-    baseDir: hostDir,
-    swarmOptions: { bootstrap: tn.bootstrap }
-  })
-  const client = new TransferBackend({
-    baseDir: clientDir,
-    swarmOptions: { bootstrap: tn.bootstrap }
-  })
+test(
+  'cross-backend room join/download works with flockmanager invite flow',
+  { timeout: 60000 },
+  async (t) => {
+    const tn = await createTestnet(10)
+    const hostDir = await fs.mkdtemp(path.join(os.tmpdir(), 'peardrops-desktop-host-'))
+    const clientDir = await fs.mkdtemp(path.join(os.tmpdir(), 'peardrops-desktop-client-'))
+    const host = new TransferBackend({
+      baseDir: hostDir,
+      swarmOptions: { bootstrap: tn.bootstrap }
+    })
+    const client = new TransferBackend({
+      baseDir: clientDir,
+      swarmOptions: { bootstrap: tn.bootstrap }
+    })
 
-  t.after(async () => {
-    await client.close()
-    await host.close()
-    await tn.destroy()
-    await fs.rm(hostDir, { recursive: true, force: true })
-    await fs.rm(clientDir, { recursive: true, force: true })
-  })
+    t.after(async () => {
+      await client.close()
+      await host.close()
+      await tn.destroy()
+      await fs.rm(hostDir, { recursive: true, force: true })
+      await fs.rm(clientDir, { recursive: true, force: true })
+    })
 
-  await host.ready()
-  await client.ready()
+    await host.ready()
+    await client.ready()
 
-  const payload = b4a.from('cross backend desktop payload').toString('base64')
-  const upload = await host.createUpload({
-    files: [
-      {
-        name: 'cross.txt',
-        mimeType: 'text/plain',
-        dataBase64: payload
-      }
-    ]
-  })
+    const payload = b4a.from('cross backend desktop payload').toString('base64')
+    const upload = await host.createUpload({
+      files: [
+        {
+          name: 'cross.txt',
+          mimeType: 'text/plain',
+          dataBase64: payload
+        }
+      ]
+    })
 
-  const roomOnlyInviteUrl = new URL(upload.invite)
-  roomOnlyInviteUrl.searchParams.delete('drive')
+    const roomOnlyInviteUrl = new URL(upload.invite)
+    roomOnlyInviteUrl.searchParams.delete('drive')
 
-  const downloaded = await client.download({
-    invite: roomOnlyInviteUrl.toString(),
-    targetDir: path.join(clientDir, 'room-download')
-  })
+    const downloaded = await client.download({
+      invite: roomOnlyInviteUrl.toString(),
+      targetDir: path.join(clientDir, 'room-download')
+    })
 
-  assert.equal(downloaded.files.length, 1)
-  const file = await fs.readFile(downloaded.files[0].path, 'utf8')
-  assert.equal(file, 'cross backend desktop payload')
-})
+    assert.equal(downloaded.files.length, 1)
+    const file = await fs.readFile(downloaded.files[0].path, 'utf8')
+    assert.equal(file, 'cross backend desktop payload')
+  }
+)

@@ -23,7 +23,6 @@ Optional flags:
 npm start -- --storage /custom/path --relay ws://localhost:49443
 ```
 
-
 ## Test
 
 ```bash

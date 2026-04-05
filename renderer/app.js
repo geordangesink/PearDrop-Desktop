@@ -413,9 +413,11 @@ function renderRows(files) {
       <td>
         <button class="mini-btn" data-action="star" data-id="${file.id}">${starred ? 'Unstar' : 'Star'}</button>
         <button class="mini-btn" data-action="copy" data-id="${file.id}">Copy invite</button>
-        ${deleted
-          ? `<button class="mini-btn" data-action="restore" data-id="${file.id}">Restore</button>`
-          : `<button class="mini-btn" data-action="delete" data-id="${file.id}">Delete</button>`}
+        ${
+          deleted
+            ? `<button class="mini-btn" data-action="restore" data-id="${file.id}">Restore</button>`
+            : `<button class="mini-btn" data-action="delete" data-id="${file.id}">Delete</button>`
+        }
       </td>
     `
 
@@ -434,20 +436,31 @@ function selectByView(view) {
   const all = state.files
 
   if (view === 'deleted') {
-    return all.filter((file) => state.deleted.has(file.id)).sort((a, b) => b.updatedAt - a.updatedAt)
+    return all
+      .filter((file) => state.deleted.has(file.id))
+      .sort((a, b) => b.updatedAt - a.updatedAt)
   }
 
   const active = all.filter((file) => !state.deleted.has(file.id))
 
   switch (view) {
     case 'recent':
-      return active.slice().sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 20)
+      return active
+        .slice()
+        .sort((a, b) => b.updatedAt - a.updatedAt)
+        .slice(0, 20)
     case 'starred':
-      return active.filter((file) => state.starred.has(file.id)).sort((a, b) => b.updatedAt - a.updatedAt)
+      return active
+        .filter((file) => state.starred.has(file.id))
+        .sort((a, b) => b.updatedAt - a.updatedAt)
     case 'shared':
-      return active.filter((file) => file.source === 'upload').sort((a, b) => b.updatedAt - a.updatedAt)
+      return active
+        .filter((file) => file.source === 'upload')
+        .sort((a, b) => b.updatedAt - a.updatedAt)
     case 'offline':
-      return active.filter((file) => file.source === 'download').sort((a, b) => b.updatedAt - a.updatedAt)
+      return active
+        .filter((file) => file.source === 'download')
+        .sort((a, b) => b.updatedAt - a.updatedAt)
     case 'home':
     case 'all-files':
     default:
@@ -507,10 +520,7 @@ function formatDate(value) {
 }
 
 function escapeHtml(value) {
-  return String(value)
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
+  return String(value).replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')
 }
 
 function readFileAsPayload(file) {
