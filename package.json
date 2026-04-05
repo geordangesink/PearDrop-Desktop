@@ -1,0 +1,48 @@
+{
+  "name": "pear-drops-desktop",
+  "productName": "Pear Drops",
+  "version": "0.1.0",
+  "upgrade": "pear://updates-disabled",
+  "description": "Native-first desktop uploader/downloader for Pear Drops",
+  "license": "Apache-2.0",
+  "author": "",
+  "type": "commonjs",
+  "main": "electron/main.js",
+  "private": true,
+  "scripts": {
+    "lint": "prettier --check . && lunte",
+    "format": "prettier --write . && lunte --fix",
+    "start": "electron-forge start -- --no-updates",
+    "package": "electron-forge package",
+    "make:darwin": "electron-forge make --platform=darwin",
+    "make:win32": "electron-forge make --platform=win32",
+    "make:linux": "electron-forge package && ./scripts/build-app-image.sh",
+    "test": "node --test test/*.test.js"
+  },
+  "dependencies": {
+    "@peardrops/native-shared": "file:../native-shared",
+    "bare-path": "^3.0.0",
+    "bare-rpc": "^1.1.0",
+    "corestore": "^7.9.1",
+    "hyperswarm": "^4.17.0",
+    "paparam": "^1.10.0",
+    "pear-runtime": "^1.0.1",
+    "which-runtime": "^1.3.2"
+  },
+  "devDependencies": {
+    "@electron-forge/cli": "^7.11.1",
+    "@electron-forge/maker-deb": "^7.11.1",
+    "@electron-forge/maker-dmg": "^7.11.1",
+    "@electron-forge/maker-msix": "^7.11.1",
+    "@electron-forge/maker-rpm": "^7.11.1",
+    "@electron-forge/maker-zip": "^7.11.1",
+    "app-builder-lib": "^26.8.1",
+    "electron": "^40.2.1",
+    "electron-forge-plugin-prune-prebuilds": "^1.0.0",
+    "electron-forge-plugin-universal-prebuilds": "^1.0.0",
+    "lunte": "^1.6.0",
+    "prettier": "^3.8.1",
+    "prettier-config-holepunch": "^2.0.0",
+    "hyperdht": "^6.19.1"
+  }
+}

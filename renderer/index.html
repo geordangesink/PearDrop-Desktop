@@ -1,0 +1,331 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Pear Drops</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #121212;
+        --bg-soft: #1a1a1a;
+        --panel: #161616;
+        --border: #2a2a2a;
+        --text: #f1f3f4;
+        --muted: #a4a7ad;
+        --accent: #2f7df6;
+        --ok: #36b37e;
+        --warn: #ff9f1c;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font-family: 'Avenir Next', 'SF Pro Text', 'Segoe UI', sans-serif;
+        height: 100vh;
+        overflow: hidden;
+      }
+
+      .app {
+        display: grid;
+        grid-template-columns: 260px 1fr;
+        height: 100vh;
+      }
+
+      .sidebar {
+        border-right: 1px solid var(--border);
+        background: linear-gradient(180deg, #1b1b1b, #141414 70%);
+        padding: 18px 12px;
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+      }
+
+      .brand {
+        font-size: 20px;
+        font-weight: 700;
+        padding: 6px 12px;
+      }
+
+      .nav-group-title {
+        color: var(--muted);
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        padding: 0 12px;
+      }
+
+      .nav-item {
+        width: 100%;
+        border: 0;
+        background: transparent;
+        color: var(--text);
+        text-align: left;
+        padding: 10px 12px;
+        border-radius: 10px;
+        cursor: pointer;
+        font-size: 16px;
+      }
+
+      .nav-item:hover {
+        background: #222;
+      }
+
+      .nav-item.active {
+        background: #2b2b2b;
+        font-weight: 600;
+      }
+
+      .sidebar-foot {
+        margin-top: auto;
+        padding: 12px;
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .main {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+      }
+
+      .topbar {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 14px 18px;
+        border-bottom: 1px solid var(--border);
+      }
+
+      .primary-btn,
+      .secondary-btn,
+      .mini-btn {
+        border: 1px solid transparent;
+        border-radius: 10px;
+        padding: 9px 14px;
+        font-weight: 600;
+        cursor: pointer;
+        font-size: 14px;
+      }
+
+      .primary-btn {
+        background: var(--accent);
+        color: #fff;
+      }
+
+      .secondary-btn {
+        background: #242424;
+        color: var(--text);
+        border-color: #3a3a3a;
+      }
+
+      .mini-btn {
+        background: #252525;
+        color: var(--muted);
+        border-color: #3a3a3a;
+        padding: 5px 10px;
+        font-size: 12px;
+      }
+
+      .search {
+        flex: 1;
+        background: #151515;
+        border: 1px solid #323232;
+        color: var(--text);
+        border-radius: 12px;
+        padding: 10px 12px;
+        min-width: 100px;
+      }
+
+      .content {
+        padding: 20px 18px;
+        overflow: auto;
+        min-width: 0;
+      }
+
+      .content-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 14px;
+        margin-bottom: 12px;
+      }
+
+      .content-title {
+        margin: 0;
+        font-size: 36px;
+        line-height: 1.1;
+      }
+
+      .content-sub {
+        margin: 4px 0 0;
+        color: var(--muted);
+      }
+
+      .filters {
+        display: flex;
+        gap: 8px;
+        margin-bottom: 14px;
+      }
+
+      .table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 14px;
+      }
+
+      .table th,
+      .table td {
+        padding: 12px 8px;
+        border-bottom: 1px solid #2a2a2a;
+        vertical-align: middle;
+      }
+
+      .table th {
+        color: var(--muted);
+        font-weight: 600;
+        text-align: left;
+      }
+
+      .name-col {
+        width: 42%;
+      }
+
+      .actions-col {
+        width: 180px;
+      }
+
+      .row-muted {
+        color: var(--muted);
+      }
+
+      .badge {
+        display: inline-block;
+        font-size: 12px;
+        border: 1px solid #3a3a3a;
+        border-radius: 999px;
+        padding: 2px 8px;
+        color: var(--muted);
+      }
+
+      .status {
+        margin-top: 12px;
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .invite-box {
+        width: 100%;
+        margin-top: 14px;
+        background: #171717;
+        border: 1px solid #343434;
+        border-radius: 12px;
+        color: var(--text);
+        min-height: 72px;
+        padding: 10px;
+      }
+
+      .home-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+        gap: 12px;
+      }
+
+      .home-card {
+        border: 1px solid #2f2f2f;
+        border-radius: 14px;
+        background: #161616;
+        padding: 14px;
+      }
+
+      .home-card h3 {
+        margin: 0 0 6px;
+      }
+
+      .home-card p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .hidden {
+        display: none !important;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="app">
+      <aside class="sidebar">
+        <div class="brand">Pear Drops</div>
+
+        <div class="nav-group-title">Home</div>
+        <button class="nav-item" data-view="home">Home</button>
+
+        <div class="nav-group-title">Files</div>
+        <button class="nav-item active" data-view="all-files">All files</button>
+        <button class="nav-item" data-view="recent">Recent</button>
+        <button class="nav-item" data-view="starred">Starred</button>
+        <button class="nav-item" data-view="shared">Shared</button>
+        <button class="nav-item" data-view="offline">Offline</button>
+        <button class="nav-item" data-view="deleted">Deleted files</button>
+
+        <div class="sidebar-foot">
+          Native-first transfer workspace.
+          <div id="transfer-count">0 transfers indexed</div>
+        </div>
+      </aside>
+
+      <section class="main">
+        <header class="topbar">
+          <button id="new-upload" class="primary-btn">+ New</button>
+          <input id="search" class="search" placeholder="Search files" />
+          <button id="download-action" class="secondary-btn">Download</button>
+          <button id="copy-invite" class="secondary-btn">Copy invite</button>
+          <input id="file-picker" type="file" multiple class="hidden" />
+        </header>
+
+        <div class="content">
+          <div class="content-head">
+            <div>
+              <h1 id="section-title" class="content-title">All files</h1>
+              <p id="section-subtitle" class="content-sub">Everything you uploaded or downloaded.</p>
+            </div>
+            <div class="filters">
+              <button id="open-web" class="mini-btn">Open web client</button>
+              <button id="clear-deleted" class="mini-btn">Empty deleted</button>
+            </div>
+          </div>
+
+          <div id="home-view" class="home-grid hidden"></div>
+
+          <div id="list-view">
+            <table class="table">
+              <thead>
+                <tr>
+                  <th class="name-col">Name</th>
+                  <th>Last modified</th>
+                  <th>Size</th>
+                  <th>Access</th>
+                  <th class="actions-col">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="file-rows"></tbody>
+            </table>
+          </div>
+
+          <textarea id="invite-input" class="invite-box" placeholder="Paste peardrops://invite link"></textarea>
+          <textarea id="invite-output" class="invite-box" readonly placeholder="Latest invite appears here"></textarea>
+          <p id="status" class="status">Starting worker...</p>
+        </div>
+      </section>
+    </main>
+    <script src="./app.js"></script>
+  </body>
+</html>
