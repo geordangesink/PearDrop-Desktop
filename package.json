@@ -20,6 +20,7 @@
     "test": "node --test test/*.test.js"
   },
   "dependencies": {
+    "@hyperswarm/dht-relay": "^0.4.3",
     "@peardrops/native-shared": "file:../native-shared",
     "bare-path": "^3.0.0",
     "bare-rpc": "^1.1.0",
@@ -40,9 +41,9 @@
     "electron": "^40.2.1",
     "electron-forge-plugin-prune-prebuilds": "^1.0.0",
     "electron-forge-plugin-universal-prebuilds": "^1.0.0",
+    "hyperdht": "^6.19.1",
     "lunte": "^1.6.0",
     "prettier": "^3.8.1",
-    "prettier-config-holepunch": "^2.0.0",
-    "hyperdht": "^6.19.1"
+    "prettier-config-holepunch": "^2.0.0"
   }
 }

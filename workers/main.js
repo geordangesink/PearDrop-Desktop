@@ -6,10 +6,11 @@ async function run() {
   const storage = Bare.argv[2]
   const updaterConfig = JSON.parse(Bare.argv[3] || '{}')
   const baseRoot = updaterConfig.dev ? os.tmpdir() : storage
+  const baseName = updaterConfig.dev ? 'pear-drops-desktop-dev' : 'peardrops'
 
   await bootstrapTransferWorker({
     ipc: Bare.IPC,
-    baseDir: path.join(baseRoot, 'peardrops'),
+    baseDir: path.join(baseRoot, baseName),
     updaterConfig,
     relayUrl: updaterConfig.relayUrl || ''
   })

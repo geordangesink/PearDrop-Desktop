@@ -1,6 +1,7 @@
 /* global window, document, navigator, TextDecoder, FileReader, Buffer, localStorage */
 
 const RPC = require('bare-rpc')
+const { createWebRtcHost } = require('./lib/webrtc-host')
 
 const RpcCommand = {
   INIT: 0,
@@ -8,7 +9,8 @@ const RpcCommand = {
   CREATE_UPLOAD: 2,
   GET_MANIFEST: 3,
   DOWNLOAD: 4,
-  SHUTDOWN: 5
+  SHUTDOWN: 5,
+  READ_ENTRY: 6
 }
 
 const workerSpecifier = '/workers/main.js'
@@ -43,6 +45,8 @@ const state = {
   view: 'all-files',
   search: '',
   latestInvite: '',
+  latestWebLink: '',
+  webRtcHost: null,
   transfers: [],
   files: loadFilesFromPrefs(),
   starred: new Set(loadSet('peardrops.desktop.starred')),
@@ -103,8 +107,10 @@ filePicker.addEventListener('change', async () => {
 
   try {
     const response = await state.rpc.request(RpcCommand.CREATE_UPLOAD, payload)
-    state.latestInvite = response.invite
-    inviteOutputEl.value = response.invite
+    state.latestInvite = response.nativeInvite || response.invite
+    state.latestWebLink = response.webSwarmLink || ''
+    inviteOutputEl.value = state.latestInvite
+    await ensureWebRtcHost(state.latestInvite)
 
     const now = Date.now()
     for (const entry of response.manifest || []) {
@@ -115,7 +121,7 @@ filePicker.addEventListener('change', async () => {
         updatedAt: now,
         access: 'Only you',
         source: 'upload',
-        invite: response.invite
+        invite: state.latestInvite
       })
     }
 
@@ -127,6 +133,10 @@ filePicker.addEventListener('change', async () => {
   } finally {
     filePicker.value = ''
   }
+})
+
+window.addEventListener('beforeunload', () => {
+  void closeWebRtcHost()
 })
 
 downloadBtn.addEventListener('click', async () => {
@@ -187,7 +197,8 @@ copyInviteBtn.addEventListener('click', async () => {
 openWebBtn.addEventListener('click', () => {
   const invite = inviteOutputEl.value.trim() || state.latestInvite
   if (!invite) return
-  const target = `http://localhost:5173/?invite=${encodeURIComponent(invite)}`
+  const target =
+    state.latestWebLink || `http://localhost:5173/?invite=${encodeURIComponent(invite)}`
   window.open(target, '_blank')
 })
 
@@ -566,4 +577,28 @@ function createRpcClient() {
       return parsed && parsed.ok === true ? parsed.result : parsed
     }
   }
+}
+
+async function ensureWebRtcHost(invite) {
+  await closeWebRtcHost()
+
+  try {
+    state.webRtcHost = await createWebRtcHost({
+      invite,
+      rpc: state.rpc
+    })
+    state.latestWebLink = state.webRtcHost.webLink
+  } catch (error) {
+    state.latestWebLink = ''
+    statusEl.textContent = `Web endpoint warning: ${error.message || String(error)}`
+  }
+}
+
+async function closeWebRtcHost() {
+  if (!state.webRtcHost) return
+  const host = state.webRtcHost
+  state.webRtcHost = null
+  try {
+    await host.close()
+  } catch {}
 }
