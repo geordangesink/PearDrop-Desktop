@@ -10,6 +10,8 @@ const { isDeepLink, findDeepLink } = require('./lib/deep-link')
 
 const appName = pkg.productName || pkg.name
 const protocol = 'peardrops'
+const DEFAULT_DEV_RELAY = 'ws://localhost:49443'
+const DEFAULT_PROD_RELAY = 'wss://pear-drops.up.railway.app'
 const workers = new Map()
 const pendingDeepLinks = []
 let isQuitting = false
@@ -109,6 +111,7 @@ function getWorker(specifier) {
 
   const appDir = resolveBaseDir()
   const workerPath = path.resolve(__dirname, '..' + specifier)
+  const relayUrl = resolveRelayUrl()
   const updaterConfig = {
     dir: appDir,
     app: getAppPath(),
@@ -117,7 +120,7 @@ function getWorker(specifier) {
     updates: false,
     version: pkg.version,
     upgrade: pkg.upgrade,
-    relayUrl: cmd.flags.relay || 'ws://localhost:49443',
+    relayUrl,
     storage: path.join(appDir, 'app-storage'),
     launchId: `${Date.now()}-${process.pid}`
   }
@@ -147,6 +150,16 @@ function getWorker(specifier) {
 
   workers.set(specifier, worker)
   return worker
+}
+
+function resolveRelayUrl() {
+  const cliRelay = String(cmd.flags.relay || '').trim()
+  if (cliRelay) return cliRelay
+
+  const envRelay = String(process.env.PEARDROPS_RELAY_URL || '').trim()
+  if (envRelay) return envRelay
+
+  return app.isPackaged ? DEFAULT_PROD_RELAY : DEFAULT_DEV_RELAY
 }
 
 async function createWindow() {
