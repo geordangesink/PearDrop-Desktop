@@ -1,3 +1,5 @@
+/* global RTCPeerConnection */
+
 const b4a = require('b4a')
 const DHT = require('@hyperswarm/dht-relay')
 const RelayStream = require('@hyperswarm/dht-relay/ws')

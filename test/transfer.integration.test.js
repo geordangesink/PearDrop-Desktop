@@ -31,6 +31,11 @@ test('backend upload and download flow saves expected file bytes', async (t) => 
 
   assert.ok(upload.invite.startsWith('peardrops://invite'))
   assert.ok(upload.invite.includes('room='))
+  assert.match(upload.hostSession.sessionLabel, /^Host Session \d{4}-\d{2}-\d{2} [0-9a-f]{4}$/)
+
+  const activeHosts = await backend.listActiveHosts()
+  assert.equal(activeHosts.hosts.length, 1)
+  assert.equal(activeHosts.hosts[0].invite, upload.invite)
 
   const manifest = await backend.getManifest({ invite: upload.invite })
   assert.equal(manifest.files.length, 1)
@@ -54,6 +59,17 @@ test('backend upload and download flow saves expected file bytes', async (t) => 
   assert.equal(roomOnly.files.length, 1)
   const roomOnlyFile = await fs.readFile(roomOnly.files[0].path, 'utf8')
   assert.equal(roomOnlyFile, 'desktop transfer payload')
+
+  const stopped = await backend.stopHost({ invite: upload.invite })
+  assert.equal(stopped.stopped, true)
+  assert.equal((await backend.listActiveHosts()).hosts.length, 0)
+
+  const restarted = await backend.startHostFromTransfer({
+    transferId: upload.transfer.id,
+    sessionName: 'Rehost'
+  })
+  assert.match(restarted.hostSession.sessionLabel, /^Rehost \d{4}-\d{2}-\d{2} [0-9a-f]{4}$/)
+  assert.equal((await backend.listActiveHosts()).hosts.length, 1)
 })
 
 test(

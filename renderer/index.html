@@ -14,14 +14,10 @@
         --text: #f1f3f4;
         --muted: #a4a7ad;
         --accent: #2f7df6;
-        --ok: #36b37e;
-        --warn: #ff9f1c;
       }
-
       * {
         box-sizing: border-box;
       }
-
       body {
         margin: 0;
         background: var(--bg);
@@ -30,13 +26,11 @@
         height: 100vh;
         overflow: hidden;
       }
-
       .app {
         display: grid;
         grid-template-columns: 260px 1fr;
         height: 100vh;
       }
-
       .sidebar {
         border-right: 1px solid var(--border);
         background: linear-gradient(180deg, #1b1b1b, #141414 70%);
@@ -45,13 +39,11 @@
         flex-direction: column;
         gap: 16px;
       }
-
       .brand {
         font-size: 20px;
         font-weight: 700;
         padding: 6px 12px;
       }
-
       .nav-group-title {
         color: var(--muted);
         font-size: 12px;
@@ -59,7 +51,6 @@
         letter-spacing: 0.06em;
         padding: 0 12px;
       }
-
       .nav-item {
         width: 100%;
         border: 0;
@@ -71,16 +62,13 @@
         cursor: pointer;
         font-size: 16px;
       }
-
       .nav-item:hover {
         background: #222;
       }
-
       .nav-item.active {
         background: #2b2b2b;
         font-weight: 600;
       }
-
       .sidebar-foot {
         margin-top: auto;
         padding: 12px;
@@ -89,13 +77,11 @@
         color: var(--muted);
         font-size: 13px;
       }
-
       .main {
         display: flex;
         flex-direction: column;
         min-width: 0;
       }
-
       .topbar {
         display: flex;
         align-items: center;
@@ -103,7 +89,6 @@
         padding: 14px 18px;
         border-bottom: 1px solid var(--border);
       }
-
       .primary-btn,
       .secondary-btn,
       .mini-btn {
@@ -114,18 +99,15 @@
         cursor: pointer;
         font-size: 14px;
       }
-
       .primary-btn {
         background: var(--accent);
         color: #fff;
       }
-
       .secondary-btn {
         background: #242424;
         color: var(--text);
         border-color: #3a3a3a;
       }
-
       .mini-btn {
         background: #252525;
         color: var(--muted);
@@ -133,7 +115,11 @@
         padding: 5px 10px;
         font-size: 12px;
       }
-
+      .danger-btn {
+        border-color: #6a2727;
+        background: #311818;
+        color: #ff9f9f;
+      }
       .search {
         flex: 1;
         background: #151515;
@@ -141,15 +127,23 @@
         color: var(--text);
         border-radius: 12px;
         padding: 10px 12px;
-        min-width: 100px;
       }
-
+      .folder-select {
+        background: #1d1d1d;
+        color: var(--text);
+        border: 1px solid #3a3a3a;
+        border-radius: 10px;
+        padding: 8px 10px;
+      }
+      .folder-select.active-filter {
+        border-color: #64a0ff;
+        box-shadow: 0 0 0 1px rgba(100, 160, 255, 0.35);
+      }
       .content {
         padding: 20px 18px;
         overflow: auto;
         min-width: 0;
       }
-
       .content-head {
         display: flex;
         align-items: center;
@@ -157,70 +151,199 @@
         gap: 14px;
         margin-bottom: 12px;
       }
-
+      .head-left {
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+      }
+      .back-btn {
+        margin-top: 4px;
+      }
       .content-title {
         margin: 0;
         font-size: 36px;
         line-height: 1.1;
       }
-
       .content-sub {
         margin: 4px 0 0;
         color: var(--muted);
       }
-
       .filters {
         display: flex;
         gap: 8px;
         margin-bottom: 14px;
       }
-
+      .bulk-bar {
+        margin: 0 0 12px;
+        padding: 10px 12px;
+        border: 1px solid #333;
+        border-radius: 12px;
+        background: #171717;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+      .bulk-note {
+        color: var(--muted);
+        margin-right: 8px;
+      }
       .table {
         width: 100%;
         border-collapse: collapse;
         font-size: 14px;
       }
-
       .table th,
       .table td {
         padding: 12px 8px;
         border-bottom: 1px solid #2a2a2a;
         vertical-align: middle;
+        text-align: left;
       }
-
       .table th {
         color: var(--muted);
         font-weight: 600;
-        text-align: left;
       }
-
+      .check-col {
+        width: 44px;
+      }
+      .preview-col {
+        width: 84px;
+      }
       .name-col {
         width: 42%;
       }
-
       .actions-col {
-        width: 180px;
+        width: 150px;
       }
-
       .row-muted {
         color: var(--muted);
       }
-
-      .badge {
-        display: inline-block;
+      .preview {
+        width: 56px;
+        height: 56px;
+        border-radius: 10px;
+        overflow: hidden;
+        border: 1px solid #353535;
+        background: #222;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #c0c4cb;
         font-size: 12px;
-        border: 1px solid #3a3a3a;
-        border-radius: 999px;
-        padding: 2px 8px;
-        color: var(--muted);
       }
-
-      .status {
-        margin-top: 12px;
+      .preview-btn {
+        border: 0;
+        padding: 0;
+        background: transparent;
+        cursor: pointer;
+      }
+      .preview img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+      .preview-video {
+        font-size: 20px;
+      }
+      .home-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+        gap: 12px;
+      }
+      .home-card {
+        border: 1px solid #2f2f2f;
+        border-radius: 14px;
+        background: #161616;
+        padding: 14px;
+      }
+      .home-card h3 {
+        margin: 0 0 6px;
+      }
+      .home-card p {
+        margin: 0;
         color: var(--muted);
         font-size: 13px;
       }
-
+      .actions-wrap {
+        display: inline-flex;
+        gap: 6px;
+        align-items: center;
+      }
+      .icon-btn {
+        width: 30px;
+        height: 30px;
+        border-radius: 8px;
+        border: 1px solid #3b3b3b;
+        background: #1f1f1f;
+        color: #d6d8dc;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        font-size: 14px;
+      }
+      .icon-btn.starred {
+        color: #ffd25f;
+      }
+      .icon-btn.delete {
+        color: #ff7b7b;
+      }
+      .icon-svg {
+        width: 14px;
+        height: 14px;
+        stroke: currentColor;
+        fill: none;
+        stroke-width: 1.8;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+      .menu {
+        position: relative;
+      }
+      .menu-panel {
+        position: absolute;
+        top: 32px;
+        right: 0;
+        min-width: 160px;
+        border: 1px solid #353535;
+        border-radius: 10px;
+        background: #1a1a1a;
+        box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35);
+        padding: 6px;
+        z-index: 10;
+      }
+      .menu-item {
+        width: 100%;
+        text-align: left;
+        background: transparent;
+        color: #d9dde5;
+        border: 0;
+        border-radius: 8px;
+        padding: 8px 10px;
+        cursor: pointer;
+      }
+      .menu-item:hover {
+        background: #272727;
+      }
+      .folder-list {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+      .folder-item {
+        border: 0;
+        background: transparent;
+        color: var(--muted);
+        text-align: left;
+        padding: 8px 12px;
+        border-radius: 8px;
+        cursor: pointer;
+      }
+      .folder-item:hover {
+        background: #252525;
+        color: var(--text);
+      }
       .invite-box {
         width: 100%;
         margin-top: 14px;
@@ -231,32 +354,130 @@
         min-height: 72px;
         padding: 10px;
       }
-
-      .home-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-        gap: 12px;
-      }
-
-      .home-card {
-        border: 1px solid #2f2f2f;
-        border-radius: 14px;
-        background: #161616;
-        padding: 14px;
-      }
-
-      .home-card h3 {
-        margin: 0 0 6px;
-      }
-
-      .home-card p {
-        margin: 0;
+      .status {
+        margin-top: 12px;
         color: var(--muted);
-        font-size: 13px;
       }
-
       .hidden {
         display: none !important;
+      }
+      .preview-overlay {
+        position: fixed;
+        inset: 0;
+        display: grid;
+        grid-template-columns: 260px 1fr;
+        z-index: 1000;
+      }
+      .preview-overlay-backdrop {
+        background: rgba(0, 0, 0, 0.62);
+      }
+      .preview-overlay-main {
+        background: rgba(15, 15, 15, 0.96);
+        border-left: 1px solid #3a3a3a;
+        display: flex;
+        flex-direction: column;
+      }
+      .preview-overlay-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 12px 16px;
+        border-bottom: 1px solid #323232;
+      }
+      .preview-overlay-title {
+        font-weight: 700;
+      }
+      .preview-overlay-close {
+        width: 30px;
+        height: 30px;
+        border-radius: 8px;
+        border: 1px solid #4a4a4a;
+        background: #1e1e1e;
+        color: #eee;
+        cursor: pointer;
+      }
+      .preview-overlay-body {
+        flex: 1;
+        padding: 18px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .preview-frame {
+        width: min(92%, 1200px);
+        height: min(92%, 820px);
+        border: 2px solid #555;
+        border-radius: 16px;
+        background: #141414;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+      }
+      .preview-frame img,
+      .preview-frame video {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+        background: #111;
+      }
+      .preview-frame-fallback {
+        text-align: center;
+        color: #c9ced8;
+        padding: 20px;
+      }
+      .folder-modal {
+        position: fixed;
+        inset: 0;
+        z-index: 1200;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .folder-modal-backdrop {
+        position: absolute;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.55);
+      }
+      .folder-modal-card {
+        position: relative;
+        width: min(520px, 92vw);
+        border: 1px solid #383838;
+        background: #151515;
+        border-radius: 14px;
+        padding: 14px;
+        z-index: 1;
+      }
+      .folder-modal-title {
+        font-size: 18px;
+        font-weight: 700;
+        margin-bottom: 10px;
+      }
+      .folder-options {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-bottom: 12px;
+      }
+      .folder-pill {
+        border: 1px solid #404040;
+        background: #232323;
+        color: #d6d9df;
+        border-radius: 999px;
+        padding: 7px 11px;
+        cursor: pointer;
+      }
+      .folder-new-row {
+        display: flex;
+        gap: 8px;
+      }
+      .folder-new-input {
+        flex: 1;
+        background: #101010;
+        color: #e7e9ee;
+        border: 1px solid #3b3b3b;
+        border-radius: 10px;
+        padding: 9px 11px;
       }
     </style>
   </head>
@@ -264,18 +485,16 @@
     <main class="app">
       <aside class="sidebar">
         <div class="brand">Pear Drops</div>
-
         <div class="nav-group-title">Home</div>
         <button class="nav-item" data-view="home">Home</button>
-
         <div class="nav-group-title">Files</div>
         <button class="nav-item active" data-view="all-files">All files</button>
         <button class="nav-item" data-view="recent">Recent</button>
         <button class="nav-item" data-view="starred">Starred</button>
-        <button class="nav-item" data-view="shared">Shared</button>
-        <button class="nav-item" data-view="offline">Offline</button>
+        <button class="nav-item" data-view="host">Host</button>
         <button class="nav-item" data-view="deleted">Deleted files</button>
-
+        <div class="nav-group-title">Folders</div>
+        <div id="folder-list" class="folder-list"></div>
         <div class="sidebar-foot">
           Native-first transfer workspace.
           <div id="transfer-count">0 transfers indexed</div>
@@ -284,8 +503,12 @@
 
       <section class="main">
         <header class="topbar">
-          <button id="new-upload" class="primary-btn">+ New</button>
+          <button id="new-upload" class="primary-btn">+ Add Files</button>
+          <button id="host-selected" class="secondary-btn">Host Upload</button>
           <input id="search" class="search" placeholder="Search files" />
+          <select id="folder-filter" class="folder-select">
+            <option value="">All folders</option>
+          </select>
           <button id="download-action" class="secondary-btn">Download</button>
           <button id="copy-invite" class="secondary-btn">Copy invite</button>
           <input id="file-picker" type="file" multiple class="hidden" />
@@ -293,14 +516,16 @@
 
         <div class="content">
           <div class="content-head">
-            <div>
-              <h1 id="section-title" class="content-title">All files</h1>
-              <p id="section-subtitle" class="content-sub">
-                Everything you uploaded or downloaded.
-              </p>
+            <div class="head-left">
+              <button id="section-back" class="mini-btn back-btn hidden">← Back</button>
+              <div>
+                <h1 id="section-title" class="content-title">All files</h1>
+                <p id="section-subtitle" class="content-sub">
+                  Everything in your local transfer workspace.
+                </p>
+              </div>
             </div>
             <div class="filters">
-              <button id="open-web" class="mini-btn">Open web client</button>
               <button id="clear-deleted" class="mini-btn">Empty deleted</button>
             </div>
           </div>
@@ -308,18 +533,42 @@
           <div id="home-view" class="home-grid hidden"></div>
 
           <div id="list-view">
+            <div id="bulk-bar" class="bulk-bar hidden">
+              <span id="bulk-note" class="bulk-note">0 selected</span>
+              <button id="bulk-invite" class="mini-btn">Host Upload</button>
+              <button id="bulk-star" class="mini-btn" title="Star / Unstar selected">☆</button>
+              <button id="bulk-delete" class="mini-btn danger-btn" title="Delete selected">
+                <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M3 6h18" />
+                  <path d="M8 6V4h8v2" />
+                  <path d="M7 6l1 14h8l1-14" />
+                  <path d="M10 10v7" />
+                  <path d="M14 10v7" />
+                </svg>
+              </button>
+              <button id="bulk-folder" class="mini-btn">Put In Folder</button>
+            </div>
+
             <table class="table">
               <thead>
                 <tr>
+                  <th class="check-col"><input id="check-all" type="checkbox" /></th>
+                  <th class="preview-col">Preview</th>
                   <th class="name-col">Name</th>
                   <th>Last modified</th>
                   <th>Size</th>
-                  <th>Access</th>
                   <th class="actions-col">Actions</th>
                 </tr>
               </thead>
               <tbody id="file-rows"></tbody>
             </table>
+            <div id="list-footer" class="filters">
+              <button id="load-more" class="mini-btn hidden">Load more</button>
+            </div>
+            <div id="folder-actions" class="filters hidden">
+              <button id="remove-from-folder" class="mini-btn">Remove Selected From Folder</button>
+              <button id="delete-folder" class="mini-btn danger-btn">Delete Folder</button>
+            </div>
           </div>
 
           <textarea
@@ -337,6 +586,48 @@
         </div>
       </section>
     </main>
+    <div id="preview-overlay" class="preview-overlay hidden">
+      <div id="preview-backdrop" class="preview-overlay-backdrop"></div>
+      <div class="preview-overlay-main">
+        <div class="preview-overlay-head">
+          <div id="preview-title" class="preview-overlay-title"></div>
+          <button id="preview-close" class="preview-overlay-close">✕</button>
+        </div>
+        <div class="preview-overlay-body">
+          <div id="preview-frame" class="preview-frame"></div>
+        </div>
+      </div>
+    </div>
+    <div id="folder-modal" class="folder-modal hidden">
+      <div id="folder-modal-backdrop" class="folder-modal-backdrop"></div>
+      <div class="folder-modal-card">
+        <div class="folder-modal-title">Put In Folder</div>
+        <div id="folder-options" class="folder-options"></div>
+        <div class="folder-new-row">
+          <input
+            id="folder-new-input"
+            class="folder-new-input"
+            placeholder="Create new folder name"
+          />
+          <button id="folder-create-btn" class="secondary-btn">Create</button>
+          <button id="folder-cancel-btn" class="mini-btn">Cancel</button>
+        </div>
+      </div>
+    </div>
+    <div id="host-modal" class="folder-modal hidden">
+      <div id="host-modal-backdrop" class="folder-modal-backdrop"></div>
+      <div class="folder-modal-card">
+        <div class="folder-modal-title">Host Upload</div>
+        <div class="row-muted" style="margin-bottom: 10px">
+          Session name (final label adds date + 4-char hex).
+        </div>
+        <div class="folder-new-row">
+          <input id="host-name-input" class="folder-new-input" placeholder="Host Session" />
+          <button id="host-submit-btn" class="secondary-btn">Start</button>
+          <button id="host-cancel-btn" class="mini-btn">Cancel</button>
+        </div>
+      </div>
+    </div>
     <script src="./app.js"></script>
   </body>
 </html>
