@@ -8,7 +8,7 @@ const api = {
     return ipcRenderer.invoke('pear:startWorker', specifier)
   },
   writeWorkerIPC(specifier, data) {
-    return ipcRenderer.invoke(`pear:worker:writeIPC:${specifier}`, data)
+    return ipcRenderer.invoke('pear:worker:writeIPC', specifier, data)
   },
   onWorkerIPC(specifier, listener) {
     const wrap = (evt, data) => listener(Buffer.from(data))
@@ -29,6 +29,20 @@ const api = {
     const wrap = (evt, url) => listener(String(url || ''))
     ipcRenderer.on('app:deep-link', wrap)
     return () => ipcRenderer.removeListener('app:deep-link', wrap)
+  },
+  onAppQuitting(listener) {
+    const wrap = (evt, payload) => listener(payload || {})
+    ipcRenderer.on('app:quitting', wrap)
+    return () => ipcRenderer.removeListener('app:quitting', wrap)
+  },
+  pickDirectory() {
+    return ipcRenderer.invoke('app:pickDirectory')
+  },
+  pickFiles() {
+    return ipcRenderer.invoke('app:pickFiles')
+  },
+  getDownloadsPath() {
+    return ipcRenderer.invoke('app:getDownloadsPath')
   }
 }
 

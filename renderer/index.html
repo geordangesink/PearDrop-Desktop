@@ -15,6 +15,16 @@
         --muted: #a4a7ad;
         --accent: #2f7df6;
       }
+      body.theme-light {
+        color-scheme: light;
+        --bg: #f4f5f7;
+        --bg-soft: #ffffff;
+        --panel: #ffffff;
+        --border: #d8dce3;
+        --text: #171a21;
+        --muted: #5e6675;
+        --accent: #2f7df6;
+      }
       * {
         box-sizing: border-box;
       }
@@ -81,6 +91,8 @@
         display: flex;
         flex-direction: column;
         min-width: 0;
+        min-height: 0;
+        overflow: hidden;
       }
       .topbar {
         display: flex;
@@ -88,6 +100,54 @@
         gap: 12px;
         padding: 14px 18px;
         border-bottom: 1px solid var(--border);
+      }
+      .theme-select {
+        background: #1d1d1d;
+        color: var(--text);
+        border: 1px solid #3a3a3a;
+        border-radius: 10px;
+        padding: 8px 10px;
+      }
+      body.theme-light .theme-select,
+      body.theme-light .folder-select,
+      body.theme-light .search {
+        background: #fff;
+        border-color: #c8cfdb;
+      }
+      body.theme-light .sidebar {
+        background: linear-gradient(180deg, #f0f2f6, #e9edf3 70%);
+      }
+      body.theme-light .nav-item:hover {
+        background: #e4e9f1;
+      }
+      body.theme-light .nav-item.active {
+        background: #dce4f1;
+      }
+      body.theme-light .secondary-btn,
+      body.theme-light .mini-btn,
+      body.theme-light .rowBtn,
+      body.theme-light .icon-btn {
+        background: #f3f5f9;
+        border-color: #c8cfdb;
+      }
+      body.theme-light .bulk-bar,
+      body.theme-light .activity-panel,
+      body.theme-light .menu-panel,
+      body.theme-light .table th,
+      body.theme-light .table td,
+      body.theme-light .preview,
+      body.theme-light .folder-modal-card,
+      body.theme-light .host-card,
+      body.theme-light .home-card,
+      body.theme-light .customize-card {
+        background: #fff;
+        border-color: #d8dce3;
+      }
+      body.theme-light .status {
+        color: #3d4a63;
+      }
+      body.theme-light .worker-log {
+        color: #5e6675;
       }
       .primary-btn,
       .secondary-btn,
@@ -140,6 +200,8 @@
         box-shadow: 0 0 0 1px rgba(100, 160, 255, 0.35);
       }
       .content {
+        flex: 1;
+        min-height: 0;
         padding: 20px 18px;
         overflow: auto;
         min-width: 0;
@@ -183,6 +245,13 @@
         align-items: center;
         gap: 8px;
         flex-wrap: wrap;
+      }
+      .activity-panel {
+        margin: 0 0 12px;
+        border: 1px solid #343434;
+        border-radius: 12px;
+        background: #171717;
+        padding: 10px 12px;
       }
       .bulk-note {
         color: var(--muted);
@@ -344,22 +413,127 @@
         background: #252525;
         color: var(--text);
       }
+      .folder-item.active {
+        background: #2b2b2b;
+        color: var(--text);
+        font-weight: 600;
+      }
+      body.theme-light .folder-item.active {
+        background: #dce4f1;
+      }
       .invite-box {
-        width: 100%;
         margin-top: 14px;
-        background: #171717;
         border: 1px solid #343434;
         border-radius: 12px;
+        background: #171717;
+        padding: 10px 12px;
+      }
+      .invite-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .copy-feedback {
+        color: #7bb0ff;
+        font-size: 12px;
+        font-weight: 600;
+      }
+      .invite-text {
+        flex: 1;
         color: var(--text);
-        min-height: 72px;
-        padding: 10px;
+        word-break: break-all;
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 12px;
+      }
+      .icon-copy {
+        width: 14px;
+        height: 14px;
+        stroke: currentColor;
+        fill: none;
+        stroke-width: 1.8;
+        stroke-linecap: round;
+        stroke-linejoin: round;
       }
       .status {
-        margin-top: 12px;
+        margin: 8px 0 0;
         color: var(--muted);
+      }
+      .worker-log {
+        margin: 6px 0 0;
+        color: #8fa3c7;
+        font-size: 12px;
+        white-space: pre-wrap;
+      }
+      .activity-bars {
+        margin: 8px 0 0;
+        display: grid;
+        gap: 8px;
+      }
+      .activity-progress-label {
+        color: var(--muted);
+        font-size: 12px;
+        margin-bottom: 4px;
+      }
+      .activity-progress-sub {
+        color: #8fa3c7;
+        font-size: 11px;
+        margin: -2px 0 4px;
+      }
+      .activity-progress-track {
+        width: 100%;
+        height: 8px;
+        border-radius: 999px;
+        background: #2a2d35;
+        overflow: hidden;
+      }
+      .activity-progress-fill {
+        height: 100%;
+        width: 0%;
+        background: var(--accent);
+        transition: width 120ms ease;
       }
       .hidden {
         display: none !important;
+      }
+      .shutdown-overlay {
+        position: fixed;
+        inset: 0;
+        z-index: 3000;
+        background: rgba(10, 11, 14, 0.96);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .shutdown-card {
+        width: min(520px, 92vw);
+        border: 1px solid #3a3d44;
+        border-radius: 14px;
+        background: #16181d;
+        padding: 24px;
+        text-align: center;
+      }
+      .shutdown-title {
+        margin: 0;
+        font-size: 28px;
+        font-weight: 700;
+        color: #f1f3f4;
+      }
+      .shutdown-sub {
+        margin: 8px 0 0;
+        color: #aab2c2;
+      }
+      body.theme-light .shutdown-overlay {
+        background: rgba(236, 240, 246, 0.92);
+      }
+      body.theme-light .shutdown-card {
+        background: #ffffff;
+        border-color: #cfd7e6;
+      }
+      body.theme-light .shutdown-title {
+        color: #111726;
+      }
+      body.theme-light .shutdown-sub {
+        color: #4f5e79;
       }
       .preview-overlay {
         position: fixed;
@@ -504,13 +678,21 @@
       <section class="main">
         <header class="topbar">
           <button id="new-upload" class="primary-btn">+ Add Files</button>
-          <button id="host-selected" class="secondary-btn">Host Upload</button>
-          <input id="search" class="search" placeholder="Search files" />
+          <input
+            id="search"
+            class="search"
+            placeholder="Search files or paste invite to view drive"
+          />
+          <button id="search-action" class="secondary-btn">Search</button>
+          <select id="theme-mode" class="theme-select">
+            <option value="system">Theme: System</option>
+            <option value="dark">Theme: Dark</option>
+            <option value="light">Theme: Light</option>
+          </select>
           <select id="folder-filter" class="folder-select">
             <option value="">All folders</option>
           </select>
-          <button id="download-action" class="secondary-btn">Download</button>
-          <button id="copy-invite" class="secondary-btn">Copy invite</button>
+          <button id="download-action" class="secondary-btn">View Drive</button>
           <input id="file-picker" type="file" multiple class="hidden" />
         </header>
 
@@ -548,6 +730,34 @@
               </button>
               <button id="bulk-folder" class="mini-btn">Put In Folder</button>
             </div>
+            <div id="invite-download-bar" class="bulk-bar hidden">
+              <span id="invite-download-note" class="bulk-note">0 selected</span>
+              <button id="download-selected-default" class="mini-btn">Download Selected</button>
+              <button id="download-selected-peardrops" class="mini-btn">Add Selected To App</button>
+              <button id="download-selected-both" class="mini-btn">Add Drive As Folder</button>
+            </div>
+            <div id="host-history-bar" class="bulk-bar hidden">
+              <span id="host-history-note" class="bulk-note">0 selected</span>
+              <button id="host-history-start" class="mini-btn">Start Hosting</button>
+              <button id="host-history-remove" class="mini-btn danger-btn">
+                Remove From History
+              </button>
+            </div>
+            <div class="activity-panel">
+              <div id="invite-row" class="invite-row hidden">
+                <div id="invite-output-text" class="invite-text"></div>
+                <button id="copy-invite" class="mini-btn" title="Copy invite">
+                  <svg class="icon-copy" viewBox="0 0 24 24" aria-hidden="true">
+                    <rect x="9" y="9" width="11" height="11" rx="2" />
+                    <rect x="4" y="4" width="11" height="11" rx="2" />
+                  </svg>
+                </button>
+                <span id="copy-feedback" class="copy-feedback hidden">Copied</span>
+              </div>
+              <p id="status" class="status">Starting worker...</p>
+              <p id="worker-log" class="worker-log">Worker logs: waiting for events.</p>
+              <div id="worker-activity-bars" class="activity-bars hidden"></div>
+            </div>
 
             <table class="table">
               <thead>
@@ -570,19 +780,6 @@
               <button id="delete-folder" class="mini-btn danger-btn">Delete Folder</button>
             </div>
           </div>
-
-          <textarea
-            id="invite-input"
-            class="invite-box"
-            placeholder="Paste peardrops://invite link"
-          ></textarea>
-          <textarea
-            id="invite-output"
-            class="invite-box"
-            readonly
-            placeholder="Latest invite appears here"
-          ></textarea>
-          <p id="status" class="status">Starting worker...</p>
         </div>
       </section>
     </main>
@@ -626,6 +823,12 @@
           <button id="host-submit-btn" class="secondary-btn">Start</button>
           <button id="host-cancel-btn" class="mini-btn">Cancel</button>
         </div>
+      </div>
+    </div>
+    <div id="shutdown-overlay" class="shutdown-overlay hidden">
+      <div class="shutdown-card">
+        <h2 class="shutdown-title">Shutting Down</h2>
+        <p id="shutdown-message" class="shutdown-sub">Closing worker and saving runtime state...</p>
       </div>
     </div>
     <script src="./app.js"></script>

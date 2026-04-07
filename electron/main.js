@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain } = require('electron')
+const { app, BrowserWindow, ipcMain, dialog } = require('electron')
 const os = require('os')
 const path = require('path')
 const PearRuntime = require('pear-runtime')
@@ -13,6 +13,7 @@ const protocol = 'peardrops'
 const DEFAULT_DEV_RELAY = 'ws://localhost:49443'
 const DEFAULT_PROD_RELAY = 'wss://pear-drops.up.railway.app'
 const workers = new Map()
+const exitedWorkers = new WeakSet()
 const pendingDeepLinks = []
 let isQuitting = false
 let workersShuttingDown = null
@@ -36,6 +37,15 @@ function sanitizeCliArgs(argv) {
         i++
       }
       continue
+    }
+
+    if ((value === '--relay' || value === '--storage') && i + 1 < input.length) {
+      const next = String(input[i + 1] || '')
+      if (next && !next.startsWith('-')) {
+        output.push(`${value}=${next}`)
+        i++
+        continue
+      }
     }
 
     output.push(input[i])
@@ -77,7 +87,6 @@ async function shutdownWorkers() {
           }
         })
       )
-      ipcMain.removeHandler(`pear:worker:writeIPC:${specifier}`)
     }
 
     await Promise.all(pending)
@@ -131,16 +140,12 @@ function getWorker(specifier) {
   const onStderr = (data) => sendToAll(`pear:worker:stderr:${specifier}`, data)
   const onIPC = (data) => sendToAll(`pear:worker:ipc:${specifier}`, data)
 
-  ipcMain.handle(`pear:worker:writeIPC:${specifier}`, (evt, data) => {
-    return worker.write(normalizeBuffer(data))
-  })
-
   worker.on('data', onIPC)
   worker.stdout.on('data', onStdout)
   worker.stderr.on('data', onStderr)
 
   worker.once('exit', (code) => {
-    ipcMain.removeHandler(`pear:worker:writeIPC:${specifier}`)
+    exitedWorkers.add(worker)
     worker.removeListener('data', onIPC)
     worker.stdout.removeListener('data', onStdout)
     worker.stderr.removeListener('data', onStderr)
@@ -203,6 +208,43 @@ ipcMain.handle('pear:startWorker', async (evt, filename) => {
   return true
 })
 
+ipcMain.handle('pear:worker:writeIPC', async (evt, filename, data) => {
+  const specifier = String(filename || '')
+  const worker = workers.get(specifier)
+  if (!worker || exitedWorkers.has(worker)) return false
+  try {
+    return worker.write(normalizeBuffer(data))
+  } catch {
+    return false
+  }
+})
+
+ipcMain.handle('app:pickDirectory', async () => {
+  const win = BrowserWindow.getFocusedWindow() || BrowserWindow.getAllWindows()[0]
+  const result = await dialog.showOpenDialog(win, {
+    properties: ['openDirectory', 'createDirectory']
+  })
+  if (result.canceled || !Array.isArray(result.filePaths) || result.filePaths.length === 0) {
+    return ''
+  }
+  return String(result.filePaths[0] || '')
+})
+
+ipcMain.handle('app:pickFiles', async () => {
+  const win = BrowserWindow.getFocusedWindow() || BrowserWindow.getAllWindows()[0]
+  const result = await dialog.showOpenDialog(win, {
+    properties: ['openFile', 'multiSelections']
+  })
+  if (result.canceled || !Array.isArray(result.filePaths) || result.filePaths.length === 0) {
+    return []
+  }
+  return result.filePaths.map((value) => String(value || '')).filter(Boolean)
+})
+
+ipcMain.handle('app:getDownloadsPath', async () => {
+  return app.getPath('downloads')
+})
+
 app.setAsDefaultProtocolClient(protocol)
 
 app.on('open-url', (evt, url) => {
@@ -230,6 +272,7 @@ if (!lock) {
     if (isQuitting) return
     evt.preventDefault()
     isQuitting = true
+    sendToAll('app:quitting', { message: 'Shutting down Pear Drops...' })
     shutdownWorkers()
       .catch((error) => {
         console.error('Failed while shutting down workers', error)

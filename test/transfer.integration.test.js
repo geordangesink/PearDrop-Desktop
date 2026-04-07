@@ -68,7 +68,9 @@ test('backend upload and download flow saves expected file bytes', async (t) => 
     transferId: upload.transfer.id,
     sessionName: 'Rehost'
   })
-  assert.match(restarted.hostSession.sessionLabel, /^Rehost \d{4}-\d{2}-\d{2} [0-9a-f]{4}$/)
+  assert.equal(restarted.nativeInvite, upload.invite)
+  assert.equal(restarted.hostSession.sessionName, upload.transfer.sessionName)
+  assert.equal(restarted.hostSession.sessionLabel, upload.transfer.sessionLabel)
   assert.equal((await backend.listActiveHosts()).hosts.length, 1)
 })
 

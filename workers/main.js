@@ -11,9 +11,15 @@ async function run() {
     ? `pear-drops-desktop-dev-${launchSuffix || 'default'}`
     : 'peardrops'
 
+  const metadataRoot = updaterConfig.dev ? os.tmpdir() : storage || baseRoot
+  const metadataName = updaterConfig.dev
+    ? `pear-drops-desktop-history-dev-${launchSuffix || 'default'}`
+    : 'pear-drops-desktop-history'
+
   await bootstrapTransferWorker({
     ipc: Bare.IPC,
     baseDir: path.join(baseRoot, baseName),
+    metadataDir: path.join(metadataRoot, metadataName),
     updaterConfig,
     relayUrl: updaterConfig.relayUrl || ''
   })

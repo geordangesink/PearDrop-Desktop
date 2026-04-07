@@ -13,7 +13,7 @@
     "lint": "prettier --check . && lunte",
     "format": "prettier --write . && lunte --fix",
     "start": "electron-forge start -- --no-updates",
-    "start:prod-relay": "electron-forge start -- --no-updates --relay wss://pear-drops.up.railway.app",
+    "start:prod-relay": "PEARDROPS_RELAY_URL=wss://pear-drops.up.railway.app electron-forge start -- --no-updates",
     "package": "electron-forge package",
     "make:darwin": "electron-forge make --platform=darwin",
     "make:win32": "electron-forge make --platform=win32",
