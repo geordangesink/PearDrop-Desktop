@@ -47,10 +47,14 @@ jobs:
           $msi = Get-ChildItem -Path out -Recurse -Filter *.msi |
             Sort-Object Length -Descending |
             Select-Object -First 1
-          if (-not $msi) { throw "No .msi installer found." }
 
           Copy-Item $exe.FullName "$publishDir/PearDrop-Setup-$version.exe" -Force
-          Copy-Item $msi.FullName "$publishDir/PearDrop-Setup-$version.msi" -Force
+          if ($msi) {
+            Copy-Item $msi.FullName "$publishDir/PearDrop-Setup-$version.msi" -Force
+            Write-Host "MSI found and published."
+          } else {
+            Write-Host "No MSI found. Publishing EXE only."
+          }
 
           Write-Host "Published artifacts:"
           Get-ChildItem $publishDir | ForEach-Object { Write-Host $_.FullName }
@@ -66,6 +70,7 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
+          fail_on_unmatched_files: false
           files: |
             out/publish/PearDrop-Setup-*.exe
             out/publish/PearDrop-Setup-*.msi
