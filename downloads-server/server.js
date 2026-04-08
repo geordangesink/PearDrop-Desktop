@@ -40,6 +40,41 @@ app.put('/upload', async (req, res) => {
   }
 })
 
+app.post('/promote-latest', express.json({ limit: '32kb' }), async (req, res) => {
+  try {
+    if (!uploadToken || req.header('x-upload-token') !== uploadToken) {
+      return res.status(401).send('unauthorized')
+    }
+
+    const source = safeRelativePath(req.body?.source)
+    const target = safeRelativePath(req.body?.target)
+    if (!source || !target) return res.status(400).send('invalid path')
+
+    const sourceAbs = path.join(activeDownloadRoot, source)
+    const targetAbs = path.join(activeDownloadRoot, target)
+    if (!sourceAbs.startsWith(activeDownloadRoot) || !targetAbs.startsWith(activeDownloadRoot)) {
+      return res.status(400).send('invalid path')
+    }
+
+    await fsp.access(sourceAbs)
+    await fsp.mkdir(path.dirname(targetAbs), { recursive: true })
+    await fsp.rm(targetAbs, { force: true })
+
+    try {
+      // Prefer hard-linking to avoid duplicating large installer files on disk.
+      await fsp.link(sourceAbs, targetAbs)
+    } catch {
+      // Fallback when linking is unavailable.
+      await fsp.copyFile(sourceAbs, targetAbs)
+    }
+
+    return res.status(201).send('ok')
+  } catch (error) {
+    if (error && error.code === 'ENOENT') return res.status(404).send('source not found')
+    return res.status(500).send('error')
+  }
+})
+
 app.get('/downloads/*', (req, res) => {
   const relative = safeRelativePath(req.path.replace(/^\/downloads\//, ''))
   if (!relative) return res.status(400).send('invalid path')

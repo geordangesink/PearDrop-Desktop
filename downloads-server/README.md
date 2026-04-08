@@ -12,6 +12,7 @@ Minimal upload + static download service for hosting installers without redirect
 
 - `GET /health` -> health check
 - `PUT /upload?path=<relative/path>` -> upload a file (requires `x-upload-token`)
+- `POST /promote-latest` -> create/update latest alias from a versioned file (requires `x-upload-token`)
 - `GET /downloads/<relative/path>` -> serve uploaded file
 
 ## Railway Setup
@@ -36,4 +37,13 @@ curl -X PUT \
 
 ```bash
 curl -I "https://<your-service>.up.railway.app/downloads/win32/v0.1.0/PearDrop-Setup-0.1.0.exe"
+```
+
+## Promote Example
+
+```bash
+curl -X POST "https://<your-service>.up.railway.app/promote-latest" \
+  -H "content-type: application/json" \
+  -H "x-upload-token: <UPLOAD_TOKEN>" \
+  --data '{"source":"win32/v0.1.0/PearDrop-Setup-0.1.0.exe","target":"win32/latest/PearDrop-Setup.exe"}'
 ```

@@ -233,24 +233,49 @@ jobs:
             fi
           }
 
+          promote_latest() {
+            src="$1"
+            dst="$2"
+            echo "Promoting $src -> $dst"
+            curl --fail --silent --show-error \
+              -X POST "${DOWNLOADS_UPLOAD_URL}/promote-latest" \
+              -H "content-type: application/json" \
+              -H "x-upload-token: ${DOWNLOADS_UPLOAD_TOKEN}" \
+              --data "{\"source\":\"${src}\",\"target\":\"${dst}\"}"
+            echo "Promoted $src -> $dst"
+          }
+
+          promote_latest_optional() {
+            src="$1"
+            dst="$2"
+            echo "Promoting (optional) $src -> $dst"
+            if curl --fail --silent --show-error \
+              -X POST "${DOWNLOADS_UPLOAD_URL}/promote-latest" \
+              -H "content-type: application/json" \
+              -H "x-upload-token: ${DOWNLOADS_UPLOAD_TOKEN}" \
+              --data "{\"source\":\"${src}\",\"target\":\"${dst}\"}"; then
+              echo "Promoted $src -> $dst"
+            else
+              echo "Optional promote failed for $src -> $dst (continuing)"
+            fi
+          }
+
           # Windows (required versioned uploads)
           upload "release-assets/PearDrop-Setup-${version}.exe" "win32/v${version}/PearDrop-Setup-${version}.exe"
           upload "release-assets/PearDrop-Setup-${version}.msi" "win32/v${version}/PearDrop-Setup-${version}.msi"
-          # Windows (optional latest uploads)
-          upload_optional "release-assets/PearDrop-Setup.exe" "win32/latest/PearDrop-Setup.exe"
-          upload_optional "release-assets/PearDrop-Setup.msi" "win32/latest/PearDrop-Setup.msi"
+          # Windows latest aliases (no duplicate upload)
+          promote_latest "win32/v${version}/PearDrop-Setup-${version}.exe" "win32/latest/PearDrop-Setup.exe"
+          promote_latest_optional "win32/v${version}/PearDrop-Setup-${version}.msi" "win32/latest/PearDrop-Setup.msi"
 
-          # macOS (required versioned uploads)
+          # macOS (required versioned upload + latest alias)
           upload "release-assets/PearDrop-${version}.dmg" "macos/v${version}/PearDrop-${version}.dmg"
-          # macOS (optional latest uploads)
-          upload_optional "release-assets/PearDrop.dmg" "macos/latest/PearDrop.dmg"
+          promote_latest "macos/v${version}/PearDrop-${version}.dmg" "macos/latest/PearDrop.dmg"
 
-          # Linux (required versioned uploads)
+          # Linux (required versioned upload + latest alias)
           if [ -f "release-assets/PearDrop.AppImage" ]; then chmod +x "release-assets/PearDrop.AppImage"; fi
           if [ -f "release-assets/PearDrop-${version}.AppImage" ]; then chmod +x "release-assets/PearDrop-${version}.AppImage"; fi
           upload "release-assets/PearDrop-${version}.AppImage" "linux/v${version}/PearDrop-${version}.AppImage"
-          # Linux (optional latest uploads)
-          upload_optional "release-assets/PearDrop.AppImage" "linux/latest/PearDrop.AppImage"
+          promote_latest "linux/v${version}/PearDrop-${version}.AppImage" "linux/latest/PearDrop.AppImage"
 
       - name: Move main-latest tag to current commit
         if: github.ref == 'refs/heads/main'
