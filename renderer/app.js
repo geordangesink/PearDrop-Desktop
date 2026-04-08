@@ -27,6 +27,7 @@ const RpcCommand = {
 const SOURCES_KEY = 'peardrops.desktop.sources.v1'
 const HISTORY_KEY = 'peardrops.desktop.host-history.v1'
 const STARRED_HOSTS_KEY = 'peardrops.desktop.starred-hosts.v1'
+const PUBLIC_SITE_ORIGIN = 'https://pear-drops.vercel.app'
 const workerSpecifier = '/workers/main.js'
 const bridge = window.bridge
 const decoder = new TextDecoder('utf8')
@@ -416,7 +417,7 @@ function wireUiEvents() {
     const action = String(actionNode?.getAttribute('data-action') || '')
 
     if (action === 'copy') {
-      void copyToClipboard(invite)
+      void copyToClipboard(toShareableInvite(invite) || invite)
       flashCopyFeedback(`host:${invite}`)
       return
     }
@@ -480,7 +481,7 @@ function wireUiEvents() {
     const action = String(actionNode?.getAttribute('data-action') || '')
 
     if (action === 'copy') {
-      void copyToClipboard(invite)
+      void copyToClipboard(toShareableInvite(invite) || invite)
       flashCopyFeedback(`starred:${invite}`)
       return
     }
@@ -1109,7 +1110,9 @@ async function refreshActiveHosts() {
 }
 
 async function copySelectedHosts() {
-  const invites = Array.from(state.selectedHosts).filter(Boolean)
+  const invites = Array.from(state.selectedHosts)
+    .map((invite) => toShareableInvite(invite) || String(invite || '').trim())
+    .filter(Boolean)
   if (!invites.length) {
     setStatus('Select at least one active host first.')
     return
@@ -1500,8 +1503,16 @@ function normalizePathList(value) {
 function normalizeInvite(raw) {
   const text = String(raw || '').trim()
   if (!text) return ''
-  if (text.startsWith('peardrops://invite') || text.startsWith('peardrops-web://join')) {
-    return text
+  if (text.startsWith('peardrops://invite')) return text
+  if (text.startsWith('peardrops-web://join')) {
+    try {
+      const parsed = new URL(text)
+      const nested = parsed.searchParams.get('invite')
+      if (nested && nested.startsWith('peardrops://invite')) return nested
+      if (parsed.search) return `peardrops://invite${parsed.search}`
+    } catch {
+      return ''
+    }
   }
   try {
     const parsed = new URL(text)
@@ -1509,6 +1520,12 @@ function normalizeInvite(raw) {
     if (nested && nested.startsWith('peardrops://invite')) return nested
   } catch {}
   return ''
+}
+
+function toShareableInvite(rawInvite) {
+  const nativeInvite = normalizeInvite(rawInvite)
+  if (!nativeInvite) return ''
+  return `${PUBLIC_SITE_ORIGIN}/open/?invite=${encodeURIComponent(nativeInvite)}`
 }
 
 function parseSessionLabel(label) {
