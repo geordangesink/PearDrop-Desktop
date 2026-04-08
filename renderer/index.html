@@ -160,14 +160,35 @@
       .btn.icon.icon-danger {
         color: #ff6f6f;
       }
-      .mini-bin {
-        width: 13px;
-        height: 13px;
-        stroke: currentColor;
-        fill: none;
-        stroke-width: 1.8;
-        stroke-linecap: round;
-        stroke-linejoin: round;
+      .mini-trash {
+        width: 14px;
+        height: 14px;
+        display: inline-flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: flex-start;
+      }
+      .mini-trash-lid {
+        width: 10px;
+        height: 2px;
+        background: currentColor;
+        border-radius: 1px;
+        margin-bottom: 1px;
+      }
+      .mini-trash-body {
+        width: 9px;
+        height: 9px;
+        border: 1.5px solid currentColor;
+        border-radius: 1.5px;
+        display: flex;
+        justify-content: center;
+        gap: 1px;
+      }
+      .mini-trash-line {
+        width: 1.2px;
+        height: 5.2px;
+        background: currentColor;
+        margin-top: 1px;
       }
       .mini-spinner {
         width: 12px;
@@ -652,7 +673,7 @@
             <button id="history-select-toggle" class="btn alt">Select All</button>
             <button id="history-rehost-selected" class="btn icon" title="Re-host Selected" aria-label="Re-host Selected">▶</button>
             <button id="history-remove-selected" class="btn alt icon icon-danger" title="Remove Selected" aria-label="Remove Selected">
-              <svg class="mini-bin" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16"/><path d="M9 7V5h6v2"/><path d="M8 7l1 12h6l1-12"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
+              <span class="mini-trash" aria-hidden="true"><span class="mini-trash-lid"></span><span class="mini-trash-body"><span class="mini-trash-line"></span><span class="mini-trash-line"></span></span></span>
             </button>
           </div>
         </div>

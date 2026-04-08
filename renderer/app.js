@@ -32,7 +32,7 @@ const bridge = window.bridge
 const decoder = new TextDecoder('utf8')
 const workerActivityBars = new Map()
 const BIN_ICON =
-  '<svg class="mini-bin" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16"/><path d="M9 7V5h6v2"/><path d="M8 7l1 12h6l1-12"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>'
+  '<span class="mini-trash" aria-hidden="true"><span class="mini-trash-lid"></span><span class="mini-trash-body"><span class="mini-trash-line"></span><span class="mini-trash-line"></span></span></span>'
 
 const statusEls = [
   document.getElementById('upload-status'),
