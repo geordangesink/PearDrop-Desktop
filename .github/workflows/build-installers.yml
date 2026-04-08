@@ -3,6 +3,8 @@ name: Build Installers
 on:
   workflow_dispatch:
   push:
+    branches:
+      - main
     tags:
       - 'v*'
 
@@ -49,8 +51,10 @@ jobs:
             Select-Object -First 1
 
           Copy-Item $exe.FullName "$publishDir/PearDrop-Setup-$version.exe" -Force
+          Copy-Item $exe.FullName "$publishDir/PearDrop-Setup.exe" -Force
           if ($msi) {
             Copy-Item $msi.FullName "$publishDir/PearDrop-Setup-$version.msi" -Force
+            Copy-Item $msi.FullName "$publishDir/PearDrop-Setup.msi" -Force
             Write-Host "MSI found and published."
           } else {
             Write-Host "No MSI found. Publishing EXE only."
@@ -66,11 +70,167 @@ jobs:
           path: out/publish/*
           if-no-files-found: error
 
-      - name: Publish release assets
+  linux-installers:
+    name: Linux Installer (.AppImage)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Linux build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y jq
+          chmod +x scripts/build-app-image.sh
+
+      - name: Build Linux artifacts
+        run: npm run make:linux
+
+      - name: Normalize publish filenames
+        run: |
+          version=$(node -p "require('./package.json').version")
+          publish_dir="out/publish"
+          mkdir -p "$publish_dir"
+
+          appimage="$(find out -type f -name '*.AppImage' | head -n 1)"
+          if [ -z "$appimage" ]; then
+            echo "No .AppImage found."
+            exit 1
+          fi
+
+          cp "$appimage" "$publish_dir/PearDrop-$version.AppImage"
+          cp "$appimage" "$publish_dir/PearDrop.AppImage"
+
+          echo "Published artifacts:"
+          ls -la "$publish_dir"
+
+      - name: Upload workflow artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-installers
+          path: out/publish/*
+          if-no-files-found: error
+
+  macos-installers:
+    name: macOS Installer (.dmg)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build macOS artifacts
+        run: npm run make:darwin
+
+      - name: Normalize publish filenames
+        run: |
+          version=$(node -p "require('./package.json').version")
+          publish_dir="out/publish"
+          mkdir -p "$publish_dir"
+
+          dmg="$(find out -type f -name '*.dmg' | head -n 1)"
+          if [ -z "$dmg" ]; then
+            echo "No .dmg found."
+            exit 1
+          fi
+
+          cp "$dmg" "$publish_dir/PearDrop-$version.dmg"
+          cp "$dmg" "$publish_dir/PearDrop.dmg"
+
+          echo "Published artifacts:"
+          ls -la "$publish_dir"
+
+      - name: Upload workflow artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-installers
+          path: out/publish/*
+          if-no-files-found: error
+
+  publish-release:
+    name: Publish GitHub Release Assets
+    runs-on: ubuntu-latest
+    needs:
+      - windows-installers
+      - linux-installers
+      - macos-installers
+    steps:
+      - name: Download all installer artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: '*-installers'
+          path: release-assets
+          merge-multiple: true
+
+      - name: Show collected assets
+        run: ls -la release-assets
+
+      - name: Move main-latest tag to current commit
+        if: github.ref == 'refs/heads/main'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner
+            const repo = context.repo.repo
+            const ref = 'tags/main-latest'
+            const sha = context.sha
+            try {
+              await github.rest.git.getRef({ owner, repo, ref })
+              await github.rest.git.updateRef({ owner, repo, ref, sha, force: true })
+              core.info(`Updated ${ref} -> ${sha}`)
+            } catch (error) {
+              if (error.status === 404) {
+                await github.rest.git.createRef({ owner, repo, ref: `refs/${ref}`, sha })
+                core.info(`Created refs/${ref} -> ${sha}`)
+              } else {
+                throw error
+              }
+            }
+
+      - name: Publish rolling main release
+        if: github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: main-latest
+          target_commitish: ${{ github.sha }}
+          name: Pear Drop Latest
+          prerelease: true
+          fail_on_unmatched_files: false
+          make_latest: false
+          files: |
+            release-assets/PearDrop-Setup.exe
+            release-assets/PearDrop-Setup.msi
+            release-assets/PearDrop.AppImage
+            release-assets/PearDrop.dmg
+            release-assets/PearDrop-Setup-*.exe
+            release-assets/PearDrop-Setup-*.msi
+            release-assets/PearDrop-*.AppImage
+            release-assets/PearDrop-*.dmg
+
+      - name: Publish versioned release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
           fail_on_unmatched_files: false
           files: |
-            out/publish/PearDrop-Setup-*.exe
-            out/publish/PearDrop-Setup-*.msi
+            release-assets/PearDrop-Setup.exe
+            release-assets/PearDrop-Setup.msi
+            release-assets/PearDrop.AppImage
+            release-assets/PearDrop.dmg
+            release-assets/PearDrop-Setup-*.exe
+            release-assets/PearDrop-Setup-*.msi
+            release-assets/PearDrop-*.AppImage
+            release-assets/PearDrop-*.dmg
