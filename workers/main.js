@@ -1,6 +1,6 @@
 const path = require('bare-path')
 const os = require('bare-os')
-const { bootstrapTransferWorker } = require('@peardrops/native-shared')
+const { bootstrapTransferWorker } = require('pear-drop-core')
 
 async function run() {
   const storage = Bare.argv[2]
