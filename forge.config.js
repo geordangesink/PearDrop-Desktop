@@ -5,6 +5,8 @@ const appName = pkg.productName ?? pkg.name
 const windowsSlug = String(appName).replace(/\s+/g, '')
 const { isWindows } = require('which-runtime')
 const buildMsix = process.env.BUILD_MSIX === '1'
+const windowsAuthors =
+  typeof pkg.author === 'string' && pkg.author.trim().length > 0 ? pkg.author.trim() : appName
 
 function getWindowsKitVersion() {
   const programFiles = process.env['PROGRAMFILES(X86)'] || process.env.PROGRAMFILES
@@ -60,6 +62,7 @@ const makers = [
     platforms: ['win32'],
     config: {
       name: windowsSlug,
+      authors: windowsAuthors,
       setupExe: `${windowsSlug}-Setup-${pkg.version}.exe`,
       noMsi: false
     }
