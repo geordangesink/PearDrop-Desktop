@@ -333,7 +333,7 @@ if (!lock) {
     if (isQuitting) return
     evt.preventDefault()
     isQuitting = true
-    sendToAll('app:quitting', { message: 'Shutting down Pear Drops...' })
+    sendToAll('app:quitting', { message: 'Shutting down Pear Drop...' })
     shutdownWorkers()
       .catch((error) => {
         console.error('Failed while shutting down workers', error)

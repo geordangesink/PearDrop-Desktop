@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Pear Drops</title>
+    <title>Pear Drop</title>
     <style>
       :root {
         color-scheme: dark;
@@ -146,6 +146,37 @@
         background: #311818;
         color: #ff9f9f;
         border-color: #6a2727;
+      }
+      .btn.icon {
+        min-width: 34px;
+        height: 30px;
+        padding: 0 8px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 14px;
+        line-height: 1;
+      }
+      .btn.icon.icon-danger {
+        color: #ff6f6f;
+      }
+      .mini-bin {
+        width: 13px;
+        height: 13px;
+        stroke: currentColor;
+        fill: none;
+        stroke-width: 1.8;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+      .mini-spinner {
+        width: 12px;
+        height: 12px;
+        border-radius: 999px;
+        border: 2px solid currentColor;
+        border-right-color: transparent;
+        display: inline-block;
+        animation: spin 0.8s linear infinite;
       }
       body[data-theme='light'] .btn.alt {
         background: #f3f5f9;
@@ -317,11 +348,43 @@
       .row-title {
         font-weight: 600;
       }
+      .host-hash-inline {
+        margin-left: 6px;
+        font-size: 11px;
+        font-weight: 500;
+        color: var(--muted);
+        opacity: 0.9;
+      }
       .row-sub {
         color: var(--muted);
         font-size: 12px;
         margin-top: 2px;
         word-break: break-all;
+      }
+      .host-data {
+        color: var(--muted);
+        font-size: 10px;
+        font-weight: 300;
+        margin-top: 2px;
+        line-height: 1.2;
+      }
+      .host-date {
+        color: var(--muted);
+        font-size: 10px;
+        font-weight: 300;
+        opacity: 0.86;
+        margin-top: 1px;
+        letter-spacing: 0.01em;
+        line-height: 1.15;
+      }
+      .host-hash {
+        color: var(--muted);
+        font-size: 9px;
+        font-weight: 300;
+        opacity: 0.75;
+        margin-top: 1px;
+        letter-spacing: 0.02em;
+        line-height: 1.15;
       }
       .star {
         color: var(--star);
@@ -416,6 +479,104 @@
       .hidden {
         display: none !important;
       }
+      .modal-root {
+        position: fixed;
+        inset: 0;
+        z-index: 2500;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .modal-backdrop {
+        position: absolute;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.46);
+      }
+      .modal-card {
+        position: relative;
+        width: min(440px, 90vw);
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        background: var(--card);
+        padding: 14px;
+        z-index: 1;
+      }
+      .modal-title {
+        margin: 0 0 6px;
+        font-size: 18px;
+      }
+      .modal-sub {
+        margin: 0 0 10px;
+        color: var(--muted);
+        font-size: 13px;
+      }
+      .modal-actions {
+        margin-top: 10px;
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+      }
+      .modal-packaging {
+        margin-top: 10px;
+        padding: 10px;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: var(--bg-soft);
+        position: relative;
+        padding-top: 22px;
+      }
+      .modal-packaging label {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 13px;
+        margin-bottom: 6px;
+      }
+      .modal-hint {
+        margin: 0;
+        display: inline-flex;
+        position: relative;
+        position: absolute;
+        top: 6px;
+        right: 6px;
+      }
+      .hint-badge {
+        width: 16px;
+        height: 16px;
+        border-radius: 999px;
+        border: 1px solid var(--line);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 11px;
+        font-weight: 700;
+        color: var(--muted);
+        cursor: default;
+      }
+      .hint-tooltip {
+        position: absolute;
+        top: calc(100% + 6px);
+        left: 0;
+        min-width: 250px;
+        max-width: 320px;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: var(--card);
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.35;
+        padding: 8px 10px;
+        box-shadow: 0 8px 22px rgba(0, 0, 0, 0.25);
+        opacity: 0;
+        pointer-events: none;
+        transform: translateY(-2px);
+        transition: opacity 120ms ease, transform 120ms ease;
+        z-index: 5;
+      }
+      .modal-hint:hover .hint-tooltip {
+        opacity: 1;
+        transform: translateY(0);
+      }
       @keyframes spin {
         from {
           transform: rotate(0deg);
@@ -467,12 +628,11 @@
               <div class="panel-head">
                 <h2 class="panel-title">Active Hosts</h2>
                 <div class="controls">
-                  <button id="hosts-select-toggle" class="btn alt">Select All</button>
-                  <button id="hosts-copy-selected" class="btn alt">Copy Selected</button>
-                  <button id="hosts-star-selected" class="btn alt">Star Selected</button>
-                  <button id="hosts-stop-selected" class="btn warn">Stop Selected</button>
-                </div>
+                <button id="hosts-select-toggle" class="btn alt">Select All</button>
+                <button id="hosts-copy-selected" class="btn alt icon" title="Copy Selected" aria-label="Copy Selected">⧉</button>
+                <button id="hosts-stop-selected" class="btn warn icon" title="Stop Selected" aria-label="Stop Selected">⏹</button>
               </div>
+            </div>
               <div id="hosts-rows" class="rows"></div>
             </article>
 
@@ -489,11 +649,13 @@
           <div class="panel-head">
             <h2 class="panel-title">Host History</h2>
             <div class="controls">
-              <button id="history-select-toggle" class="btn alt">Select All</button>
-              <button id="history-rehost-selected" class="btn">Re-host Selected</button>
-              <button id="history-remove-selected" class="btn warn">Remove Selected</button>
-            </div>
+            <button id="history-select-toggle" class="btn alt">Select All</button>
+            <button id="history-rehost-selected" class="btn icon" title="Re-host Selected" aria-label="Re-host Selected">▶</button>
+            <button id="history-remove-selected" class="btn alt icon icon-danger" title="Remove Selected" aria-label="Remove Selected">
+              <svg class="mini-bin" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16"/><path d="M9 7V5h6v2"/><path d="M8 7l1 12h6l1-12"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
+            </button>
           </div>
+        </div>
           <div id="history-rows" class="rows"></div>
         </section>
       </section>
@@ -536,10 +698,31 @@
 
       <input id="file-picker" type="file" multiple class="hidden" />
 
+      <section id="host-name-modal" class="modal-root hidden">
+        <div id="host-name-backdrop" class="modal-backdrop"></div>
+        <div class="modal-card">
+          <h3 class="modal-title">Host session name</h3>
+          <p class="modal-sub">Choose a name for this host session.</p>
+          <input id="host-name-input" class="input" value="Host Session" />
+          <div class="modal-packaging">
+            <div class="modal-hint">
+              <span class="hint-badge">i</span>
+              <div class="hint-tooltip">Zip is recommended when sharing apps (like <code>.app</code>) or folders containing nested folders.</div>
+            </div>
+            <label><input type="radio" name="host-packaging" value="zip" checked> Zip package (Recommended)</label>
+            <label><input type="radio" name="host-packaging" value="raw"> Raw files</label>
+          </div>
+          <div class="modal-actions">
+            <button id="host-name-cancel" class="btn alt">Cancel</button>
+            <button id="host-name-submit" class="btn">Start</button>
+          </div>
+        </div>
+      </section>
+
       <section id="shutdown-overlay" class="shutdown-overlay hidden">
         <div class="shutdown-card">
           <h2 class="shutdown-title">Shutting Down</h2>
-          <p id="shutdown-message" class="shutdown-sub">Closing Pear Drops safely</p>
+          <p id="shutdown-message" class="shutdown-sub">Closing Pear Drop safely</p>
           <div class="shutdown-spinner" aria-hidden="true"></div>
         </div>
       </section>

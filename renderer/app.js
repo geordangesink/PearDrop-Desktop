@@ -5,6 +5,10 @@ const fs = require('fs/promises')
 const nodeFs = require('fs')
 const nodePath = require('path')
 const { pathToFileURL } = require('url')
+const os = require('os')
+const { execFile } = require('child_process')
+const { promisify } = require('util')
+const execFileAsync = promisify(execFile)
 
 const RpcCommand = {
   INIT: 0,
@@ -27,6 +31,8 @@ const workerSpecifier = '/workers/main.js'
 const bridge = window.bridge
 const decoder = new TextDecoder('utf8')
 const workerActivityBars = new Map()
+const BIN_ICON =
+  '<svg class="mini-bin" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16"/><path d="M9 7V5h6v2"/><path d="M8 7l1 12h6l1-12"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>'
 
 const statusEls = [
   document.getElementById('upload-status'),
@@ -75,6 +81,11 @@ const historyRehostSelectedBtn = document.getElementById('history-rehost-selecte
 const historyRemoveSelectedBtn = document.getElementById('history-remove-selected')
 
 const filePicker = document.getElementById('file-picker')
+const hostNameModalEl = document.getElementById('host-name-modal')
+const hostNameBackdropEl = document.getElementById('host-name-backdrop')
+const hostNameInputEl = document.getElementById('host-name-input')
+const hostNameCancelBtn = document.getElementById('host-name-cancel')
+const hostNameSubmitBtn = document.getElementById('host-name-submit')
 const shutdownOverlayEl = document.getElementById('shutdown-overlay')
 const shutdownMessageEl = document.getElementById('shutdown-message')
 
@@ -89,11 +100,18 @@ const state = {
   starredHosts: new Set(loadJson(STARRED_HOSTS_KEY, [])),
   inviteEntries: [],
   inviteSelected: new Set(),
+  expandedDriveFolders: new Set(),
+  runningHistoryByInvite: new Map(),
+  rehostingHistoryIds: new Set(),
+  stoppingInvites: new Set(),
   inviteSource: '',
   themeMode: 'system',
   sourceMenuOpen: false,
   currentTab: 'upload'
 }
+let pendingHostNameResolve = null
+let copyFeedbackTimer = null
+let activeCopyFeedbackKey = ''
 
 if (!bridge || typeof bridge.startWorker !== 'function') {
   setStatus('Desktop bridge failed to load. Check preload configuration.')
@@ -126,6 +144,7 @@ function wireGlobalEvents() {
   })
 
   bridge.onAppQuitting?.((payload) => {
+    finalizeSessionsFromActiveHosts(state.activeHosts)
     const message = String(payload?.message || '').trim()
     if (shutdownMessageEl && message) shutdownMessageEl.textContent = message
     shutdownOverlayEl?.classList.remove('hidden')
@@ -209,7 +228,32 @@ function wireUiEvents() {
     setStatus(`Removed ${removed} source entr${removed === 1 ? 'y' : 'ies'}.`)
   })
 
-  hostSelectedBtn.addEventListener('click', () => void hostSelectedSources())
+  hostSelectedBtn.addEventListener('click', async () => {
+    const options = await promptForHostOptions('Host Session')
+    if (options === null) return
+    void hostSelectedSources(options.sessionName, options.packaging)
+  })
+
+  hostNameBackdropEl?.addEventListener('click', () => resolveHostNamePrompt(null))
+  hostNameCancelBtn?.addEventListener('click', () => resolveHostNamePrompt(null))
+  hostNameSubmitBtn?.addEventListener('click', () => {
+    const next = String(hostNameInputEl?.value || '').trim() || 'Host Session'
+    const packaging = readHostPackagingMode()
+    resolveHostNamePrompt({ sessionName: next, packaging })
+  })
+  hostNameInputEl?.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault()
+      const next = String(hostNameInputEl?.value || '').trim() || 'Host Session'
+      const packaging = readHostPackagingMode()
+      resolveHostNamePrompt({ sessionName: next, packaging })
+      return
+    }
+    if (event.key === 'Escape') {
+      event.preventDefault()
+      resolveHostNamePrompt(null)
+    }
+  })
 
   viewDriveBtn.addEventListener('click', () => void openInviteFiles())
   downloadSelectedBtn.addEventListener('click', () => void downloadInviteSelected())
@@ -238,14 +282,36 @@ function wireUiEvents() {
     const node = target.closest('[data-action]')
     if (!(node instanceof HTMLElement)) return
     const action = String(node.dataset.action || '')
-    const index = Number(node.dataset.index || -1)
-    if (action !== 'toggle') return
-    if (!Number.isInteger(index) || index < 0 || index >= state.inviteEntries.length) return
-    const entry = state.inviteEntries[index]
-    const key = entryKey(entry)
-    if (state.inviteSelected.has(key)) state.inviteSelected.delete(key)
-    else state.inviteSelected.add(key)
-    renderDriveRows()
+    if (action === 'toggle-file') {
+      const key = String(node.dataset.key || '').trim()
+      if (!key) return
+      if (state.inviteSelected.has(key)) state.inviteSelected.delete(key)
+      else state.inviteSelected.add(key)
+      renderDriveRows()
+      return
+    }
+
+    if (action === 'toggle-folder') {
+      const folderPath = String(node.dataset.folder || '').trim()
+      if (!folderPath) return
+      const descendants = collectDriveFolderFileKeys(folderPath)
+      if (!descendants.length) return
+      const allSelected = descendants.every((key) => state.inviteSelected.has(key))
+      for (const key of descendants) {
+        if (allSelected) state.inviteSelected.delete(key)
+        else state.inviteSelected.add(key)
+      }
+      renderDriveRows()
+      return
+    }
+
+    if (action === 'toggle-expand') {
+      const folderPath = String(node.dataset.folder || '').trim()
+      if (!folderPath) return
+      if (state.expandedDriveFolders.has(folderPath)) state.expandedDriveFolders.delete(folderPath)
+      else state.expandedDriveFolders.add(folderPath)
+      renderDriveRows()
+    }
   })
 
   hostsSelectToggleBtn.addEventListener('click', () => {
@@ -262,7 +328,7 @@ function wireUiEvents() {
   })
 
   hostsCopySelectedBtn.addEventListener('click', () => void copySelectedHosts())
-  hostsStarSelectedBtn.addEventListener('click', () => {
+  hostsStarSelectedBtn?.addEventListener('click', () => {
     if (!state.selectedHosts.size) {
       setStatus('Select at least one active host first.')
       return
@@ -330,7 +396,12 @@ function wireUiEvents() {
     if (action === 'preview-source') {
       const previewUrl = String(actionNode?.getAttribute('data-preview-url') || '').trim()
       if (previewUrl) window.open(previewUrl, '_blank', 'noopener,noreferrer')
+      return
     }
+
+    if (state.selectedSources.has(id)) state.selectedSources.delete(id)
+    else state.selectedSources.add(id)
+    renderSources()
   })
 
   hostsRowsEl.addEventListener('click', (event) => {
@@ -346,6 +417,7 @@ function wireUiEvents() {
 
     if (action === 'copy') {
       void copyToClipboard(invite)
+      flashCopyFeedback(`host:${invite}`)
       return
     }
     if (action === 'star') {
@@ -409,6 +481,7 @@ function wireUiEvents() {
 
     if (action === 'copy') {
       void copyToClipboard(invite)
+      flashCopyFeedback(`starred:${invite}`)
       return
     }
     if (action === 'unstar') {
@@ -498,6 +571,31 @@ function renderAll() {
   renderDriveRows()
 }
 
+function promptForHostOptions(defaultValue = 'Host Session') {
+  return new Promise((resolve) => {
+    pendingHostNameResolve = resolve
+    if (hostNameInputEl) hostNameInputEl.value = String(defaultValue || 'Host Session')
+    const rawRadio = document.querySelector('input[name="host-packaging"][value="raw"]')
+    if (rawRadio instanceof HTMLInputElement) rawRadio.checked = true
+    hostNameModalEl?.classList.remove('hidden')
+    setTimeout(() => hostNameInputEl?.focus(), 0)
+  })
+}
+
+function resolveHostNamePrompt(value) {
+  if (!pendingHostNameResolve) return
+  const finish = pendingHostNameResolve
+  pendingHostNameResolve = null
+  hostNameModalEl?.classList.add('hidden')
+  finish(value)
+}
+
+function readHostPackagingMode() {
+  const selected = document.querySelector('input[name="host-packaging"]:checked')
+  if (!(selected instanceof HTMLInputElement)) return 'raw'
+  return selected.value === 'zip' ? 'zip' : 'raw'
+}
+
 function setTab(nextTab) {
   state.currentTab = nextTab === 'download' ? 'download' : 'upload'
   renderTabs()
@@ -544,7 +642,7 @@ function renderSources() {
         </div>
       </div>
       <div class="controls" style="margin-top:8px;">
-        <button class="btn alt" data-action="remove-source">Remove</button>
+        <button class="btn alt icon icon-danger" data-action="remove-source" aria-label="Remove" title="Remove">${BIN_ICON}</button>
       </div>
     `
     sourcesGridEl.appendChild(card)
@@ -603,6 +701,9 @@ function renderHosts() {
     const invite = String(host.invite || '').trim()
     const selected = state.selectedHosts.has(invite)
     const starred = state.starredHosts.has(invite)
+    const isStopping = state.stoppingInvites.has(invite)
+    const parsedLabel = parseSessionLabel(host.sessionLabel || host.sessionName || 'Host Session')
+    const sessionDateTime = formatSessionDateTime(host.createdAt, parsedLabel.embeddedDateTime)
 
     const row = document.createElement('div')
     row.className = 'row-item'
@@ -610,13 +711,14 @@ function renderHosts() {
     row.innerHTML = `
       <input type="checkbox" ${selected ? 'checked' : ''} />
       <div>
-        <div class="row-title">${starred ? '<span class="star">★</span> ' : ''}${escapeHtml(host.sessionLabel || invite || 'Host')}</div>
-        <div class="row-sub">${formatBytes(Number(host.totalBytes || 0))}</div>
+        <div class="row-title">${starred ? '<span class="star">★</span> ' : ''}${escapeHtml(parsedLabel.title)}${parsedLabel.hash ? ` <span class="host-hash-inline">(${escapeHtml(parsedLabel.hash)})</span>` : ''}</div>
+        ${sessionDateTime ? `<div class="host-date">${escapeHtml(sessionDateTime)}</div>` : ''}
+        <div class="host-data">${formatBytes(Number(host.totalBytes || 0))}</div>
       </div>
       <div class="controls">
-        <button class="btn alt" data-action="copy">Copy</button>
-        <button class="btn alt" data-action="star">${starred ? 'Unstar' : 'Star'}</button>
-        <button class="btn warn" data-action="stop">Stop</button>
+        <button class="btn alt icon" data-action="copy" aria-label="Copy" title="Copy">${isCopyFeedbackActive(`host:${invite}`) ? '✓' : '⧉'}</button>
+        <button class="btn alt icon" data-action="star" aria-label="${starred ? 'Unstar' : 'Star'}" title="${starred ? 'Unstar' : 'Star'}">${starred ? '★' : '☆'}</button>
+        <button class="btn warn icon" data-action="stop" aria-label="Stop" title="Stop">${isStopping ? '<span class="mini-spinner"></span>' : '⏹'}</button>
       </div>
     `
     hostsRowsEl.appendChild(row)
@@ -646,16 +748,19 @@ function renderStarredHosts() {
   for (const invite of starredInvites) {
     const host = activeByInvite.get(invite)
     const historyItem = historyByInvite.get(invite)
-    const label = host?.sessionLabel || 'Starred Host'
+    const label = String(host?.sessionLabel || historyItem?.sessionName || 'Starred Host')
     const size = host ? formatBytes(Number(host.totalBytes || 0)) : 'Not active'
     const canStop = Boolean(host)
+    const isStopping = canStop && state.stoppingInvites.has(invite)
     const canRehost = Boolean(
       historyItem && Array.isArray(historyItem.sourceRefs) && historyItem.sourceRefs.length
     )
+    const isRehosting =
+      canRehost && state.rehostingHistoryIds.has(String(historyItem?.id || '').trim())
     const primaryActionHtml = canStop
-      ? '<button class="btn warn" data-action="stop">Stop</button>'
+      ? `<button class="btn warn icon" data-action="stop" aria-label="Stop" title="Stop">${isStopping ? '<span class="mini-spinner"></span>' : '⏹'}</button>`
       : canRehost
-        ? `<button class="btn alt" data-action="rehost" data-history-id="${escapeHtmlAttr(String(historyItem.id || ''))}">Re-host</button>`
+        ? `<button class="btn alt icon" data-action="rehost" data-history-id="${escapeHtmlAttr(String(historyItem.id || ''))}" aria-label="Re-host" title="Re-host">${isRehosting ? '<span class="mini-spinner"></span>' : '▶'}</button>`
         : ''
 
     const row = document.createElement('div')
@@ -665,12 +770,12 @@ function renderStarredHosts() {
       <div class="star">★</div>
       <div>
         <div class="row-title">${escapeHtml(label)}</div>
-        <div class="row-sub">${escapeHtml(size)}</div>
+        <div class="host-data">${escapeHtml(size)}</div>
       </div>
       <div class="controls">
         ${primaryActionHtml}
-        <button class="btn alt" data-action="copy">Copy</button>
-        <button class="btn alt" data-action="unstar">Unstar</button>
+        <button class="btn alt icon" data-action="copy" aria-label="Copy" title="Copy">${isCopyFeedbackActive(`starred:${invite}`) ? '✓' : '⧉'}</button>
+        <button class="btn alt icon" data-action="unstar" aria-label="Unstar" title="Unstar">★</button>
       </div>
     `
     starredRowsEl.appendChild(row)
@@ -691,8 +796,11 @@ function renderHistory() {
 
   for (const item of state.hostHistory) {
     const selected = state.selectedHistory.has(item.id)
+    const isRehosting = state.rehostingHistoryIds.has(String(item.id || '').trim())
     const sourceSummary =
       (item.sourceRefs || []).map((ref) => ref.path).join(' | ') || 'No source paths'
+    const parsedLabel = parseSessionLabel(item.sessionName || 'Host Session')
+    const sessionDateTime = formatSessionDateTime(item.createdAt, parsedLabel.embeddedDateTime)
 
     const row = document.createElement('div')
     row.className = 'row-item'
@@ -700,12 +808,13 @@ function renderHistory() {
     row.innerHTML = `
       <input type="checkbox" ${selected ? 'checked' : ''} />
       <div>
-        <div class="row-title">${escapeHtml(item.sessionName || 'Host Session')}</div>
+        <div class="row-title">${escapeHtml(parsedLabel.title)}${parsedLabel.hash ? ` <span class="host-hash-inline">(${escapeHtml(parsedLabel.hash)})</span>` : ''}</div>
+        ${sessionDateTime ? `<div class="host-date">${escapeHtml(sessionDateTime)}</div>` : ''}
         <div class="row-sub">${escapeHtml(sourceSummary)}</div>
       </div>
       <div class="controls">
-        <button class="btn alt" data-action="rehost">Re-host</button>
-        <button class="btn warn" data-action="remove">Remove</button>
+        <button class="btn alt icon" data-action="rehost" aria-label="Re-host" title="Re-host">${isRehosting ? '<span class="mini-spinner"></span>' : '▶'}</button>
+        <button class="btn alt icon icon-danger" data-action="remove" aria-label="Remove" title="Remove">${BIN_ICON}</button>
       </div>
     `
     historyRowsEl.appendChild(row)
@@ -728,19 +837,37 @@ function renderDriveRows() {
     return
   }
 
-  let selectedCount = 0
-  for (let i = 0; i < state.inviteEntries.length; i++) {
-    const entry = state.inviteEntries[i]
-    const key = entryKey(entry)
-    const checked = state.inviteSelected.has(key)
-    if (checked) selectedCount += 1
+  const selectedCount = state.inviteEntries.filter((entry) =>
+    state.inviteSelected.has(entryKey(entry))
+  ).length
+  const rows = buildVisibleDriveRows()
+  for (const row of rows) {
+    if (row.type === 'file') {
+      const key = row.key
+      const checked = state.inviteSelected.has(key)
+      const tr = document.createElement('tr')
+      tr.innerHTML = `
+        <td><input type="checkbox" data-action="toggle-file" data-key="${escapeHtmlAttr(key)}" ${checked ? 'checked' : ''}></td>
+        <td>${'&nbsp;'.repeat(row.depth * 4)}${escapeHtml(row.name)}</td>
+        <td class="small">${escapeHtml(row.drivePath)}</td>
+        <td class="small">${formatBytes(Number(row.byteLength || 0))}</td>
+      `
+      driveRowsEl.appendChild(tr)
+      continue
+    }
+
+    const folderChecked = row.fileKeys.length > 0 && row.fileKeys.every((key) => state.inviteSelected.has(key))
+    const folderSomeChecked = !folderChecked && row.fileKeys.some((key) => state.inviteSelected.has(key))
+    const expanded = state.expandedDriveFolders.has(row.folderPath)
     const tr = document.createElement('tr')
     tr.innerHTML = `
-      <td><input type="checkbox" data-action="toggle" data-index="${i}" ${checked ? 'checked' : ''}></td>
-      <td>${escapeHtml(entry.name || nodePath.basename(String(entry.drivePath || '')) || `File ${i + 1}`)}</td>
-      <td class="small">${escapeHtml(String(entry.drivePath || ''))}</td>
-      <td class="small">${formatBytes(Number(entry.byteLength || 0))}</td>
+      <td><input type="checkbox" data-action="toggle-folder" data-folder="${escapeHtmlAttr(row.folderPath)}" ${folderChecked ? 'checked' : ''}></td>
+      <td>${'&nbsp;'.repeat(row.depth * 4)}<button class="btn alt" data-action="toggle-expand" data-folder="${escapeHtmlAttr(row.folderPath)}" style="padding:2px 6px; min-width: 26px;">${expanded ? '▾' : '▸'}</button> <strong>${escapeHtml(row.name)}</strong></td>
+      <td class="small">${escapeHtml(`/files/${row.folderPath}`)}</td>
+      <td class="small">${row.fileKeys.length} files</td>
     `
+    const check = tr.querySelector('input[type="checkbox"]')
+    if (check instanceof HTMLInputElement) check.indeterminate = folderSomeChecked
     driveRowsEl.appendChild(tr)
   }
 
@@ -760,6 +887,7 @@ async function openInviteFiles() {
     state.inviteSource = invite
     state.inviteEntries = entries
     state.inviteSelected = new Set(entries.map((entry) => entryKey(entry)))
+    state.expandedDriveFolders.clear()
     renderDriveRows()
     setStatus(`Drive loaded (${entries.length} file${entries.length === 1 ? '' : 's'}).`)
   } catch (error) {
@@ -812,7 +940,7 @@ async function downloadInviteSelected() {
   }
 }
 
-async function hostSelectedSources() {
+async function hostSelectedSources(sessionNameInput = 'Host Session', packaging = 'raw') {
   if (!state.rpc) return setStatus('Worker is still starting.')
 
   const ids = Array.from(state.selectedSources)
@@ -822,26 +950,32 @@ async function hostSelectedSources() {
   if (!picked.length) return setStatus('Selected sources are no longer available.')
 
   try {
-    upsertWorkerActivityBar('host-expand', 'Indexing local sources', 0, picked.length)
-
-    const files = []
-    for (let i = 0; i < picked.length; i++) {
-      const source = picked[i]
-      // Re-host/source-host must fail when saved source paths no longer exist.
-      // eslint-disable-next-line no-await-in-loop
-      const expanded = await expandSourceToFiles(source)
-      files.push(...expanded)
-      upsertWorkerActivityBar('host-expand', 'Indexing local sources', i + 1, picked.length)
+    let files = []
+    if (packaging === 'zip') {
+      upsertWorkerActivityBar('host-expand', 'Preparing zip package', 0, 1)
+      setWorkerLogMessage('building zip package')
+      files = [await buildZipUploadPayload(picked, sessionNameInput)]
+      upsertWorkerActivityBar('host-expand', 'Preparing zip package', 1, 1)
+      clearWorkerActivityBar('host-expand')
+    } else {
+      upsertWorkerActivityBar('host-expand', 'Indexing local sources', 0, picked.length)
+      for (let i = 0; i < picked.length; i++) {
+        const source = picked[i]
+        // Re-host/source-host must fail when saved source paths no longer exist.
+        // eslint-disable-next-line no-await-in-loop
+        const expanded = await expandSourceToFiles(source)
+        files.push(...expanded)
+        upsertWorkerActivityBar('host-expand', 'Indexing local sources', i + 1, picked.length)
+      }
+      clearWorkerActivityBar('host-expand')
     }
-
-    clearWorkerActivityBar('host-expand')
 
     if (!files.length) return setStatus('No readable files found in selected sources.')
 
     setWorkerLogMessage('creating upload host')
     upsertWorkerActivityBar('host-upload', 'Creating host upload', 0, 1)
 
-    const sessionName = `Host ${new Date().toLocaleString()}`
+    const sessionName = String(sessionNameInput || '').trim() || 'Host Session'
     const response = await state.rpc.request(RpcCommand.CREATE_UPLOAD, {
       files,
       sessionName
@@ -850,18 +984,20 @@ async function hostSelectedSources() {
     clearWorkerActivityBar('host-upload')
 
     const invite = String(response?.nativeInvite || response?.invite || '').trim()
-    rememberHistory({
-      id: `hist:${Date.now()}:${Math.random().toString(16).slice(2, 8)}`,
-      sourceRefs: picked.map((item) => ({ type: item.type, path: item.path, name: item.name })),
-      invite,
-      sessionName,
-      createdAt: Date.now(),
-      fileCount: Array.isArray(response?.manifest) ? response.manifest.length : files.length,
-      totalBytes: Number(
-        response?.transfer?.totalBytes ||
-          files.reduce((sum, row) => sum + Number(row.byteLength || 0), 0)
-      )
-    })
+    if (invite) {
+      state.runningHistoryByInvite.set(invite, {
+        id: `hist:${Date.now()}:${Math.random().toString(16).slice(2, 8)}`,
+        sourceRefs: picked.map((item) => ({ type: item.type, path: item.path, name: item.name })),
+        invite,
+        sessionName,
+        createdAt: Date.now(),
+        fileCount: Array.isArray(response?.manifest) ? response.manifest.length : files.length,
+        totalBytes: Number(
+          response?.transfer?.totalBytes ||
+            files.reduce((sum, row) => sum + Number(row.byteLength || 0), 0)
+        )
+      })
+    }
 
     state.selectedSources.clear()
     await refreshActiveHosts()
@@ -874,11 +1010,83 @@ async function hostSelectedSources() {
   }
 }
 
+async function buildZipUploadPayload(sources, sessionNameInput) {
+  const sourcePaths = []
+  const parentDirs = []
+  for (const source of sources) {
+    const srcPath = String(source?.path || '').trim()
+    if (!srcPath) continue
+    // eslint-disable-next-line no-await-in-loop
+    const exists = await pathExists(srcPath)
+    if (!exists) throw new Error(`Source path does not exist: ${srcPath}`)
+    // eslint-disable-next-line no-await-in-loop
+    const stat = await fs.stat(srcPath)
+    if (!stat.isFile() && !stat.isDirectory()) {
+      throw new Error(`Source is not a file or folder: ${srcPath}`)
+    }
+    const absolute = nodePath.resolve(srcPath)
+    sourcePaths.push(absolute)
+    parentDirs.push(stat.isDirectory() ? nodePath.dirname(absolute) : nodePath.dirname(absolute))
+  }
+  if (!sourcePaths.length) throw new Error('No source paths available for zip package')
+
+  const workspaceDir = commonParentDir(parentDirs)
+  const relTargets = sourcePaths.map((item) => nodePath.relative(workspaceDir, item))
+  const zipNameBase = sanitizePathPart(String(sessionNameInput || 'Host Session'))
+  const zipName = `${zipNameBase || 'Host-Session'}-${Date.now()}.zip`
+  const zipPath = nodePath.join(os.tmpdir(), zipName)
+  await fs.unlink(zipPath).catch(() => {})
+
+  try {
+    await execFileAsync('zip', ['-r', '-y', zipPath, ...relTargets], { cwd: workspaceDir })
+  } catch (error) {
+    const details = String(error?.stderr || error?.message || '').trim()
+    throw new Error(
+      details
+        ? `Zip packaging failed: ${details}`
+        : 'Zip packaging failed. Install the zip utility or choose Raw files in host options.'
+    )
+  }
+
+  const stat = await fs.stat(zipPath)
+  return {
+    name: zipName,
+    path: zipPath,
+    drivePath: `/files/${sanitizePathPart(zipName)}`,
+    byteLength: Number(stat.size || 0),
+    mimeType: 'application/zip'
+  }
+}
+
+function commonParentDir(paths) {
+  if (!Array.isArray(paths) || !paths.length) return os.tmpdir()
+  const resolved = paths.map((item) => nodePath.resolve(String(item || ''))).filter(Boolean)
+  if (!resolved.length) return os.tmpdir()
+  let common = resolved[0]
+  for (let i = 1; i < resolved.length; i++) {
+    const current = resolved[i]
+    while (!isPathInsideOrSame(common, current)) {
+      const parent = nodePath.dirname(common)
+      if (parent === common) return parent || os.tmpdir()
+      common = parent
+    }
+  }
+  return common || os.tmpdir()
+}
+
+function isPathInsideOrSame(basePath, targetPath) {
+  const base = nodePath.resolve(String(basePath || ''))
+  const target = nodePath.resolve(String(targetPath || ''))
+  const rel = nodePath.relative(base, target)
+  return rel === '' || (!rel.startsWith('..') && !nodePath.isAbsolute(rel))
+}
+
 async function refreshActiveHosts() {
   if (!state.rpc) return
   try {
     const response = await state.rpc.request(RpcCommand.LIST_ACTIVE_HOSTS, {})
     const hosts = Array.isArray(response?.hosts) ? response.hosts : []
+    finalizeEndedRunningSessions(hosts)
     state.activeHosts = hosts
 
     const validInvites = new Set(
@@ -915,9 +1123,11 @@ async function stopSelectedHosts() {
 
   for (let i = 0; i < invites.length; i++) {
     const invite = invites[i]
+    const activeHost = state.activeHosts.find((host) => String(host?.invite || '').trim() === invite)
     try {
       // eslint-disable-next-line no-await-in-loop
       await state.rpc.request(RpcCommand.STOP_HOST, { invite })
+      finalizeStoppedSession(invite, activeHost)
     } catch {}
     upsertWorkerActivityBar('hosts-stop', 'Stopping selected hosts', i + 1, invites.length)
   }
@@ -931,12 +1141,29 @@ async function stopSelectedHosts() {
 async function stopHost(invite) {
   if (!state.rpc) return
   try {
+    const key = String(invite || '').trim()
+    if (key) {
+      state.stoppingInvites.add(key)
+      renderHosts()
+      renderStarredHosts()
+    }
+    const activeHost = state.activeHosts.find(
+      (host) => String(host?.invite || '').trim() === String(invite || '').trim()
+    )
     await state.rpc.request(RpcCommand.STOP_HOST, { invite })
+    finalizeStoppedSession(invite, activeHost)
     state.selectedHosts.delete(invite)
     await refreshActiveHosts()
     setStatus('Host stopped.')
   } catch (error) {
     setStatus(`Stop failed: ${error.message || String(error)}`)
+  } finally {
+    const key = String(invite || '').trim()
+    if (key) {
+      state.stoppingInvites.delete(key)
+      renderHosts()
+      renderStarredHosts()
+    }
   }
 }
 
@@ -959,7 +1186,14 @@ async function rehostSelectedHistory() {
 
 async function rehostHistoryItem(historyItem) {
   if (!state.rpc) return setStatus('Worker is still starting.')
+  const rowId = String(historyItem?.id || '').trim()
+  if (rowId) {
+    state.rehostingHistoryIds.add(rowId)
+    renderHistory()
+    renderStarredHosts()
+  }
   try {
+    setWorkerLogMessage('re-hosting session')
     const refs = Array.isArray(historyItem.sourceRefs) ? historyItem.sourceRefs : []
     if (!refs.length) throw new Error('History entry does not include saved source paths')
 
@@ -990,23 +1224,30 @@ async function rehostHistoryItem(historyItem) {
     })
 
     const invite = String(response?.nativeInvite || response?.invite || '').trim()
-    const next = {
-      ...historyItem,
-      invite,
-      createdAt: Date.now(),
-      fileCount: Array.isArray(response?.manifest) ? response.manifest.length : files.length,
-      totalBytes: Number(response?.transfer?.totalBytes || historyItem.totalBytes || 0)
+    if (invite) {
+      state.runningHistoryByInvite.set(invite, {
+        ...historyItem,
+        invite,
+        createdAt: Number(historyItem.createdAt || Date.now()),
+        fileCount: Array.isArray(response?.manifest) ? response.manifest.length : files.length,
+        totalBytes: Number(response?.transfer?.totalBytes || historyItem.totalBytes || 0)
+      })
     }
-
-    state.hostHistory = [
-      next,
-      ...state.hostHistory.filter((row) => row.id !== historyItem.id)
-    ].slice(0, 200)
+    state.hostHistory = state.hostHistory.filter((row) => row.id !== historyItem.id)
+    state.selectedHistory.delete(String(historyItem.id || ''))
     localStorage.setItem(HISTORY_KEY, JSON.stringify(state.hostHistory))
+    await refreshActiveHosts()
+    renderHistory()
     setStatus('Re-host started.')
   } catch (error) {
     clearWorkerActivityBar('rehost-expand')
     setStatus(`Re-host failed: ${error.message || String(error)}`)
+  } finally {
+    if (rowId) {
+      state.rehostingHistoryIds.delete(rowId)
+      renderHistory()
+      renderStarredHosts()
+    }
   }
 }
 
@@ -1035,9 +1276,61 @@ function addLocalSources(entries) {
   setStatus(`Source list updated (${state.sources.length}).`)
 }
 
+function finalizeStoppedSession(invite, activeHost = null) {
+  const key = String(invite || '').trim()
+  if (!key) return
+  const running = state.runningHistoryByInvite.get(key)
+  if (running) {
+    state.runningHistoryByInvite.delete(key)
+    rememberHistory({
+      ...running,
+      invite: key
+    })
+    return
+  }
+
+  const host = activeHost || state.activeHosts.find((row) => String(row?.invite || '').trim() === key)
+  if (!host) return
+  rememberHistory({
+    id: `hist:${Date.now()}:${Math.random().toString(16).slice(2, 8)}`,
+    sourceRefs: [],
+    invite: key,
+    sessionName: String(host?.sessionLabel || host?.sessionName || 'Host Session'),
+    createdAt: Number(host?.createdAt || Date.now()),
+    fileCount: Number(host?.fileCount || 0),
+    totalBytes: Number(host?.totalBytes || 0)
+  })
+}
+
+function finalizeEndedRunningSessions(activeHosts) {
+  const activeInvites = new Set(
+    Array.isArray(activeHosts)
+      ? activeHosts.map((host) => String(host?.invite || '').trim()).filter(Boolean)
+      : []
+  )
+  for (const [invite, entry] of state.runningHistoryByInvite.entries()) {
+    if (activeInvites.has(invite)) continue
+    state.runningHistoryByInvite.delete(invite)
+    rememberHistory({
+      ...entry
+    })
+  }
+}
+
+function finalizeSessionsFromActiveHosts(activeHosts) {
+  if (!Array.isArray(activeHosts) || !activeHosts.length) return
+  for (const host of activeHosts) {
+    const invite = String(host?.invite || '').trim()
+    if (!invite) continue
+    finalizeStoppedSession(invite, host)
+  }
+}
+
 function rememberHistory(entry) {
   state.hostHistory = [entry, ...state.hostHistory].slice(0, 200)
   localStorage.setItem(HISTORY_KEY, JSON.stringify(state.hostHistory))
+  renderHistory()
+  renderStarredHosts()
 }
 
 function persistSources() {
@@ -1211,6 +1504,122 @@ function normalizeInvite(raw) {
   return ''
 }
 
+function parseSessionLabel(label) {
+  const value = String(label || '').trim()
+  if (!value) return { title: 'Host Session', embeddedDateTime: '', hash: '' }
+
+  const parts = value.split(/\s+/).filter(Boolean)
+  if (!parts.length) return { title: 'Host Session', embeddedDateTime: '', hash: '' }
+
+  let hash = ''
+  if (/^[a-f0-9]{3,8}$/i.test(parts[parts.length - 1])) {
+    hash = parts.pop() || ''
+  }
+
+  let embeddedDateTime = ''
+  const isDate = (part) => /^\d{4}-\d{2}-\d{2}$/.test(part)
+  const isTime = (part) => /^\d{2}:\d{2}(:\d{2})?$/.test(part)
+  if (parts.length >= 2 && isDate(parts[parts.length - 2]) && isTime(parts[parts.length - 1])) {
+    embeddedDateTime = `${parts[parts.length - 2]} ${parts[parts.length - 1]}`
+    parts.splice(parts.length - 2, 2)
+  } else if (parts.length >= 1 && isDate(parts[parts.length - 1])) {
+    embeddedDateTime = parts[parts.length - 1]
+    parts.splice(parts.length - 1, 1)
+  }
+
+  const title = parts.join(' ').trim() || 'Host Session'
+  return { title, embeddedDateTime, hash }
+}
+
+function formatSessionDateTime(createdAt, fallbackDateTime = '') {
+  const ts = Number(createdAt || 0)
+  if (Number.isFinite(ts) && ts > 0) {
+    try {
+      return new Date(ts).toLocaleString(undefined, {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit'
+      })
+    } catch {}
+  }
+  return String(fallbackDateTime || '').trim()
+}
+
+function compactHex(value) {
+  const raw = String(value || '').trim().replaceAll('-', '')
+  if (!raw) return 'n/a'
+  if (raw.length <= 14) return raw
+  return `${raw.slice(0, 8)}…${raw.slice(-6)}`
+}
+
+function buildVisibleDriveRows() {
+  const root = { folders: new Map(), files: [] }
+
+  for (const entry of state.inviteEntries) {
+    const drivePath = String(entry?.drivePath || '').trim()
+    if (!drivePath) continue
+    const rel = drivePath.startsWith('/files/') ? drivePath.slice('/files/'.length) : drivePath
+    const parts = rel.split('/').filter(Boolean)
+    if (!parts.length) continue
+
+    let cursor = root
+    for (let i = 0; i < parts.length - 1; i++) {
+      const part = parts[i]
+      if (!cursor.folders.has(part)) cursor.folders.set(part, { folders: new Map(), files: [] })
+      cursor = cursor.folders.get(part)
+    }
+
+    cursor.files.push({ name: parts[parts.length - 1], entry, drivePath })
+  }
+
+  const rows = []
+  const walk = (node, parentPath = '', depth = 0) => {
+    const folderNames = Array.from(node.folders.keys()).sort((a, b) => a.localeCompare(b))
+    for (const folderName of folderNames) {
+      const folderPath = parentPath ? `${parentPath}/${folderName}` : folderName
+      const fileKeys = collectDriveFolderFileKeys(folderPath)
+      rows.push({
+        type: 'folder',
+        name: folderName,
+        folderPath,
+        depth,
+        fileKeys
+      })
+      if (state.expandedDriveFolders.has(folderPath)) {
+        walk(node.folders.get(folderName), folderPath, depth + 1)
+      }
+    }
+
+    const files = node.files.slice().sort((a, b) => a.name.localeCompare(b.name))
+    for (const file of files) {
+      rows.push({
+        type: 'file',
+        key: entryKey(file.entry),
+        name: file.name,
+        drivePath: file.drivePath,
+        byteLength: Number(file.entry?.byteLength || 0),
+        depth
+      })
+    }
+  }
+
+  walk(root, '', 0)
+  return rows
+}
+
+function collectDriveFolderFileKeys(folderPath) {
+  const prefix = `/files/${String(folderPath || '').trim()}/`
+  if (!prefix.trim()) return []
+  return state.inviteEntries
+    .filter((entry) => {
+      const drivePath = String(entry?.drivePath || '').trim()
+      return drivePath.startsWith(prefix)
+    })
+    .map((entry) => entryKey(entry))
+}
+
 function setWorkerLogMessage(message) {
   const text = redactInviteText(String(message || '').trim())
   for (const el of workerLogEls) {
@@ -1326,6 +1735,20 @@ function loadJson(key, fallback) {
   } catch {
     return fallback
   }
+}
+
+function flashCopyFeedback(key) {
+  activeCopyFeedbackKey = String(key || '')
+  renderHosts()
+  if (copyFeedbackTimer) clearTimeout(copyFeedbackTimer)
+  copyFeedbackTimer = setTimeout(() => {
+    activeCopyFeedbackKey = ''
+    renderHosts()
+  }, 1200)
+}
+
+function isCopyFeedbackActive(key) {
+  return activeCopyFeedbackKey === String(key || '')
 }
 
 async function copyToClipboard(value) {

@@ -8,7 +8,7 @@
 >
   <Identity Name="HelloPear" Version="0.1.0.0" Publisher="CN=My Publisher" ProcessorArchitecture="x64" />
   <Properties>
-    <DisplayName>Hello Pear</DisplayName>
+    <DisplayName>Pear Drop</DisplayName>
     <PublisherDisplayName>My Publisher</PublisherDisplayName>
     <Description>Description of my app</Description>
     <Logo>build\icon.png</Logo>
@@ -27,7 +27,7 @@
   </Capabilities>
   <Applications>
     <Application Id="App" Executable="app\HelloPear.exe" EntryPoint="Windows.FullTrustApplication">
-      <uap:VisualElements DisplayName="Hello Pear" Description="Description of my app" Square150x150Logo="build\icon.png" Square44x44Logo="build\icon.png" BackgroundColor="transparent" />
+      <uap:VisualElements DisplayName="Pear Drop" Description="Description of my app" Square150x150Logo="build\icon.png" Square44x44Logo="build\icon.png" BackgroundColor="transparent" />
     </Application>
   </Applications>
 </Package>
