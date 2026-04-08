@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   windows-installers:
-    name: Windows Installers (.exe/.msi/.msix)
+    name: Windows Installers (.exe/.msi)
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -29,7 +29,7 @@ jobs:
         run: npm ci
 
       - name: Build Windows artifacts
-        run: npm run make:win32
+        run: npm run make:win32:squirrel
 
       - name: Normalize publish filenames
         shell: pwsh
@@ -49,15 +49,8 @@ jobs:
             Select-Object -First 1
           if (-not $msi) { throw "No .msi installer found." }
 
-          $msix = Get-ChildItem -Path out -Recurse -Filter *.msix |
-            Sort-Object Length -Descending |
-            Select-Object -First 1
-
           Copy-Item $exe.FullName "$publishDir/PearDrop-Setup-$version.exe" -Force
           Copy-Item $msi.FullName "$publishDir/PearDrop-Setup-$version.msi" -Force
-          if ($msix) {
-            Copy-Item $msix.FullName "$publishDir/PearDrop-$version.msix" -Force
-          }
 
           Write-Host "Published artifacts:"
           Get-ChildItem $publishDir | ForEach-Object { Write-Host $_.FullName }
@@ -76,4 +69,3 @@ jobs:
           files: |
             out/publish/PearDrop-Setup-*.exe
             out/publish/PearDrop-Setup-*.msi
-            out/publish/PearDrop-*.msix

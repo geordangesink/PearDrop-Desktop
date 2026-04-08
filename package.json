@@ -17,6 +17,7 @@
     "package": "electron-forge package",
     "make:darwin": "electron-forge make --platform=darwin",
     "make:win32": "electron-forge make --platform=win32",
+    "make:win32:squirrel": "electron-forge make --platform=win32 --targets @electron-forge/maker-squirrel",
     "make:linux": "electron-forge package && ./scripts/build-app-image.sh",
     "test": "node --test test/*.test.js"
   },

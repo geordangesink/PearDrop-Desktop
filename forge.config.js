@@ -4,6 +4,7 @@ const pkg = require('./package.json')
 const appName = pkg.productName ?? pkg.name
 const windowsSlug = String(appName).replace(/\s+/g, '')
 const { isWindows } = require('which-runtime')
+const buildMsix = process.env.BUILD_MSIX === '1'
 
 function getWindowsKitVersion() {
   const programFiles = process.env['PROGRAMFILES(X86)'] || process.env.PROGRAMFILES
@@ -48,45 +49,52 @@ if (process.env.MAC_CODESIGN_IDENTITY) {
   }
 }
 
+const makers = [
+  {
+    name: '@electron-forge/maker-dmg',
+    platforms: ['darwin'],
+    config: {}
+  },
+  {
+    name: '@electron-forge/maker-squirrel',
+    platforms: ['win32'],
+    config: {
+      name: windowsSlug,
+      setupExe: `${windowsSlug}-Setup-${pkg.version}.exe`,
+      noMsi: false
+    }
+  }
+]
+
+if (buildMsix) {
+  makers.push({
+    name: '@electron-forge/maker-msix',
+    platforms: ['win32'],
+    config: {
+      appManifest: path.join(__dirname, 'build', 'AppxManifest.xml'),
+      windowsKitVersion: getWindowsKitVersion(),
+      ...(process.env.WINDOWS_CERTIFICATE_FILE
+        ? {
+            windowsSignOptions: {
+              certificateFile: process.env.WINDOWS_CERTIFICATE_FILE,
+              certificatePassword: process.env.WINDOWS_CERTIFICATE_PASSWORD
+            }
+          }
+        : {})
+    }
+  })
+}
+
 module.exports = {
   packagerConfig,
 
-  makers: [
-    {
-      name: '@electron-forge/maker-dmg',
-      platforms: ['darwin'],
-      config: {}
-    },
-    {
-      name: '@electron-forge/maker-squirrel',
-      platforms: ['win32'],
-      config: {
-        name: windowsSlug,
-        setupExe: `${windowsSlug}-Setup-${pkg.version}.exe`,
-        noMsi: false
-      }
-    },
-    {
-      name: '@electron-forge/maker-msix',
-      platforms: ['win32'],
-      config: {
-        appManifest: path.join(__dirname, 'build', 'AppxManifest.xml'),
-        windowsKitVersion: getWindowsKitVersion(),
-        ...(process.env.WINDOWS_CERTIFICATE_FILE
-          ? {
-              windowsSignOptions: {
-                certificateFile: process.env.WINDOWS_CERTIFICATE_FILE,
-                certificatePassword: process.env.WINDOWS_CERTIFICATE_PASSWORD
-              }
-            }
-          : {})
-      }
-    }
-  ],
+  makers,
 
   hooks: {
     preMake: async () => {
       fs.rmSync(path.join(__dirname, 'out', 'make'), { recursive: true, force: true })
+
+      if (!buildMsix) return
 
       const manifest = path.join(__dirname, 'build', 'AppxManifest.xml')
       const msixVersion = pkg.version.replace(/^(\d+\.\d+\.\d+)$/, '$1.0')
@@ -94,6 +102,13 @@ module.exports = {
       fs.writeFileSync(manifest, xml.replace(/Version="[^"]*"/, `Version="${msixVersion}"`))
     },
     postMake: async (forgeConfig, results) => {
+      if (!buildMsix) {
+        if (isWindows) {
+          fs.rmSync(path.join(__dirname, 'out', 'make'), { recursive: true, force: true })
+        }
+        return
+      }
+
       for (const result of results) {
         if (result.platform !== 'win32') continue
         for (const artifact of result.artifacts) {
