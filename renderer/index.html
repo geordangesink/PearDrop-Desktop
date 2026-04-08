@@ -17,7 +17,7 @@
         --brand-soft: #171717;
         --star: #ffd25f;
       }
-      body[data-theme="light"] {
+      body[data-theme='light'] {
         color-scheme: light;
         --bg: #f4f5f7;
         --bg-soft: #ffffff;
@@ -29,13 +29,16 @@
         --brand-soft: #ffffff;
         --star: #d4891f;
       }
-      * { box-sizing: border-box; }
-      html, body {
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
         height: 100%;
       }
       body {
         margin: 0;
-        font-family: "Avenir Next", "SF Pro Text", "Segoe UI", sans-serif;
+        font-family: 'Avenir Next', 'SF Pro Text', 'Segoe UI', sans-serif;
         background: var(--bg);
         color: var(--text);
         display: flex;
@@ -88,20 +91,31 @@
         color: #fff;
         box-shadow: 0 0 0 2px rgba(47, 125, 246, 0.22);
       }
-      body[data-theme="light"] .tab-btn {
+      body[data-theme='light'] .tab-btn {
         background: #f3f5f9;
         border-color: #c8cfdb;
       }
-      body[data-theme="light"] .tab-btn.active {
+      body[data-theme='light'] .tab-btn.active {
         background: var(--brand);
         color: #fff;
       }
       .tab-page {
         margin-top: 12px;
       }
-      h1 { margin: 0; font-size: 30px; }
-      .sub { margin: 6px 0 0; color: var(--muted); }
-      .row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+      h1 {
+        margin: 0;
+        font-size: 30px;
+      }
+      .sub {
+        margin: 6px 0 0;
+        color: var(--muted);
+      }
+      .row {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-top: 12px;
+      }
       .input {
         flex: 1;
         min-width: 320px;
@@ -111,7 +125,7 @@
         color: var(--text);
         padding: 10px 12px;
       }
-      body[data-theme="light"] .input {
+      body[data-theme='light'] .input {
         background: #fff;
       }
       .btn {
@@ -133,22 +147,27 @@
         color: #ff9f9f;
         border-color: #6a2727;
       }
-      body[data-theme="light"] .btn.alt {
+      body[data-theme='light'] .btn.alt {
         background: #f3f5f9;
         border-color: #c8cfdb;
       }
-      body[data-theme="light"] .btn.warn {
+      body[data-theme='light'] .btn.warn {
         background: #fdeeee;
         color: #a53939;
         border-color: #e9b9b9;
       }
-      .status { margin: 8px 0 0; color: var(--muted); }
+      .status {
+        margin: 8px 0 0;
+        color: var(--muted);
+      }
       .worker-log {
         margin: 6px 0 0;
         color: #8fa3c7;
         font-size: 12px;
       }
-      body[data-theme="light"] .worker-log { color: #5e6675; }
+      body[data-theme='light'] .worker-log {
+        color: #5e6675;
+      }
       .activity-bars {
         margin-top: 8px;
         display: grid;
@@ -159,7 +178,11 @@
         border-radius: 10px;
         padding: 8px;
       }
-      .activity-label { color: var(--muted); font-size: 12px; margin-bottom: 4px; }
+      .activity-label {
+        color: var(--muted);
+        font-size: 12px;
+        margin-bottom: 4px;
+      }
       .activity-track {
         width: 100%;
         height: 8px;
@@ -167,8 +190,14 @@
         background: #2a2d35;
         overflow: hidden;
       }
-      body[data-theme="light"] .activity-track { background: #d9e0eb; }
-      .activity-fill { height: 100%; width: 0%; background: var(--brand); }
+      body[data-theme='light'] .activity-track {
+        background: #d9e0eb;
+      }
+      .activity-fill {
+        height: 100%;
+        width: 0%;
+        background: var(--brand);
+      }
 
       .layout {
         margin-top: 12px;
@@ -177,7 +206,9 @@
         gap: 12px;
       }
       @media (max-width: 1080px) {
-        .layout { grid-template-columns: 1fr; }
+        .layout {
+          grid-template-columns: 1fr;
+        }
       }
       .right-col {
         display: grid;
@@ -197,8 +228,15 @@
         gap: 8px;
         margin-bottom: 8px;
       }
-      .panel-title { margin: 0; font-size: 18px; }
-      .controls { display: flex; gap: 6px; flex-wrap: wrap; }
+      .panel-title {
+        margin: 0;
+        font-size: 18px;
+      }
+      .controls {
+        display: flex;
+        gap: 6px;
+        flex-wrap: wrap;
+      }
 
       .source-grid {
         display: grid;
@@ -246,17 +284,27 @@
       .source-select {
         margin-top: 2px;
       }
-      body[data-theme="light"] .source-preview {
+      body[data-theme='light'] .source-preview {
         background: #eef2f8;
       }
       .source-card.selected {
         outline: 2px solid var(--brand);
         outline-offset: -1px;
       }
-      .source-name { font-weight: 600; }
-      .source-path { color: var(--muted); font-size: 12px; margin-top: 3px; word-break: break-all; }
+      .source-name {
+        font-weight: 600;
+      }
+      .source-path {
+        color: var(--muted);
+        font-size: 12px;
+        margin-top: 3px;
+        word-break: break-all;
+      }
 
-      .rows { display: grid; gap: 8px; }
+      .rows {
+        display: grid;
+        gap: 8px;
+      }
       .row-item {
         border: 1px solid var(--line);
         border-radius: 10px;
@@ -266,25 +314,46 @@
         align-items: center;
         gap: 8px;
       }
-      .row-title { font-weight: 600; }
-      .row-sub { color: var(--muted); font-size: 12px; margin-top: 2px; word-break: break-all; }
-      .star { color: var(--star); }
+      .row-title {
+        font-weight: 600;
+      }
+      .row-sub {
+        color: var(--muted);
+        font-size: 12px;
+        margin-top: 2px;
+        word-break: break-all;
+      }
+      .star {
+        color: var(--star);
+      }
 
       .table {
         width: 100%;
         border-collapse: collapse;
       }
-      .table th, .table td {
+      .table th,
+      .table td {
         border-bottom: 1px solid var(--line);
         text-align: left;
         padding: 8px 6px;
         vertical-align: middle;
       }
-      .table th { color: var(--muted); font-size: 12px; }
-      .small { color: var(--muted); font-size: 12px; }
-      .muted-empty { color: var(--muted); font-size: 13px; }
+      .table th {
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .small {
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .muted-empty {
+        color: var(--muted);
+        font-size: 13px;
+      }
 
-      .menu-wrap { position: relative; }
+      .menu-wrap {
+        position: relative;
+      }
       .menu {
         position: absolute;
         top: calc(100% + 6px);
@@ -306,7 +375,9 @@
         border-radius: 8px;
         cursor: pointer;
       }
-      .menu button:hover { background: rgba(127, 127, 127, 0.14); }
+      .menu button:hover {
+        background: rgba(127, 127, 127, 0.14);
+      }
 
       .shutdown-overlay {
         position: fixed;
@@ -334,12 +405,24 @@
         border-top-color: var(--brand);
         animation: spin 0.9s linear infinite;
       }
-      .shutdown-title { margin: 0; font-size: 28px; }
-      .shutdown-sub { margin: 8px 0 0; color: var(--muted); }
-      .hidden { display: none !important; }
+      .shutdown-title {
+        margin: 0;
+        font-size: 28px;
+      }
+      .shutdown-sub {
+        margin: 8px 0 0;
+        color: var(--muted);
+      }
+      .hidden {
+        display: none !important;
+      }
       @keyframes spin {
-        from { transform: rotate(0deg); }
-        to { transform: rotate(360deg); }
+        from {
+          transform: rotate(0deg);
+        }
+        to {
+          transform: rotate(360deg);
+        }
       }
     </style>
   </head>
@@ -402,7 +485,7 @@
           </div>
         </section>
 
-        <section class="panel" style="margin-top: 12px;">
+        <section class="panel" style="margin-top: 12px">
           <div class="panel-head">
             <h2 class="panel-title">Host History</h2>
             <div class="controls">
@@ -427,7 +510,7 @@
           <div id="download-worker-activity-bars" class="activity-bars hidden"></div>
         </section>
 
-        <section style="margin-top: 12px;">
+        <section style="margin-top: 12px">
           <article class="panel">
             <div class="panel-head">
               <h2 class="panel-title">Drive Files</h2>

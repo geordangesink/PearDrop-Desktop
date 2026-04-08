@@ -270,7 +270,9 @@ function wireUiEvents() {
     for (const invite of state.selectedHosts) state.starredHosts.add(invite)
     persistStarredHosts()
     renderHosts()
-    setStatus(`Starred ${state.selectedHosts.size} host${state.selectedHosts.size === 1 ? '' : 's'}.`)
+    setStatus(
+      `Starred ${state.selectedHosts.size} host${state.selectedHosts.size === 1 ? '' : 's'}.`
+    )
   })
   hostsStopSelectedBtn.addEventListener('click', () => void stopSelectedHosts())
 
@@ -515,7 +517,8 @@ function renderSourceMenu() {
 
 function renderSources() {
   sourcesGridEl.textContent = ''
-  const allSelected = state.sources.length > 0 && state.selectedSources.size === state.sources.length
+  const allSelected =
+    state.sources.length > 0 && state.selectedSources.size === state.sources.length
   sourceSelectToggleBtn.textContent = allSelected ? 'Deselect All' : 'Select All'
 
   if (!state.sources.length) {
@@ -646,7 +649,9 @@ function renderStarredHosts() {
     const label = host?.sessionLabel || 'Starred Host'
     const size = host ? formatBytes(Number(host.totalBytes || 0)) : 'Not active'
     const canStop = Boolean(host)
-    const canRehost = Boolean(historyItem && Array.isArray(historyItem.sourceRefs) && historyItem.sourceRefs.length)
+    const canRehost = Boolean(
+      historyItem && Array.isArray(historyItem.sourceRefs) && historyItem.sourceRefs.length
+    )
     const primaryActionHtml = canStop
       ? '<button class="btn warn" data-action="stop">Stop</button>'
       : canRehost
@@ -686,7 +691,8 @@ function renderHistory() {
 
   for (const item of state.hostHistory) {
     const selected = state.selectedHistory.has(item.id)
-    const sourceSummary = (item.sourceRefs || []).map((ref) => ref.path).join(' | ') || 'No source paths'
+    const sourceSummary =
+      (item.sourceRefs || []).map((ref) => ref.path).join(' | ') || 'No source paths'
 
     const row = document.createElement('div')
     row.className = 'row-item'
@@ -781,12 +787,25 @@ async function downloadInviteSelected() {
       if (!drivePath) continue
       const outputPath = resolveOutputPath(targetDir, entry)
       await fs.mkdir(nodePath.dirname(outputPath), { recursive: true })
-      await writeEntryToFile(state.rpc, state.inviteSource, drivePath, outputPath, Number(entry.byteLength || 0))
-      upsertWorkerActivityBar('download-selected', 'Downloading selected files', i + 1, selected.length)
+      await writeEntryToFile(
+        state.rpc,
+        state.inviteSource,
+        drivePath,
+        outputPath,
+        Number(entry.byteLength || 0)
+      )
+      upsertWorkerActivityBar(
+        'download-selected',
+        'Downloading selected files',
+        i + 1,
+        selected.length
+      )
     }
 
     clearWorkerActivityBar('download-selected')
-    setStatus(`Downloaded ${selected.length} file${selected.length === 1 ? '' : 's'} to ${targetDir}.`)
+    setStatus(
+      `Downloaded ${selected.length} file${selected.length === 1 ? '' : 's'} to ${targetDir}.`
+    )
   } catch (error) {
     clearWorkerActivityBar('download-selected')
     setStatus(`Download failed: ${error.message || String(error)}`)
@@ -838,7 +857,10 @@ async function hostSelectedSources() {
       sessionName,
       createdAt: Date.now(),
       fileCount: Array.isArray(response?.manifest) ? response.manifest.length : files.length,
-      totalBytes: Number(response?.transfer?.totalBytes || files.reduce((sum, row) => sum + Number(row.byteLength || 0), 0))
+      totalBytes: Number(
+        response?.transfer?.totalBytes ||
+          files.reduce((sum, row) => sum + Number(row.byteLength || 0), 0)
+      )
     })
 
     state.selectedSources.clear()
@@ -859,8 +881,12 @@ async function refreshActiveHosts() {
     const hosts = Array.isArray(response?.hosts) ? response.hosts : []
     state.activeHosts = hosts
 
-    const validInvites = new Set(hosts.map((host) => String(host.invite || '').trim()).filter(Boolean))
-    state.selectedHosts = new Set(Array.from(state.selectedHosts).filter((invite) => validInvites.has(invite)))
+    const validInvites = new Set(
+      hosts.map((host) => String(host.invite || '').trim()).filter(Boolean)
+    )
+    state.selectedHosts = new Set(
+      Array.from(state.selectedHosts).filter((invite) => validInvites.has(invite))
+    )
 
     renderHosts()
   } catch {
@@ -972,7 +998,10 @@ async function rehostHistoryItem(historyItem) {
       totalBytes: Number(response?.transfer?.totalBytes || historyItem.totalBytes || 0)
     }
 
-    state.hostHistory = [next, ...state.hostHistory.filter((row) => row.id !== historyItem.id)].slice(0, 200)
+    state.hostHistory = [
+      next,
+      ...state.hostHistory.filter((row) => row.id !== historyItem.id)
+    ].slice(0, 200)
     localStorage.setItem(HISTORY_KEY, JSON.stringify(state.hostHistory))
     setStatus('Re-host started.')
   } catch (error) {
@@ -1146,11 +1175,13 @@ function entryKey(entry) {
 }
 
 function sanitizePathPart(value) {
-  return String(value || '')
-    .replaceAll('\\', '_')
-    .replaceAll('/', '_')
-    .replace(/\s+/g, ' ')
-    .trim() || 'file'
+  return (
+    String(value || '')
+      .replaceAll('\\', '_')
+      .replaceAll('/', '_')
+      .replace(/\s+/g, ' ')
+      .trim() || 'file'
+  )
 }
 
 function sanitizeRelativePath(value) {
@@ -1223,7 +1254,9 @@ function renderWorkerActivityBars() {
   if (!workerActivityBarsEls.length) return
   const barsHtml = Array.from(workerActivityBars.values())
     .map((bar) => {
-      const percent = Math.round((Number(bar.done || 0) / Math.max(1, Number(bar.total || 1))) * 100)
+      const percent = Math.round(
+        (Number(bar.done || 0) / Math.max(1, Number(bar.total || 1))) * 100
+      )
       const progressText =
         bar.displayMode === 'bytes'
           ? `${percent}% (${formatBytes(Number(bar.done || 0))} / ${formatBytes(Number(bar.total || 0))})`
@@ -1248,7 +1281,9 @@ function renderWorkerActivityBars() {
 }
 
 function applyThemeMode(mode) {
-  const raw = String(mode || 'system').trim().toLowerCase()
+  const raw = String(mode || 'system')
+    .trim()
+    .toLowerCase()
   state.themeMode = raw === 'dark' || raw === 'light' ? raw : 'system'
   const next = state.themeMode === 'system' ? resolveSystemTheme() : state.themeMode
   document.body.setAttribute('data-theme', next)
