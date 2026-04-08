@@ -207,6 +207,7 @@ jobs:
               echo "Skipping missing file: $src"
               return 0
             fi
+            echo "Uploading $src -> $dst"
             curl --fail --silent --show-error \
               -X PUT "${DOWNLOADS_UPLOAD_URL}/upload?path=${dst}" \
               -H "x-upload-token: ${DOWNLOADS_UPLOAD_TOKEN}" \
@@ -214,21 +215,42 @@ jobs:
             echo "Uploaded $src -> $dst"
           }
 
-          # Windows
-          upload "release-assets/PearDrop-Setup.exe" "win32/latest/PearDrop-Setup.exe"
-          upload "release-assets/PearDrop-Setup.msi" "win32/latest/PearDrop-Setup.msi"
+          upload_optional() {
+            src="$1"
+            dst="$2"
+            if [ ! -f "$src" ]; then
+              echo "Skipping missing file: $src"
+              return 0
+            fi
+            echo "Uploading (optional) $src -> $dst"
+            if curl --fail --silent --show-error \
+              -X PUT "${DOWNLOADS_UPLOAD_URL}/upload?path=${dst}" \
+              -H "x-upload-token: ${DOWNLOADS_UPLOAD_TOKEN}" \
+              --data-binary @"$src"; then
+              echo "Uploaded $src -> $dst"
+            else
+              echo "Optional upload failed for $src -> $dst (continuing)"
+            fi
+          }
+
+          # Windows (required versioned uploads)
           upload "release-assets/PearDrop-Setup-${version}.exe" "win32/v${version}/PearDrop-Setup-${version}.exe"
           upload "release-assets/PearDrop-Setup-${version}.msi" "win32/v${version}/PearDrop-Setup-${version}.msi"
+          # Windows (optional latest uploads)
+          upload_optional "release-assets/PearDrop-Setup.exe" "win32/latest/PearDrop-Setup.exe"
+          upload_optional "release-assets/PearDrop-Setup.msi" "win32/latest/PearDrop-Setup.msi"
 
-          # macOS
-          upload "release-assets/PearDrop.dmg" "macos/latest/PearDrop.dmg"
+          # macOS (required versioned uploads)
           upload "release-assets/PearDrop-${version}.dmg" "macos/v${version}/PearDrop-${version}.dmg"
+          # macOS (optional latest uploads)
+          upload_optional "release-assets/PearDrop.dmg" "macos/latest/PearDrop.dmg"
 
-          # Linux
+          # Linux (required versioned uploads)
           if [ -f "release-assets/PearDrop.AppImage" ]; then chmod +x "release-assets/PearDrop.AppImage"; fi
           if [ -f "release-assets/PearDrop-${version}.AppImage" ]; then chmod +x "release-assets/PearDrop-${version}.AppImage"; fi
-          upload "release-assets/PearDrop.AppImage" "linux/latest/PearDrop.AppImage"
           upload "release-assets/PearDrop-${version}.AppImage" "linux/v${version}/PearDrop-${version}.AppImage"
+          # Linux (optional latest uploads)
+          upload_optional "release-assets/PearDrop.AppImage" "linux/latest/PearDrop.AppImage"
 
       - name: Move main-latest tag to current commit
         if: github.ref == 'refs/heads/main'
