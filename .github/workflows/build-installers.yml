@@ -100,8 +100,10 @@ jobs:
             exit 1
           fi
 
+          chmod +x "$appimage"
           cp "$appimage" "$publish_dir/PearDrop-$version.AppImage"
           cp "$appimage" "$publish_dir/PearDrop.AppImage"
+          chmod +x "$publish_dir/PearDrop-$version.AppImage" "$publish_dir/PearDrop.AppImage"
 
           echo "Published artifacts:"
           ls -la "$publish_dir"
