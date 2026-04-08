@@ -591,7 +591,9 @@
         opacity: 0;
         pointer-events: none;
         transform: translateY(-2px);
-        transition: opacity 120ms ease, transform 120ms ease;
+        transition:
+          opacity 120ms ease,
+          transform 120ms ease;
         z-index: 5;
       }
       .modal-hint:hover .hint-tooltip {
@@ -649,11 +651,25 @@
               <div class="panel-head">
                 <h2 class="panel-title">Active Hosts</h2>
                 <div class="controls">
-                <button id="hosts-select-toggle" class="btn alt">Select All</button>
-                <button id="hosts-copy-selected" class="btn alt icon" title="Copy Selected" aria-label="Copy Selected">⧉</button>
-                <button id="hosts-stop-selected" class="btn warn icon" title="Stop Selected" aria-label="Stop Selected">⏹</button>
+                  <button id="hosts-select-toggle" class="btn alt">Select All</button>
+                  <button
+                    id="hosts-copy-selected"
+                    class="btn alt icon"
+                    title="Copy Selected"
+                    aria-label="Copy Selected"
+                  >
+                    ⧉
+                  </button>
+                  <button
+                    id="hosts-stop-selected"
+                    class="btn warn icon"
+                    title="Stop Selected"
+                    aria-label="Stop Selected"
+                  >
+                    ⏹
+                  </button>
+                </div>
               </div>
-            </div>
               <div id="hosts-rows" class="rows"></div>
             </article>
 
@@ -670,13 +686,30 @@
           <div class="panel-head">
             <h2 class="panel-title">Host History</h2>
             <div class="controls">
-            <button id="history-select-toggle" class="btn alt">Select All</button>
-            <button id="history-rehost-selected" class="btn icon" title="Re-host Selected" aria-label="Re-host Selected">▶</button>
-            <button id="history-remove-selected" class="btn alt icon icon-danger" title="Remove Selected" aria-label="Remove Selected">
-              <span class="mini-trash" aria-hidden="true"><span class="mini-trash-lid"></span><span class="mini-trash-body"><span class="mini-trash-line"></span><span class="mini-trash-line"></span></span></span>
-            </button>
+              <button id="history-select-toggle" class="btn alt">Select All</button>
+              <button
+                id="history-rehost-selected"
+                class="btn icon"
+                title="Re-host Selected"
+                aria-label="Re-host Selected"
+              >
+                ▶
+              </button>
+              <button
+                id="history-remove-selected"
+                class="btn alt icon icon-danger"
+                title="Remove Selected"
+                aria-label="Remove Selected"
+              >
+                <span class="mini-trash" aria-hidden="true"
+                  ><span class="mini-trash-lid"></span
+                  ><span class="mini-trash-body"
+                    ><span class="mini-trash-line"></span
+                    ><span class="mini-trash-line"></span></span
+                ></span>
+              </button>
+            </div>
           </div>
-        </div>
           <div id="history-rows" class="rows"></div>
         </section>
       </section>
@@ -728,10 +761,16 @@
           <div class="modal-packaging">
             <div class="modal-hint">
               <span class="hint-badge">i</span>
-              <div class="hint-tooltip">Zip is recommended when sharing apps (like <code>.app</code>) or folders containing nested folders.</div>
+              <div class="hint-tooltip">
+                Zip is recommended when sharing apps (like <code>.app</code>) or folders containing
+                nested folders.
+              </div>
             </div>
-            <label><input type="radio" name="host-packaging" value="zip" checked> Zip package (Recommended)</label>
-            <label><input type="radio" name="host-packaging" value="raw"> Raw files</label>
+            <label
+              ><input type="radio" name="host-packaging" value="zip" checked /> Zip package
+              (Recommended)</label
+            >
+            <label><input type="radio" name="host-packaging" value="raw" /> Raw files</label>
           </div>
           <div class="modal-actions">
             <button id="host-name-cancel" class="btn alt">Cancel</button>

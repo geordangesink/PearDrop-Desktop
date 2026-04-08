@@ -576,7 +576,7 @@ function promptForHostOptions(defaultValue = 'Host Session') {
     pendingHostNameResolve = resolve
     if (hostNameInputEl) hostNameInputEl.value = String(defaultValue || 'Host Session')
     const rawRadio = document.querySelector('input[name="host-packaging"][value="raw"]')
-    if (rawRadio instanceof HTMLInputElement) rawRadio.checked = true
+    if (rawRadio && typeof rawRadio === 'object' && 'checked' in rawRadio) rawRadio.checked = true
     hostNameModalEl?.classList.remove('hidden')
     setTimeout(() => hostNameInputEl?.focus(), 0)
   })
@@ -592,7 +592,7 @@ function resolveHostNamePrompt(value) {
 
 function readHostPackagingMode() {
   const selected = document.querySelector('input[name="host-packaging"]:checked')
-  if (!(selected instanceof HTMLInputElement)) return 'raw'
+  if (!selected || typeof selected !== 'object' || !('value' in selected)) return 'raw'
   return selected.value === 'zip' ? 'zip' : 'raw'
 }
 
@@ -856,8 +856,10 @@ function renderDriveRows() {
       continue
     }
 
-    const folderChecked = row.fileKeys.length > 0 && row.fileKeys.every((key) => state.inviteSelected.has(key))
-    const folderSomeChecked = !folderChecked && row.fileKeys.some((key) => state.inviteSelected.has(key))
+    const folderChecked =
+      row.fileKeys.length > 0 && row.fileKeys.every((key) => state.inviteSelected.has(key))
+    const folderSomeChecked =
+      !folderChecked && row.fileKeys.some((key) => state.inviteSelected.has(key))
     const expanded = state.expandedDriveFolders.has(row.folderPath)
     const tr = document.createElement('tr')
     tr.innerHTML = `
@@ -867,7 +869,9 @@ function renderDriveRows() {
       <td class="small">${row.fileKeys.length} files</td>
     `
     const check = tr.querySelector('input[type="checkbox"]')
-    if (check instanceof HTMLInputElement) check.indeterminate = folderSomeChecked
+    if (check && typeof check === 'object' && 'indeterminate' in check) {
+      check.indeterminate = folderSomeChecked
+    }
     driveRowsEl.appendChild(tr)
   }
 
@@ -1123,7 +1127,9 @@ async function stopSelectedHosts() {
 
   for (let i = 0; i < invites.length; i++) {
     const invite = invites[i]
-    const activeHost = state.activeHosts.find((host) => String(host?.invite || '').trim() === invite)
+    const activeHost = state.activeHosts.find(
+      (host) => String(host?.invite || '').trim() === invite
+    )
     try {
       // eslint-disable-next-line no-await-in-loop
       await state.rpc.request(RpcCommand.STOP_HOST, { invite })
@@ -1289,7 +1295,8 @@ function finalizeStoppedSession(invite, activeHost = null) {
     return
   }
 
-  const host = activeHost || state.activeHosts.find((row) => String(row?.invite || '').trim() === key)
+  const host =
+    activeHost || state.activeHosts.find((row) => String(row?.invite || '').trim() === key)
   if (!host) return
   rememberHistory({
     id: `hist:${Date.now()}:${Math.random().toString(16).slice(2, 8)}`,
@@ -1545,13 +1552,6 @@ function formatSessionDateTime(createdAt, fallbackDateTime = '') {
     } catch {}
   }
   return String(fallbackDateTime || '').trim()
-}
-
-function compactHex(value) {
-  const raw = String(value || '').trim().replaceAll('-', '')
-  if (!raw) return 'n/a'
-  if (raw.length <= 14) return raw
-  return `${raw.slice(0, 8)}…${raw.slice(-6)}`
 }
 
 function buildVisibleDriveRows() {
