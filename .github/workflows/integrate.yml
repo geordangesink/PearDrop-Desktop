@@ -9,5 +9,10 @@ jobs:
     runs-on: ubuntu-latest
     name: Lint
     steps:
-      - uses: holepunchto/actions/node-base@v1
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
       - run: npm run lint

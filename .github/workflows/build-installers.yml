@@ -1,0 +1,79 @@
+name: Build Installers
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-installers-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows-installers:
+    name: Windows Installers (.exe/.msi/.msix)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Windows artifacts
+        run: npm run make:win32
+
+      - name: Normalize publish filenames
+        shell: pwsh
+        run: |
+          $version = node -p "require('./package.json').version"
+          $publishDir = "out/publish"
+          New-Item -ItemType Directory -Path $publishDir -Force | Out-Null
+
+          $exe = Get-ChildItem -Path out -Recurse -Filter *.exe |
+            Where-Object { $_.Name -notmatch "Update|Squirrel|Stub" } |
+            Sort-Object Length -Descending |
+            Select-Object -First 1
+          if (-not $exe) { throw "No .exe installer found." }
+
+          $msi = Get-ChildItem -Path out -Recurse -Filter *.msi |
+            Sort-Object Length -Descending |
+            Select-Object -First 1
+          if (-not $msi) { throw "No .msi installer found." }
+
+          $msix = Get-ChildItem -Path out -Recurse -Filter *.msix |
+            Sort-Object Length -Descending |
+            Select-Object -First 1
+
+          Copy-Item $exe.FullName "$publishDir/PearDrop-Setup-$version.exe" -Force
+          Copy-Item $msi.FullName "$publishDir/PearDrop-Setup-$version.msi" -Force
+          if ($msix) {
+            Copy-Item $msix.FullName "$publishDir/PearDrop-$version.msix" -Force
+          }
+
+          Write-Host "Published artifacts:"
+          Get-ChildItem $publishDir | ForEach-Object { Write-Host $_.FullName }
+
+      - name: Upload workflow artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-installers
+          path: out/publish/*
+          if-no-files-found: error
+
+      - name: Publish release assets
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            out/publish/PearDrop-Setup-*.exe
+            out/publish/PearDrop-Setup-*.msi
+            out/publish/PearDrop-*.msix

@@ -2,6 +2,7 @@ const fs = require('fs')
 const path = require('path')
 const pkg = require('./package.json')
 const appName = pkg.productName ?? pkg.name
+const windowsSlug = String(appName).replace(/\s+/g, '')
 const { isWindows } = require('which-runtime')
 
 function getWindowsKitVersion() {
@@ -55,6 +56,15 @@ module.exports = {
       name: '@electron-forge/maker-dmg',
       platforms: ['darwin'],
       config: {}
+    },
+    {
+      name: '@electron-forge/maker-squirrel',
+      platforms: ['win32'],
+      config: {
+        name: windowsSlug,
+        setupExe: `${windowsSlug}-Setup-${pkg.version}.exe`,
+        noMsi: false
+      }
     },
     {
       name: '@electron-forge/maker-msix',
