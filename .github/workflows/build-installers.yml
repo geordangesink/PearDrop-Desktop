@@ -193,9 +193,6 @@ jobs:
 
           version="$(ls -1 release-assets | sed -nE 's/^PearDrop-Setup-([0-9]+\.[0-9]+\.[0-9]+)\.exe$/\1/p' | head -n 1)"
           if [ -z "${version}" ]; then
-            version="$(ls -1 release-assets | sed -nE 's/^PearDrop-([0-9]+\.[0-9]+\.[0-9]+)\.(dmg|AppImage)$/\1/p' | head -n 1)"
-          fi
-          if [ -z "${version}" ]; then
             echo "Could not detect version from artifacts."
             exit 1
           fi
@@ -215,24 +212,6 @@ jobs:
             echo "Uploaded $src -> $dst"
           }
 
-          upload_optional() {
-            src="$1"
-            dst="$2"
-            if [ ! -f "$src" ]; then
-              echo "Skipping missing file: $src"
-              return 0
-            fi
-            echo "Uploading (optional) $src -> $dst"
-            if curl --fail --silent --show-error \
-              -X PUT "${DOWNLOADS_UPLOAD_URL}/upload?path=${dst}" \
-              -H "x-upload-token: ${DOWNLOADS_UPLOAD_TOKEN}" \
-              --data-binary @"$src"; then
-              echo "Uploaded $src -> $dst"
-            else
-              echo "Optional upload failed for $src -> $dst (continuing)"
-            fi
-          }
-
           promote_latest() {
             src="$1"
             dst="$2"
@@ -245,37 +224,9 @@ jobs:
             echo "Promoted $src -> $dst"
           }
 
-          promote_latest_optional() {
-            src="$1"
-            dst="$2"
-            echo "Promoting (optional) $src -> $dst"
-            if curl --fail --silent --show-error \
-              -X POST "${DOWNLOADS_UPLOAD_URL}/promote-latest" \
-              -H "content-type: application/json" \
-              -H "x-upload-token: ${DOWNLOADS_UPLOAD_TOKEN}" \
-              --data "{\"source\":\"${src}\",\"target\":\"${dst}\"}"; then
-              echo "Promoted $src -> $dst"
-            else
-              echo "Optional promote failed for $src -> $dst (continuing)"
-            fi
-          }
-
-          # Windows (required versioned uploads)
+          # Windows EXE only (required)
           upload "release-assets/PearDrop-Setup-${version}.exe" "win32/v${version}/PearDrop-Setup-${version}.exe"
-          upload "release-assets/PearDrop-Setup-${version}.msi" "win32/v${version}/PearDrop-Setup-${version}.msi"
-          # Windows latest aliases (no duplicate upload)
           promote_latest "win32/v${version}/PearDrop-Setup-${version}.exe" "win32/latest/PearDrop-Setup.exe"
-          promote_latest_optional "win32/v${version}/PearDrop-Setup-${version}.msi" "win32/latest/PearDrop-Setup.msi"
-
-          # macOS (required versioned upload + latest alias)
-          upload "release-assets/PearDrop-${version}.dmg" "macos/v${version}/PearDrop-${version}.dmg"
-          promote_latest "macos/v${version}/PearDrop-${version}.dmg" "macos/latest/PearDrop.dmg"
-
-          # Linux (required versioned upload + latest alias)
-          if [ -f "release-assets/PearDrop.AppImage" ]; then chmod +x "release-assets/PearDrop.AppImage"; fi
-          if [ -f "release-assets/PearDrop-${version}.AppImage" ]; then chmod +x "release-assets/PearDrop-${version}.AppImage"; fi
-          upload "release-assets/PearDrop-${version}.AppImage" "linux/v${version}/PearDrop-${version}.AppImage"
-          promote_latest "linux/v${version}/PearDrop-${version}.AppImage" "linux/latest/PearDrop.AppImage"
 
       - name: Move main-latest tag to current commit
         if: github.ref == 'refs/heads/main'
