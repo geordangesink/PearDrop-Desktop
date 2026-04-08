@@ -9,492 +9,305 @@
         color-scheme: dark;
         --bg: #121212;
         --bg-soft: #1a1a1a;
-        --panel: #161616;
-        --border: #2a2a2a;
+        --card: #161616;
+        --line: #2a2a2a;
         --text: #f1f3f4;
         --muted: #a4a7ad;
-        --accent: #2f7df6;
+        --brand: #2f7df6;
+        --brand-soft: #171717;
+        --star: #ffd25f;
       }
-      body.theme-light {
+      body[data-theme="light"] {
         color-scheme: light;
         --bg: #f4f5f7;
         --bg-soft: #ffffff;
-        --panel: #ffffff;
-        --border: #d8dce3;
+        --card: #ffffff;
+        --line: #d8dce3;
         --text: #171a21;
         --muted: #5e6675;
-        --accent: #2f7df6;
+        --brand: #2f7df6;
+        --brand-soft: #ffffff;
+        --star: #d4891f;
       }
-      * {
-        box-sizing: border-box;
+      * { box-sizing: border-box; }
+      html, body {
+        height: 100%;
       }
       body {
         margin: 0;
+        font-family: "Avenir Next", "SF Pro Text", "Segoe UI", sans-serif;
         background: var(--bg);
         color: var(--text);
-        font-family: 'Avenir Next', 'SF Pro Text', 'Segoe UI', sans-serif;
-        height: 100vh;
-        overflow: hidden;
-      }
-      .app {
-        display: grid;
-        grid-template-columns: 260px 1fr;
-        height: 100vh;
-      }
-      .sidebar {
-        border-right: 1px solid var(--border);
-        background: linear-gradient(180deg, #1b1b1b, #141414 70%);
-        padding: 18px 12px;
-        display: flex;
-        flex-direction: column;
-        gap: 16px;
-      }
-      .brand {
-        font-size: 20px;
-        font-weight: 700;
-        padding: 6px 12px;
-      }
-      .nav-group-title {
-        color: var(--muted);
-        font-size: 12px;
-        text-transform: uppercase;
-        letter-spacing: 0.06em;
-        padding: 0 12px;
-      }
-      .nav-item {
-        width: 100%;
-        border: 0;
-        background: transparent;
-        color: var(--text);
-        text-align: left;
-        padding: 10px 12px;
-        border-radius: 10px;
-        cursor: pointer;
-        font-size: 16px;
-      }
-      .nav-item:hover {
-        background: #222;
-      }
-      .nav-item.active {
-        background: #2b2b2b;
-        font-weight: 600;
-      }
-      .sidebar-foot {
-        margin-top: auto;
-        padding: 12px;
-        border: 1px solid var(--border);
-        border-radius: 12px;
-        color: var(--muted);
-        font-size: 13px;
-      }
-      .main {
-        display: flex;
-        flex-direction: column;
-        min-width: 0;
-        min-height: 0;
-        overflow: hidden;
-      }
-      .topbar {
         display: flex;
         align-items: center;
-        gap: 12px;
-        padding: 14px 18px;
-        border-bottom: 1px solid var(--border);
+        justify-content: center;
       }
-      .theme-select {
-        background: #1d1d1d;
+      .app {
+        width: min(1360px, 96vw);
+        height: min(900px, 94vh);
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        background: var(--bg-soft);
+        box-shadow: 0 16px 42px rgba(0, 0, 0, 0.34);
+        overflow: auto;
+        padding: 16px;
+      }
+      .hero {
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        background: var(--card);
+        padding: 14px;
+      }
+      .mode-switch {
+        display: flex;
+        justify-content: center;
+        margin: 4px 0 14px;
+      }
+      .tabs {
+        display: flex;
+        gap: 8px;
+        padding: 6px;
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        background: var(--card);
+      }
+      .tab-btn {
+        border: 1px solid var(--line);
+        background: #242424;
         color: var(--text);
-        border: 1px solid #3a3a3a;
-        border-radius: 10px;
-        padding: 8px 10px;
+        border-radius: 12px;
+        min-width: 170px;
+        padding: 12px 18px;
+        font-size: 16px;
+        font-weight: 700;
+        cursor: pointer;
       }
-      body.theme-light .theme-select,
-      body.theme-light .folder-select,
-      body.theme-light .search {
-        background: #fff;
-        border-color: #c8cfdb;
+      .tab-btn.active {
+        background: var(--brand);
+        border-color: var(--brand);
+        color: #fff;
+        box-shadow: 0 0 0 2px rgba(47, 125, 246, 0.22);
       }
-      body.theme-light .sidebar {
-        background: linear-gradient(180deg, #f0f2f6, #e9edf3 70%);
-      }
-      body.theme-light .nav-item:hover {
-        background: #e4e9f1;
-      }
-      body.theme-light .nav-item.active {
-        background: #dce4f1;
-      }
-      body.theme-light .secondary-btn,
-      body.theme-light .mini-btn,
-      body.theme-light .rowBtn,
-      body.theme-light .icon-btn {
+      body[data-theme="light"] .tab-btn {
         background: #f3f5f9;
         border-color: #c8cfdb;
       }
-      body.theme-light .bulk-bar,
-      body.theme-light .activity-panel,
-      body.theme-light .menu-panel,
-      body.theme-light .table th,
-      body.theme-light .table td,
-      body.theme-light .preview,
-      body.theme-light .folder-modal-card,
-      body.theme-light .host-card,
-      body.theme-light .home-card,
-      body.theme-light .customize-card {
-        background: #fff;
-        border-color: #d8dce3;
-      }
-      body.theme-light .status {
-        color: #3d4a63;
-      }
-      body.theme-light .worker-log {
-        color: #5e6675;
-      }
-      .primary-btn,
-      .secondary-btn,
-      .mini-btn {
-        border: 1px solid transparent;
-        border-radius: 10px;
-        padding: 9px 14px;
-        font-weight: 600;
-        cursor: pointer;
-        font-size: 14px;
-      }
-      .primary-btn {
-        background: var(--accent);
+      body[data-theme="light"] .tab-btn.active {
+        background: var(--brand);
         color: #fff;
       }
-      .secondary-btn {
+      .tab-page {
+        margin-top: 12px;
+      }
+      h1 { margin: 0; font-size: 30px; }
+      .sub { margin: 6px 0 0; color: var(--muted); }
+      .row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+      .input {
+        flex: 1;
+        min-width: 320px;
+        border-radius: 12px;
+        border: 1px solid var(--line);
+        background: #151515;
+        color: var(--text);
+        padding: 10px 12px;
+      }
+      body[data-theme="light"] .input {
+        background: #fff;
+      }
+      .btn {
+        border: 1px solid transparent;
+        border-radius: 10px;
+        padding: 8px 12px;
+        font-weight: 600;
+        cursor: pointer;
+        background: var(--brand);
+        color: #fff;
+      }
+      .btn.alt {
         background: #242424;
         color: var(--text);
-        border-color: #3a3a3a;
+        border-color: var(--line);
       }
-      .mini-btn {
-        background: #252525;
-        color: var(--muted);
-        border-color: #3a3a3a;
-        padding: 5px 10px;
-        font-size: 12px;
-      }
-      .danger-btn {
-        border-color: #6a2727;
+      .btn.warn {
         background: #311818;
         color: #ff9f9f;
+        border-color: #6a2727;
       }
-      .search {
-        flex: 1;
-        background: #151515;
-        border: 1px solid #323232;
-        color: var(--text);
-        border-radius: 12px;
-        padding: 10px 12px;
+      body[data-theme="light"] .btn.alt {
+        background: #f3f5f9;
+        border-color: #c8cfdb;
       }
-      .folder-select {
-        background: #1d1d1d;
-        color: var(--text);
-        border: 1px solid #3a3a3a;
-        border-radius: 10px;
-        padding: 8px 10px;
+      body[data-theme="light"] .btn.warn {
+        background: #fdeeee;
+        color: #a53939;
+        border-color: #e9b9b9;
       }
-      .folder-select.active-filter {
-        border-color: #64a0ff;
-        box-shadow: 0 0 0 1px rgba(100, 160, 255, 0.35);
-      }
-      .content {
-        flex: 1;
-        min-height: 0;
-        padding: 20px 18px;
-        overflow: auto;
-        min-width: 0;
-      }
-      .content-head {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 14px;
-        margin-bottom: 12px;
-      }
-      .head-left {
-        display: flex;
-        align-items: flex-start;
-        gap: 10px;
-      }
-      .back-btn {
-        margin-top: 4px;
-      }
-      .content-title {
-        margin: 0;
-        font-size: 36px;
-        line-height: 1.1;
-      }
-      .content-sub {
-        margin: 4px 0 0;
-        color: var(--muted);
-      }
-      .filters {
-        display: flex;
-        gap: 8px;
-        margin-bottom: 14px;
-      }
-      .bulk-bar {
-        margin: 0 0 12px;
-        padding: 10px 12px;
-        border: 1px solid #333;
-        border-radius: 12px;
-        background: #171717;
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        flex-wrap: wrap;
-      }
-      .activity-panel {
-        margin: 0 0 12px;
-        border: 1px solid #343434;
-        border-radius: 12px;
-        background: #171717;
-        padding: 10px 12px;
-      }
-      .bulk-note {
-        color: var(--muted);
-        margin-right: 8px;
-      }
-      .table {
-        width: 100%;
-        border-collapse: collapse;
-        font-size: 14px;
-      }
-      .table th,
-      .table td {
-        padding: 12px 8px;
-        border-bottom: 1px solid #2a2a2a;
-        vertical-align: middle;
-        text-align: left;
-      }
-      .table th {
-        color: var(--muted);
-        font-weight: 600;
-      }
-      .check-col {
-        width: 44px;
-      }
-      .preview-col {
-        width: 84px;
-      }
-      .name-col {
-        width: 42%;
-      }
-      .actions-col {
-        width: 150px;
-      }
-      .row-muted {
-        color: var(--muted);
-      }
-      .preview {
-        width: 56px;
-        height: 56px;
-        border-radius: 10px;
-        overflow: hidden;
-        border: 1px solid #353535;
-        background: #222;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        color: #c0c4cb;
-        font-size: 12px;
-      }
-      .preview-btn {
-        border: 0;
-        padding: 0;
-        background: transparent;
-        cursor: pointer;
-      }
-      .preview img {
-        width: 100%;
-        height: 100%;
-        object-fit: cover;
-      }
-      .preview-video {
-        font-size: 20px;
-      }
-      .home-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-        gap: 12px;
-      }
-      .home-card {
-        border: 1px solid #2f2f2f;
-        border-radius: 14px;
-        background: #161616;
-        padding: 14px;
-      }
-      .home-card h3 {
-        margin: 0 0 6px;
-      }
-      .home-card p {
-        margin: 0;
-        color: var(--muted);
-        font-size: 13px;
-      }
-      .actions-wrap {
-        display: inline-flex;
-        gap: 6px;
-        align-items: center;
-      }
-      .icon-btn {
-        width: 30px;
-        height: 30px;
-        border-radius: 8px;
-        border: 1px solid #3b3b3b;
-        background: #1f1f1f;
-        color: #d6d8dc;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        cursor: pointer;
-        font-size: 14px;
-      }
-      .icon-btn.starred {
-        color: #ffd25f;
-      }
-      .icon-btn.delete {
-        color: #ff7b7b;
-      }
-      .icon-svg {
-        width: 14px;
-        height: 14px;
-        stroke: currentColor;
-        fill: none;
-        stroke-width: 1.8;
-        stroke-linecap: round;
-        stroke-linejoin: round;
-      }
-      .menu {
-        position: relative;
-      }
-      .menu-panel {
-        position: absolute;
-        top: 32px;
-        right: 0;
-        min-width: 160px;
-        border: 1px solid #353535;
-        border-radius: 10px;
-        background: #1a1a1a;
-        box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35);
-        padding: 6px;
-        z-index: 10;
-      }
-      .menu-item {
-        width: 100%;
-        text-align: left;
-        background: transparent;
-        color: #d9dde5;
-        border: 0;
-        border-radius: 8px;
-        padding: 8px 10px;
-        cursor: pointer;
-      }
-      .menu-item:hover {
-        background: #272727;
-      }
-      .folder-list {
-        display: flex;
-        flex-direction: column;
-        gap: 4px;
-      }
-      .folder-item {
-        border: 0;
-        background: transparent;
-        color: var(--muted);
-        text-align: left;
-        padding: 8px 12px;
-        border-radius: 8px;
-        cursor: pointer;
-      }
-      .folder-item:hover {
-        background: #252525;
-        color: var(--text);
-      }
-      .folder-item.active {
-        background: #2b2b2b;
-        color: var(--text);
-        font-weight: 600;
-      }
-      body.theme-light .folder-item.active {
-        background: #dce4f1;
-      }
-      .invite-box {
-        margin-top: 14px;
-        border: 1px solid #343434;
-        border-radius: 12px;
-        background: #171717;
-        padding: 10px 12px;
-      }
-      .invite-row {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-      }
-      .copy-feedback {
-        color: #7bb0ff;
-        font-size: 12px;
-        font-weight: 600;
-      }
-      .invite-text {
-        flex: 1;
-        color: var(--text);
-        word-break: break-all;
-        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-        font-size: 12px;
-      }
-      .icon-copy {
-        width: 14px;
-        height: 14px;
-        stroke: currentColor;
-        fill: none;
-        stroke-width: 1.8;
-        stroke-linecap: round;
-        stroke-linejoin: round;
-      }
-      .status {
-        margin: 8px 0 0;
-        color: var(--muted);
-      }
+      .status { margin: 8px 0 0; color: var(--muted); }
       .worker-log {
         margin: 6px 0 0;
         color: #8fa3c7;
         font-size: 12px;
-        white-space: pre-wrap;
       }
+      body[data-theme="light"] .worker-log { color: #5e6675; }
       .activity-bars {
-        margin: 8px 0 0;
+        margin-top: 8px;
         display: grid;
         gap: 8px;
       }
-      .activity-progress-label {
-        color: var(--muted);
-        font-size: 12px;
-        margin-bottom: 4px;
+      .activity-bar {
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 8px;
       }
-      .activity-progress-sub {
-        color: #8fa3c7;
-        font-size: 11px;
-        margin: -2px 0 4px;
-      }
-      .activity-progress-track {
+      .activity-label { color: var(--muted); font-size: 12px; margin-bottom: 4px; }
+      .activity-track {
         width: 100%;
         height: 8px;
         border-radius: 999px;
         background: #2a2d35;
         overflow: hidden;
       }
-      .activity-progress-fill {
+      body[data-theme="light"] .activity-track { background: #d9e0eb; }
+      .activity-fill { height: 100%; width: 0%; background: var(--brand); }
+
+      .layout {
+        margin-top: 12px;
+        display: grid;
+        grid-template-columns: 1.2fr 1fr;
+        gap: 12px;
+      }
+      @media (max-width: 1080px) {
+        .layout { grid-template-columns: 1fr; }
+      }
+      .right-col {
+        display: grid;
+        gap: 12px;
+        align-content: start;
+      }
+      .panel {
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        padding: 12px;
+        background: var(--card);
+      }
+      .panel-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        margin-bottom: 8px;
+      }
+      .panel-title { margin: 0; font-size: 18px; }
+      .controls { display: flex; gap: 6px; flex-wrap: wrap; }
+
+      .source-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+        gap: 8px;
+      }
+      .source-card {
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 10px;
+        background: var(--brand-soft);
+      }
+      .source-card-main {
+        display: grid;
+        grid-template-columns: 84px 1fr auto;
+        gap: 10px;
+        align-items: start;
+      }
+      .source-preview {
+        width: 84px;
+        height: 84px;
+        border-radius: 10px;
+        border: 1px solid var(--line);
+        background: #222;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--muted);
+        font-size: 10px;
+        font-weight: 700;
+        text-transform: uppercase;
+        overflow: hidden;
+      }
+      .source-preview-btn {
+        padding: 0;
+        border: 0;
+        background: transparent;
+        cursor: pointer;
+      }
+      .source-preview img {
+        width: 100%;
         height: 100%;
-        width: 0%;
-        background: var(--accent);
-        transition: width 120ms ease;
+        object-fit: cover;
       }
-      .hidden {
-        display: none !important;
+      .source-select {
+        margin-top: 2px;
       }
+      body[data-theme="light"] .source-preview {
+        background: #eef2f8;
+      }
+      .source-card.selected {
+        outline: 2px solid var(--brand);
+        outline-offset: -1px;
+      }
+      .source-name { font-weight: 600; }
+      .source-path { color: var(--muted); font-size: 12px; margin-top: 3px; word-break: break-all; }
+
+      .rows { display: grid; gap: 8px; }
+      .row-item {
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 8px;
+        display: grid;
+        grid-template-columns: auto 1fr auto;
+        align-items: center;
+        gap: 8px;
+      }
+      .row-title { font-weight: 600; }
+      .row-sub { color: var(--muted); font-size: 12px; margin-top: 2px; word-break: break-all; }
+      .star { color: var(--star); }
+
+      .table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      .table th, .table td {
+        border-bottom: 1px solid var(--line);
+        text-align: left;
+        padding: 8px 6px;
+        vertical-align: middle;
+      }
+      .table th { color: var(--muted); font-size: 12px; }
+      .small { color: var(--muted); font-size: 12px; }
+      .muted-empty { color: var(--muted); font-size: 13px; }
+
+      .menu-wrap { position: relative; }
+      .menu {
+        position: absolute;
+        top: calc(100% + 6px);
+        left: 0;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: var(--card);
+        padding: 6px;
+        z-index: 20;
+        min-width: 140px;
+      }
+      .menu button {
+        width: 100%;
+        border: 0;
+        background: transparent;
+        color: var(--text);
+        text-align: left;
+        padding: 7px 8px;
+        border-radius: 8px;
+        cursor: pointer;
+      }
+      .menu button:hover { background: rgba(127, 127, 127, 0.14); }
+
       .shutdown-overlay {
         position: fixed;
         inset: 0;
@@ -506,331 +319,149 @@
       }
       .shutdown-card {
         width: min(520px, 92vw);
-        border: 1px solid #3a3d44;
+        border: 1px solid var(--line);
         border-radius: 14px;
-        background: #16181d;
+        background: var(--card);
         padding: 24px;
         text-align: center;
       }
-      .shutdown-title {
-        margin: 0;
-        font-size: 28px;
-        font-weight: 700;
-        color: #f1f3f4;
-      }
-      .shutdown-sub {
-        margin: 8px 0 0;
-        color: #aab2c2;
-      }
-      body.theme-light .shutdown-overlay {
-        background: rgba(236, 240, 246, 0.92);
-      }
-      body.theme-light .shutdown-card {
-        background: #ffffff;
-        border-color: #cfd7e6;
-      }
-      body.theme-light .shutdown-title {
-        color: #111726;
-      }
-      body.theme-light .shutdown-sub {
-        color: #4f5e79;
-      }
-      .preview-overlay {
-        position: fixed;
-        inset: 0;
-        display: grid;
-        grid-template-columns: 260px 1fr;
-        z-index: 1000;
-      }
-      .preview-overlay-backdrop {
-        background: rgba(0, 0, 0, 0.62);
-      }
-      .preview-overlay-main {
-        background: rgba(15, 15, 15, 0.96);
-        border-left: 1px solid #3a3a3a;
-        display: flex;
-        flex-direction: column;
-      }
-      .preview-overlay-head {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: 12px 16px;
-        border-bottom: 1px solid #323232;
-      }
-      .preview-overlay-title {
-        font-weight: 700;
-      }
-      .preview-overlay-close {
+      .shutdown-spinner {
         width: 30px;
         height: 30px;
-        border-radius: 8px;
-        border: 1px solid #4a4a4a;
-        background: #1e1e1e;
-        color: #eee;
-        cursor: pointer;
-      }
-      .preview-overlay-body {
-        flex: 1;
-        padding: 18px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-      }
-      .preview-frame {
-        width: min(92%, 1200px);
-        height: min(92%, 820px);
-        border: 2px solid #555;
-        border-radius: 16px;
-        background: #141414;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        overflow: hidden;
-      }
-      .preview-frame img,
-      .preview-frame video {
-        width: 100%;
-        height: 100%;
-        object-fit: contain;
-        background: #111;
-      }
-      .preview-frame-fallback {
-        text-align: center;
-        color: #c9ced8;
-        padding: 20px;
-      }
-      .folder-modal {
-        position: fixed;
-        inset: 0;
-        z-index: 1200;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-      }
-      .folder-modal-backdrop {
-        position: absolute;
-        inset: 0;
-        background: rgba(0, 0, 0, 0.55);
-      }
-      .folder-modal-card {
-        position: relative;
-        width: min(520px, 92vw);
-        border: 1px solid #383838;
-        background: #151515;
-        border-radius: 14px;
-        padding: 14px;
-        z-index: 1;
-      }
-      .folder-modal-title {
-        font-size: 18px;
-        font-weight: 700;
-        margin-bottom: 10px;
-      }
-      .folder-options {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 8px;
-        margin-bottom: 12px;
-      }
-      .folder-pill {
-        border: 1px solid #404040;
-        background: #232323;
-        color: #d6d9df;
+        margin: 10px auto 0;
         border-radius: 999px;
-        padding: 7px 11px;
-        cursor: pointer;
+        border: 3px solid rgba(127, 127, 127, 0.28);
+        border-top-color: var(--brand);
+        animation: spin 0.9s linear infinite;
       }
-      .folder-new-row {
-        display: flex;
-        gap: 8px;
-      }
-      .folder-new-input {
-        flex: 1;
-        background: #101010;
-        color: #e7e9ee;
-        border: 1px solid #3b3b3b;
-        border-radius: 10px;
-        padding: 9px 11px;
+      .shutdown-title { margin: 0; font-size: 28px; }
+      .shutdown-sub { margin: 8px 0 0; color: var(--muted); }
+      .hidden { display: none !important; }
+      @keyframes spin {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
       }
     </style>
   </head>
   <body>
     <main class="app">
-      <aside class="sidebar">
-        <div class="brand">Pear Drops</div>
-        <div class="nav-group-title">Home</div>
-        <button class="nav-item" data-view="home">Home</button>
-        <div class="nav-group-title">Files</div>
-        <button class="nav-item active" data-view="all-files">All files</button>
-        <button class="nav-item" data-view="recent">Recent</button>
-        <button class="nav-item" data-view="starred">Starred</button>
-        <button class="nav-item" data-view="host">Host</button>
-        <button class="nav-item" data-view="deleted">Deleted files</button>
-        <div class="nav-group-title">Folders</div>
-        <div id="folder-list" class="folder-list"></div>
-        <div class="sidebar-foot">
-          Native-first transfer workspace.
-          <div id="transfer-count">0 transfers indexed</div>
+      <div class="mode-switch">
+        <div class="tabs">
+          <button id="tab-upload" class="tab-btn active">Upload</button>
+          <button id="tab-download" class="tab-btn">Download</button>
         </div>
-      </aside>
+      </div>
 
-      <section class="main">
-        <header class="topbar">
-          <button id="new-upload" class="primary-btn">+ Add Files</button>
-          <input
-            id="search"
-            class="search"
-            placeholder="Search files or paste invite to view drive"
-          />
-          <button id="search-action" class="secondary-btn">Search</button>
-          <select id="theme-mode" class="theme-select">
-            <option value="system">Theme: System</option>
-            <option value="dark">Theme: Dark</option>
-            <option value="light">Theme: Light</option>
-          </select>
-          <select id="folder-filter" class="folder-select">
-            <option value="">All folders</option>
-          </select>
-          <button id="download-action" class="secondary-btn">View Drive</button>
-          <input id="file-picker" type="file" multiple class="hidden" />
-        </header>
+      <section id="upload-page" class="tab-page">
+        <section class="hero">
+          <p id="upload-status" class="status">Starting worker...</p>
+          <p id="upload-worker-log" class="worker-log">Worker logs: waiting for events.</p>
+          <div id="upload-worker-activity-bars" class="activity-bars hidden"></div>
+        </section>
 
-        <div class="content">
-          <div class="content-head">
-            <div class="head-left">
-              <button id="section-back" class="mini-btn back-btn hidden">← Back</button>
-              <div>
-                <h1 id="section-title" class="content-title">All files</h1>
-                <p id="section-subtitle" class="content-sub">
-                  Everything in your local transfer workspace.
-                </p>
+        <section class="layout">
+          <article class="panel">
+            <div class="panel-head">
+              <h2 class="panel-title">Local Sources</h2>
+              <div class="controls">
+                <span class="menu-wrap">
+                  <button id="source-add" class="btn">＋</button>
+                  <div id="source-add-menu" class="menu hidden">
+                    <button id="add-file-action">Add File(s)</button>
+                    <button id="add-folder-action">Add Folder</button>
+                  </div>
+                </span>
+                <button id="source-select-toggle" class="btn alt">Select All</button>
+                <button id="source-remove-all" class="btn warn">Remove All</button>
+                <button id="host-selected" class="btn">Host Selected</button>
               </div>
             </div>
-            <div class="filters">
-              <button id="clear-deleted" class="mini-btn">Empty deleted</button>
+            <div id="sources-grid" class="source-grid"></div>
+          </article>
+
+          <div class="right-col">
+            <article class="panel">
+              <div class="panel-head">
+                <h2 class="panel-title">Active Hosts</h2>
+                <div class="controls">
+                  <button id="hosts-select-toggle" class="btn alt">Select All</button>
+                  <button id="hosts-copy-selected" class="btn alt">Copy Selected</button>
+                  <button id="hosts-star-selected" class="btn alt">Star Selected</button>
+                  <button id="hosts-stop-selected" class="btn warn">Stop Selected</button>
+                </div>
+              </div>
+              <div id="hosts-rows" class="rows"></div>
+            </article>
+
+            <article class="panel">
+              <div class="panel-head">
+                <h2 class="panel-title">Starred Hosts</h2>
+              </div>
+              <div id="starred-rows" class="rows"></div>
+            </article>
+          </div>
+        </section>
+
+        <section class="panel" style="margin-top: 12px;">
+          <div class="panel-head">
+            <h2 class="panel-title">Host History</h2>
+            <div class="controls">
+              <button id="history-select-toggle" class="btn alt">Select All</button>
+              <button id="history-rehost-selected" class="btn">Re-host Selected</button>
+              <button id="history-remove-selected" class="btn warn">Remove Selected</button>
             </div>
           </div>
+          <div id="history-rows" class="rows"></div>
+        </section>
+      </section>
 
-          <div id="home-view" class="home-grid hidden"></div>
+      <section id="download-page" class="tab-page hidden">
+        <section class="hero">
+          <div class="row">
+            <input id="invite-input" class="input" placeholder="Paste peardrops://invite..." />
+            <button id="view-drive" class="btn alt">View Drive</button>
+          </div>
 
-          <div id="list-view">
-            <div id="bulk-bar" class="bulk-bar hidden">
-              <span id="bulk-note" class="bulk-note">0 selected</span>
-              <button id="bulk-invite" class="mini-btn">Host Upload</button>
-              <button id="bulk-star" class="mini-btn" title="Star / Unstar selected">☆</button>
-              <button id="bulk-delete" class="mini-btn danger-btn" title="Delete selected">
-                <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M3 6h18" />
-                  <path d="M8 6V4h8v2" />
-                  <path d="M7 6l1 14h8l1-14" />
-                  <path d="M10 10v7" />
-                  <path d="M14 10v7" />
-                </svg>
-              </button>
-              <button id="bulk-folder" class="mini-btn">Put In Folder</button>
-            </div>
-            <div id="invite-download-bar" class="bulk-bar hidden">
-              <span id="invite-download-note" class="bulk-note">0 selected</span>
-              <button id="download-selected-default" class="mini-btn">Download Selected</button>
-              <button id="download-selected-peardrops" class="mini-btn">Add Selected To App</button>
-              <button id="download-selected-both" class="mini-btn">Add Drive As Folder</button>
-            </div>
-            <div id="host-history-bar" class="bulk-bar hidden">
-              <span id="host-history-note" class="bulk-note">0 selected</span>
-              <button id="host-history-start" class="mini-btn">Start Hosting</button>
-              <button id="host-history-remove" class="mini-btn danger-btn">
-                Remove From History
-              </button>
-            </div>
-            <div class="activity-panel">
-              <div id="invite-row" class="invite-row hidden">
-                <div id="invite-output-text" class="invite-text"></div>
-                <button id="copy-invite" class="mini-btn" title="Copy invite">
-                  <svg class="icon-copy" viewBox="0 0 24 24" aria-hidden="true">
-                    <rect x="9" y="9" width="11" height="11" rx="2" />
-                    <rect x="4" y="4" width="11" height="11" rx="2" />
-                  </svg>
-                </button>
-                <span id="copy-feedback" class="copy-feedback hidden">Copied</span>
+          <p id="download-status" class="status">Starting worker...</p>
+          <p id="download-worker-log" class="worker-log">Worker logs: waiting for events.</p>
+          <div id="download-worker-activity-bars" class="activity-bars hidden"></div>
+        </section>
+
+        <section style="margin-top: 12px;">
+          <article class="panel">
+            <div class="panel-head">
+              <h2 class="panel-title">Drive Files</h2>
+              <div class="controls">
+                <button id="download-selected" class="btn">Download Selected</button>
+                <button id="drive-select-toggle" class="btn alt">Select All</button>
               </div>
-              <p id="status" class="status">Starting worker...</p>
-              <p id="worker-log" class="worker-log">Worker logs: waiting for events.</p>
-              <div id="worker-activity-bars" class="activity-bars hidden"></div>
             </div>
-
             <table class="table">
               <thead>
                 <tr>
-                  <th class="check-col"><input id="check-all" type="checkbox" /></th>
-                  <th class="preview-col">Preview</th>
-                  <th class="name-col">Name</th>
-                  <th>Last modified</th>
+                  <th><input id="check-all-drive" type="checkbox" /></th>
+                  <th>Name</th>
+                  <th>Path</th>
                   <th>Size</th>
-                  <th class="actions-col">Actions</th>
                 </tr>
               </thead>
-              <tbody id="file-rows"></tbody>
+              <tbody id="drive-files"></tbody>
             </table>
-            <div id="list-footer" class="filters">
-              <button id="load-more" class="mini-btn hidden">Load more</button>
-            </div>
-            <div id="folder-actions" class="filters hidden">
-              <button id="remove-from-folder" class="mini-btn">Remove Selected From Folder</button>
-              <button id="delete-folder" class="mini-btn danger-btn">Delete Folder</button>
-            </div>
-          </div>
+          </article>
+        </section>
+      </section>
+
+      <input id="file-picker" type="file" multiple class="hidden" />
+
+      <section id="shutdown-overlay" class="shutdown-overlay hidden">
+        <div class="shutdown-card">
+          <h2 class="shutdown-title">Shutting Down</h2>
+          <p id="shutdown-message" class="shutdown-sub">Closing Pear Drops safely</p>
+          <div class="shutdown-spinner" aria-hidden="true"></div>
         </div>
       </section>
     </main>
-    <div id="preview-overlay" class="preview-overlay hidden">
-      <div id="preview-backdrop" class="preview-overlay-backdrop"></div>
-      <div class="preview-overlay-main">
-        <div class="preview-overlay-head">
-          <div id="preview-title" class="preview-overlay-title"></div>
-          <button id="preview-close" class="preview-overlay-close">✕</button>
-        </div>
-        <div class="preview-overlay-body">
-          <div id="preview-frame" class="preview-frame"></div>
-        </div>
-      </div>
-    </div>
-    <div id="folder-modal" class="folder-modal hidden">
-      <div id="folder-modal-backdrop" class="folder-modal-backdrop"></div>
-      <div class="folder-modal-card">
-        <div class="folder-modal-title">Put In Folder</div>
-        <div id="folder-options" class="folder-options"></div>
-        <div class="folder-new-row">
-          <input
-            id="folder-new-input"
-            class="folder-new-input"
-            placeholder="Create new folder name"
-          />
-          <button id="folder-create-btn" class="secondary-btn">Create</button>
-          <button id="folder-cancel-btn" class="mini-btn">Cancel</button>
-        </div>
-      </div>
-    </div>
-    <div id="host-modal" class="folder-modal hidden">
-      <div id="host-modal-backdrop" class="folder-modal-backdrop"></div>
-      <div class="folder-modal-card">
-        <div class="folder-modal-title">Host Upload</div>
-        <div class="row-muted" style="margin-bottom: 10px">
-          Session name (final label adds date + 4-char hex).
-        </div>
-        <div class="folder-new-row">
-          <input id="host-name-input" class="folder-new-input" placeholder="Host Session" />
-          <button id="host-submit-btn" class="secondary-btn">Start</button>
-          <button id="host-cancel-btn" class="mini-btn">Cancel</button>
-        </div>
-      </div>
-    </div>
-    <div id="shutdown-overlay" class="shutdown-overlay hidden">
-      <div class="shutdown-card">
-        <h2 class="shutdown-title">Shutting Down</h2>
-        <p id="shutdown-message" class="shutdown-sub">Closing worker and saving runtime state...</p>
-      </div>
-    </div>
+
     <script src="./app.js"></script>
   </body>
 </html>

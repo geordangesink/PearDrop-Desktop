@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog } = require('electron')
+const { app, BrowserWindow, ipcMain, dialog, Menu } = require('electron')
 const os = require('os')
 const path = require('path')
 const PearRuntime = require('pear-runtime')
@@ -17,6 +17,7 @@ const exitedWorkers = new WeakSet()
 const pendingDeepLinks = []
 let isQuitting = false
 let workersShuttingDown = null
+let themeMode = 'system'
 
 const cmd = command(
   appName,
@@ -115,6 +116,60 @@ function sendToAll(channel, payload) {
   }
 }
 
+function applyThemeMode(mode) {
+  const next = mode === 'dark' || mode === 'light' ? mode : 'system'
+  themeMode = next
+  sendToAll('app:theme-mode', { mode: next })
+}
+
+function createAppMenu() {
+  const template = [
+    ...(process.platform === 'darwin'
+      ? [
+          {
+            role: 'appMenu'
+          }
+        ]
+      : []),
+    {
+      role: 'fileMenu'
+    },
+    {
+      role: 'editMenu'
+    },
+    {
+      label: 'Options',
+      submenu: [
+        {
+          label: 'Theme',
+          submenu: [
+            {
+              label: 'System',
+              type: 'radio',
+              checked: themeMode === 'system',
+              click: () => applyThemeMode('system')
+            },
+            {
+              label: 'Dark',
+              type: 'radio',
+              checked: themeMode === 'dark',
+              click: () => applyThemeMode('dark')
+            },
+            {
+              label: 'Light',
+              type: 'radio',
+              checked: themeMode === 'light',
+              click: () => applyThemeMode('light')
+            }
+          ]
+        }
+      ]
+    }
+  ]
+  const menu = Menu.buildFromTemplate(template)
+  Menu.setApplicationMenu(menu)
+}
+
 function getWorker(specifier) {
   if (workers.has(specifier)) return workers.get(specifier)
 
@@ -169,7 +224,7 @@ function resolveRelayUrl() {
 
 async function createWindow() {
   const win = new BrowserWindow({
-    width: 980,
+    width: 1120,
     height: 720,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -190,6 +245,7 @@ async function createWindow() {
   while (pendingDeepLinks.length > 0) {
     sendToAll('app:deep-link', pendingDeepLinks.shift())
   }
+  sendToAll('app:theme-mode', { mode: themeMode })
 }
 
 function onDeepLink(url) {
@@ -245,6 +301,10 @@ ipcMain.handle('app:getDownloadsPath', async () => {
   return app.getPath('downloads')
 })
 
+ipcMain.handle('app:getThemeMode', async () => {
+  return themeMode
+})
+
 app.setAsDefaultProtocolClient(protocol)
 
 app.on('open-url', (evt, url) => {
@@ -262,6 +322,7 @@ if (!lock) {
   })
 
   app.whenReady().then(() => {
+    createAppMenu()
     createWindow().catch((error) => {
       console.error('Failed creating window', error)
       app.quit()
@@ -278,7 +339,7 @@ if (!lock) {
         console.error('Failed while shutting down workers', error)
       })
       .finally(() => {
-        app.quit()
+        app.exit(0)
       })
   })
 

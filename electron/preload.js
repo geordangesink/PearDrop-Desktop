@@ -43,6 +43,14 @@ const api = {
   },
   getDownloadsPath() {
     return ipcRenderer.invoke('app:getDownloadsPath')
+  },
+  getThemeMode() {
+    return ipcRenderer.invoke('app:getThemeMode')
+  },
+  onThemeMode(listener) {
+    const wrap = (evt, payload) => listener(payload || {})
+    ipcRenderer.on('app:theme-mode', wrap)
+    return () => ipcRenderer.removeListener('app:theme-mode', wrap)
   }
 }
 

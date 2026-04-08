@@ -1,4 +1,4 @@
-/* global window, document, navigator, TextDecoder, FileReader, Buffer, localStorage, confirm, Element */
+/* global window, document, navigator, TextDecoder, Buffer, localStorage */
 
 const RPC = require('bare-rpc')
 const fs = require('fs/promises')
@@ -20,1827 +20,1180 @@ const RpcCommand = {
   READ_ENTRY_CHUNK: 10
 }
 
+const SOURCES_KEY = 'peardrops.desktop.sources.v1'
+const HISTORY_KEY = 'peardrops.desktop.host-history.v1'
+const STARRED_HOSTS_KEY = 'peardrops.desktop.starred-hosts.v1'
 const workerSpecifier = '/workers/main.js'
 const bridge = window.bridge
 const decoder = new TextDecoder('utf8')
-const TRASH_SVG =
-  '<svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M7 6l1 14h8l1-14"/><path d="M10 10v7"/><path d="M14 10v7"/></svg>'
+const workerActivityBars = new Map()
 
-const PREF_KEY = 'peardrops.desktop.files.v3'
-const STARRED_KEY = 'peardrops.desktop.starred'
-const DELETED_KEY = 'peardrops.desktop.deleted'
-const DELETED_AT_KEY = 'peardrops.desktop.deletedAt'
-const FOLDERS_KEY = 'peardrops.desktop.folders'
-const HOST_HISTORY_KEY = 'peardrops.desktop.host-history'
-const HOST_HISTORY_REMOVED_KEY = 'peardrops.desktop.host-history-removed'
-const THEME_MODE_KEY = 'peardrops.desktop.theme-mode'
-const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000
+const statusEls = [
+  document.getElementById('upload-status'),
+  document.getElementById('download-status')
+].filter(Boolean)
+const workerLogEls = [
+  document.getElementById('upload-worker-log'),
+  document.getElementById('download-worker-log')
+].filter(Boolean)
+const workerActivityBarsEls = [
+  document.getElementById('upload-worker-activity-bars'),
+  document.getElementById('download-worker-activity-bars')
+].filter(Boolean)
 
-const statusEl = document.getElementById('status')
-const sectionTitleEl = document.getElementById('section-title')
-const sectionSubtitleEl = document.getElementById('section-subtitle')
-const sectionBackBtn = document.getElementById('section-back')
-const transferCountEl = document.getElementById('transfer-count')
-const rowsEl = document.getElementById('file-rows')
-const homeViewEl = document.getElementById('home-view')
-const listViewEl = document.getElementById('list-view')
-const bulkBarEl = document.getElementById('bulk-bar')
-const bulkNoteEl = document.getElementById('bulk-note')
-const checkAllEl = document.getElementById('check-all')
-const loadMoreBtn = document.getElementById('load-more')
-const folderActionsEl = document.getElementById('folder-actions')
-const removeFromFolderBtn = document.getElementById('remove-from-folder')
-const deleteFolderBtn = document.getElementById('delete-folder')
-const previewOverlayEl = document.getElementById('preview-overlay')
-const previewBackdropEl = document.getElementById('preview-backdrop')
-const previewCloseEl = document.getElementById('preview-close')
-const previewTitleEl = document.getElementById('preview-title')
-const previewFrameEl = document.getElementById('preview-frame')
+const uploadTabBtn = document.getElementById('tab-upload')
+const downloadTabBtn = document.getElementById('tab-download')
+const uploadPageEl = document.getElementById('upload-page')
+const downloadPageEl = document.getElementById('download-page')
+const inviteInputEl = document.getElementById('invite-input')
+const viewDriveBtn = document.getElementById('view-drive')
+const downloadSelectedBtn = document.getElementById('download-selected')
 
-const inviteOutputTextEl = document.getElementById('invite-output-text')
-const inviteRowEl = document.getElementById('invite-row')
-const folderFilterEl = document.getElementById('folder-filter')
+const sourceAddBtn = document.getElementById('source-add')
+const sourceAddMenuEl = document.getElementById('source-add-menu')
+const addFileActionBtn = document.getElementById('add-file-action')
+const addFolderActionBtn = document.getElementById('add-folder-action')
+const sourceSelectToggleBtn = document.getElementById('source-select-toggle')
+const sourceRemoveAllBtn = document.getElementById('source-remove-all')
+const hostSelectedBtn = document.getElementById('host-selected')
+const sourcesGridEl = document.getElementById('sources-grid')
+
+const driveRowsEl = document.getElementById('drive-files')
+const checkAllDriveEl = document.getElementById('check-all-drive')
+const driveSelectToggleBtn = document.getElementById('drive-select-toggle')
+
+const hostsRowsEl = document.getElementById('hosts-rows')
+const starredRowsEl = document.getElementById('starred-rows')
+const hostsSelectToggleBtn = document.getElementById('hosts-select-toggle')
+const hostsCopySelectedBtn = document.getElementById('hosts-copy-selected')
+const hostsStarSelectedBtn = document.getElementById('hosts-star-selected')
+const hostsStopSelectedBtn = document.getElementById('hosts-stop-selected')
+
+const historyRowsEl = document.getElementById('history-rows')
+const historySelectToggleBtn = document.getElementById('history-select-toggle')
+const historyRehostSelectedBtn = document.getElementById('history-rehost-selected')
+const historyRemoveSelectedBtn = document.getElementById('history-remove-selected')
+
 const filePicker = document.getElementById('file-picker')
-const newUploadBtn = document.getElementById('new-upload')
-const searchActionBtn = document.getElementById('search-action')
-const downloadBtn = document.getElementById('download-action')
-const copyInviteBtn = document.getElementById('copy-invite')
-const clearDeletedBtn = document.getElementById('clear-deleted')
-const searchInput = document.getElementById('search')
-const bulkInviteBtn = document.getElementById('bulk-invite')
-const bulkStarBtn = document.getElementById('bulk-star')
-const bulkDeleteBtn = document.getElementById('bulk-delete')
-const bulkFolderBtn = document.getElementById('bulk-folder')
-const folderListEl = document.getElementById('folder-list')
-const folderModalEl = document.getElementById('folder-modal')
-const folderModalBackdropEl = document.getElementById('folder-modal-backdrop')
-const folderOptionsEl = document.getElementById('folder-options')
-const folderNewInputEl = document.getElementById('folder-new-input')
-const folderCreateBtn = document.getElementById('folder-create-btn')
-const folderCancelBtn = document.getElementById('folder-cancel-btn')
-const hostModalEl = document.getElementById('host-modal')
-const hostModalBackdropEl = document.getElementById('host-modal-backdrop')
-const hostNameInputEl = document.getElementById('host-name-input')
-const hostSubmitBtn = document.getElementById('host-submit-btn')
-const hostCancelBtn = document.getElementById('host-cancel-btn')
-const inviteDownloadBarEl = document.getElementById('invite-download-bar')
-const inviteDownloadNoteEl = document.getElementById('invite-download-note')
-const hostHistoryBarEl = document.getElementById('host-history-bar')
-const hostHistoryNoteEl = document.getElementById('host-history-note')
-const hostHistoryStartBtn = document.getElementById('host-history-start')
-const hostHistoryRemoveBtn = document.getElementById('host-history-remove')
-const downloadSelectedDefaultBtn = document.getElementById('download-selected-default')
-const downloadSelectedPearBtn = document.getElementById('download-selected-peardrops')
-const downloadSelectedBothBtn = document.getElementById('download-selected-both')
-const workerLogEl = document.getElementById('worker-log')
-const workerActivityBarsEl = document.getElementById('worker-activity-bars')
-const themeModeEl = document.getElementById('theme-mode')
-const copyFeedbackEl = document.getElementById('copy-feedback')
 const shutdownOverlayEl = document.getElementById('shutdown-overlay')
 const shutdownMessageEl = document.getElementById('shutdown-message')
 
-const navItems = Array.from(document.querySelectorAll('.sidebar .nav-item'))
-const sidebarEl = document.querySelector('.sidebar')
-
 const state = {
   rpc: null,
-  view: 'all-files',
-  search: '',
-  searchResultsQuery: '',
-  latestInvite: '',
-  latestInviteManifest: [],
-  transfers: [],
+  sources: loadJson(SOURCES_KEY, []),
+  selectedSources: new Set(),
+  hostHistory: loadJson(HISTORY_KEY, []),
+  selectedHistory: new Set(),
   activeHosts: [],
-  files: loadJson(PREF_KEY, []),
-  starred: new Set(loadJson(STARRED_KEY, [])),
-  deleted: new Set(loadJson(DELETED_KEY, [])),
-  deletedAt: loadJson(DELETED_AT_KEY, {}),
-  selected: new Set(),
-  folders: loadJson(FOLDERS_KEY, []),
-  hostHistory: loadJson(HOST_HISTORY_KEY, []),
-  hostHistoryRemoved: new Set(loadJson(HOST_HISTORY_REMOVED_KEY, [])),
-  selectedHostHistory: new Set(),
-  folderFilter: '',
-  openMenuId: '',
-  hostDetailInvite: '',
-  previewFileId: '',
-  folderAssignIds: [],
+  selectedHosts: new Set(),
+  starredHosts: new Set(loadJson(STARRED_HOSTS_KEY, [])),
   inviteEntries: [],
   inviteSelected: new Set(),
   inviteSource: '',
-  recentVisible: 10,
-  deletedVisible: 10,
-  hostingBusy: false,
-  themeMode: readThemeMode(),
-  copyFeedbackKey: ''
+  themeMode: 'system',
+  sourceMenuOpen: false,
+  currentTab: 'upload'
 }
 
-let pendingHostNameResolve = null
-let copyFeedbackTimer = null
-const workerActivityBars = new Map()
-
 if (!bridge || typeof bridge.startWorker !== 'function') {
-  statusEl.textContent = 'Desktop bridge failed to load. Check preload configuration.'
+  setStatus('Desktop bridge failed to load. Check preload configuration.')
   throw new Error('window.bridge is unavailable')
 }
 
-void startDesktop()
-setTimeout(() => cleanupExpiredDeleted(), 0)
-applyThemeMode(state.themeMode)
-if (themeModeEl) themeModeEl.value = state.themeMode
-updateFolderOptions()
-renderSidebarFolders()
-render()
+wireGlobalEvents()
+wireUiEvents()
+void boot()
 
-bridge.onWorkerStderr(workerSpecifier, (data) => {
-  const text = decoder.decode(data)
-  if (text.includes('ECONNRESET') || text.includes('connection reset by peer')) return
-  setWorkerLogMessage(String(text).trim())
-})
+function wireGlobalEvents() {
+  bridge.onWorkerStdout?.(workerSpecifier, (data) => {
+    const text = decoder.decode(data).trim()
+    if (!text) return
+    setWorkerLogMessage(text)
+  })
 
-bridge.onDeepLink((url) => {
-  if (!url.startsWith('peardrops://')) return
-  searchInput.value = url
-  statusEl.textContent = 'Invite link received via deep link.'
-})
-bridge.onAppQuitting?.((payload) => {
-  const message = String(payload?.message || '').trim()
-  if (shutdownMessageEl && message) shutdownMessageEl.textContent = message
-  shutdownOverlayEl?.classList.remove('hidden')
-})
+  bridge.onWorkerStderr?.(workerSpecifier, (data) => {
+    const text = decoder.decode(data)
+    if (text.includes('ECONNRESET') || text.includes('connection reset by peer')) return
+    const clean = text.trim()
+    if (!clean) return
+    setWorkerLogMessage(clean)
+  })
 
-if (sidebarEl) {
-  sidebarEl.addEventListener('click', (event) => {
+  bridge.onDeepLink?.((url) => {
+    if (!String(url || '').startsWith('peardrops://')) return
+    inviteInputEl.value = url
+    setStatus('Invite link received from deep link.')
+  })
+
+  bridge.onAppQuitting?.((payload) => {
+    const message = String(payload?.message || '').trim()
+    if (shutdownMessageEl && message) shutdownMessageEl.textContent = message
+    shutdownOverlayEl?.classList.remove('hidden')
+  })
+
+  bridge.onThemeMode?.((payload) => {
+    applyThemeMode(payload?.mode)
+  })
+
+  window.matchMedia?.('(prefers-color-scheme: dark)')?.addEventListener?.('change', () => {
+    if (state.themeMode === 'system') applyThemeMode('system')
+  })
+
+  document.addEventListener('click', (event) => {
     const target = event.target
     if (!(target instanceof HTMLElement)) return
-    const item = target.closest('.nav-item')
-    if (!(item instanceof HTMLElement)) return
-    const nextView = item.dataset.view || 'all-files'
-    if (nextView === 'all-files') {
-      state.folderFilter = ''
-      folderFilterEl.value = ''
+    if (
+      state.sourceMenuOpen &&
+      !target.closest('#source-add') &&
+      !target.closest('#source-add-menu')
+    ) {
+      state.sourceMenuOpen = false
+      renderSourceMenu()
     }
-    setView(nextView)
   })
 }
 
-document.addEventListener('click', (event) => {
-  const target = event.target
-  if (!(target instanceof Element)) return
-  if (
-    !target.closest('[data-action="menu"]') &&
-    !target.closest('.menu-panel') &&
-    state.openMenuId
-  ) {
-    state.openMenuId = ''
-    render()
-  }
-})
+function wireUiEvents() {
+  uploadTabBtn.addEventListener('click', () => setTab('upload'))
+  downloadTabBtn.addEventListener('click', () => setTab('download'))
 
-document.addEventListener('keydown', (event) => {
-  if (event.key === 'Escape') closePreview()
-})
+  sourceAddBtn.addEventListener('click', (event) => {
+    event.stopPropagation()
+    state.sourceMenuOpen = !state.sourceMenuOpen
+    renderSourceMenu()
+  })
 
-previewBackdropEl?.addEventListener('click', () => closePreview())
-previewCloseEl?.addEventListener('click', () => closePreview())
-folderModalBackdropEl?.addEventListener('click', () => closeFolderModal())
-folderCancelBtn?.addEventListener('click', () => closeFolderModal())
-hostModalBackdropEl?.addEventListener('click', () => closeHostNameModal(null))
-hostCancelBtn?.addEventListener('click', () => closeHostNameModal(null))
-hostSubmitBtn?.addEventListener('click', () => {
-  closeHostNameModal(String(hostNameInputEl?.value || ''))
-})
-hostNameInputEl?.addEventListener('keydown', (event) => {
-  if (event.key === 'Enter') {
-    event.preventDefault()
-    closeHostNameModal(String(hostNameInputEl?.value || ''))
-  }
-})
-folderCreateBtn?.addEventListener('click', () => {
-  const name = String(folderNewInputEl?.value || '').trim()
-  if (!name) return
-  const folder = ensureFolder(name)
-  applyFolderToIds(folder.id, state.folderAssignIds)
-  closeFolderModal()
-  render()
-})
+  addFileActionBtn.addEventListener('click', async () => {
+    state.sourceMenuOpen = false
+    renderSourceMenu()
+    const picked = normalizePathList(await bridge.pickFiles?.())
+    if (picked.length) {
+      addLocalSources(picked.map((srcPath) => ({ type: 'file', path: srcPath })))
+      return
+    }
+    filePicker.click()
+  })
 
-searchActionBtn?.addEventListener('click', () => void onSearchAction())
-themeModeEl?.addEventListener('change', () => {
-  state.themeMode = String(themeModeEl.value || 'system')
-  localStorage.setItem(THEME_MODE_KEY, state.themeMode)
-  applyThemeMode(state.themeMode)
-})
-window.matchMedia?.('(prefers-color-scheme: dark)')?.addEventListener?.('change', () => {
-  if (state.themeMode === 'system') applyThemeMode('system')
-})
+  addFolderActionBtn.addEventListener('click', async () => {
+    state.sourceMenuOpen = false
+    renderSourceMenu()
+    const dir = String((await bridge.pickDirectory?.()) || '').trim()
+    if (!dir) return
+    addLocalSources([{ type: 'folder', path: dir }])
+  })
 
-folderFilterEl.addEventListener('change', () => {
-  state.folderFilter = folderFilterEl.value
-  setView('all-files', { keepFolderFilter: true })
-})
+  filePicker.addEventListener('change', () => {
+    const files = Array.from(filePicker.files || [])
+    const paths = files.map((file) => String(file?.path || '')).filter(Boolean)
+    if (paths.length) addLocalSources(paths.map((srcPath) => ({ type: 'file', path: srcPath })))
+    filePicker.value = ''
+  })
 
-sectionBackBtn?.addEventListener('click', () => {
-  state.hostDetailInvite = ''
-  render()
-})
+  sourceSelectToggleBtn.addEventListener('click', () => {
+    if (!state.sources.length) return
+    const allSelected = state.selectedSources.size === state.sources.length
+    state.selectedSources.clear()
+    if (!allSelected) {
+      for (const source of state.sources) state.selectedSources.add(source.id)
+    }
+    renderSources()
+  })
 
-newUploadBtn.addEventListener('click', async () => {
-  const picked = normalizePathList(await bridge.pickFiles?.())
-  if (picked.length) {
-    await importPathsAsLocalFiles(picked)
-    return
-  }
-  filePicker.click()
-})
-filePicker.addEventListener('change', async () => {
-  const sourceFiles = Array.from(filePicker.files || [])
-  if (sourceFiles.length === 0) return
+  sourceRemoveAllBtn.addEventListener('click', () => {
+    if (!state.sources.length) return
+    const removed = state.sources.length
+    state.sources = []
+    state.selectedSources.clear()
+    persistSources()
+    renderSources()
+    setStatus(`Removed ${removed} source entr${removed === 1 ? 'y' : 'ies'}.`)
+  })
 
-  const fromInputPaths = sourceFiles.map((file) => String(file?.path || '')).filter(Boolean)
-  if (fromInputPaths.length === sourceFiles.length) {
-    await importPathsAsLocalFiles(fromInputPaths)
-  } else {
-    const now = Date.now()
-    const fallback = sourceFiles.map((file, i) => ({
-      id: `local:${now}:${i}:${file.name}`,
-      name: String(file.name || `file-${i + 1}`),
-      byteLength: Number(file.size || 0),
-      updatedAt: now,
-      source: 'local',
-      invite: '',
-      mimeType: file.type || guessMime(file.name),
-      path: String(file?.path || '')
-    }))
-    state.files.push(...fallback)
-    persistAll()
-    statusEl.textContent =
-      'Added files, but some are missing local paths. Re-add via native picker for reliable hosting.'
-    render()
-  }
+  hostSelectedBtn.addEventListener('click', () => void hostSelectedSources())
 
-  filePicker.value = ''
-})
+  viewDriveBtn.addEventListener('click', () => void openInviteFiles())
+  downloadSelectedBtn.addEventListener('click', () => void downloadInviteSelected())
 
-downloadBtn.addEventListener('click', async () => {
-  await openInviteFilesFromSearch()
-})
-
-copyInviteBtn.addEventListener('click', async () => {
-  const invite = state.latestInvite
-  if (!invite) return void (statusEl.textContent = 'No invite available yet.')
-  await copyToClipboard(invite)
-  setCopyFeedback('invite-bar', 'Copied')
-  statusEl.textContent = 'Invite copied to clipboard.'
-})
-
-clearDeletedBtn.addEventListener('click', () => {
-  if (state.deleted.size === 0) {
-    return void (statusEl.textContent = 'Deleted files is already empty.')
-  }
-  if (!confirm('Permanently remove all deleted files from this local list?')) return
-  wipeDeletedFiles(Array.from(state.deleted))
-  statusEl.textContent = 'Deleted files cleared.'
-  render()
-})
-
-checkAllEl.addEventListener('change', () => {
-  if (state.view === 'invite-files') {
+  driveSelectToggleBtn.addEventListener('click', () => {
+    if (!state.inviteEntries.length) return
+    const allSelected = state.inviteSelected.size === state.inviteEntries.length
     state.inviteSelected.clear()
-    if (checkAllEl.checked) {
-      for (const entry of state.inviteEntries) {
-        state.inviteSelected.add(String(entry.drivePath || entry.name))
-      }
+    if (!allSelected) {
+      for (const entry of state.inviteEntries) state.inviteSelected.add(entryKey(entry))
     }
-    render()
-    return
-  }
-  if (state.view === 'host' && !state.hostDetailInvite) {
-    const rows = getHostHistoryRows()
-    state.selectedHostHistory.clear()
-    if (checkAllEl.checked) {
-      for (const row of rows) state.selectedHostHistory.add(hostHistoryEntryKey(row))
+    renderDriveRows()
+  })
+
+  checkAllDriveEl.addEventListener('change', () => {
+    state.inviteSelected.clear()
+    if (checkAllDriveEl.checked) {
+      for (const entry of state.inviteEntries) state.inviteSelected.add(entryKey(entry))
     }
-    render()
-    return
-  }
+    renderDriveRows()
+  })
 
-  const visible = selectVisibleFiles().map((file) => file.id)
-  if (checkAllEl.checked) {
-    for (const id of visible) state.selected.add(id)
-  } else {
-    for (const id of visible) state.selected.delete(id)
-  }
-  render()
-})
-
-bulkInviteBtn.addEventListener('click', () => void hostSelectedFiles(Array.from(state.selected)))
-bulkStarBtn.addEventListener('click', () => {
-  const ids = Array.from(state.selected)
-  const unstar = ids.length > 0 && ids.every((id) => state.starred.has(id))
-  for (const id of ids) {
-    if (unstar) state.starred.delete(id)
-    else state.starred.add(id)
-  }
-  persistAll()
-  render()
-})
-bulkDeleteBtn.addEventListener('click', () => {
-  const ids = Array.from(state.selected)
-  if (!ids.length) return
-  if (!confirm(`Delete ${ids.length} selected item(s)?`)) return
-  for (const id of ids) {
-    state.deleted.add(id)
-    state.deletedAt[id] = Date.now()
-  }
-  persistAll()
-  render()
-})
-bulkFolderBtn.addEventListener('click', () => assignFolderToSelection(Array.from(state.selected)))
-downloadSelectedDefaultBtn?.addEventListener('click', () => void downloadInviteSelected('download'))
-downloadSelectedPearBtn?.addEventListener(
-  'click',
-  () => void downloadInviteSelected('add-selected')
-)
-downloadSelectedBothBtn?.addEventListener(
-  'click',
-  () => void downloadInviteSelected('add-drive-folder')
-)
-hostHistoryStartBtn?.addEventListener('click', () => void startSelectedHistoryHosts())
-hostHistoryRemoveBtn?.addEventListener('click', () => {
-  const keys = Array.from(state.selectedHostHistory)
-  if (!keys.length) return
-  if (!confirm(`Remove ${keys.length} selected host history item(s)?`)) return
-  removeFromHistory(keys)
-  statusEl.textContent = `Removed ${keys.length} history item(s).`
-  render()
-})
-
-loadMoreBtn?.addEventListener('click', () => {
-  if (state.view === 'recent') state.recentVisible += 10
-  if (state.view === 'deleted') state.deletedVisible += 10
-  render()
-})
-
-removeFromFolderBtn?.addEventListener('click', () => {
-  const ids = Array.from(state.selected)
-  if (!ids.length) return
-  for (const id of ids) {
-    const file = state.files.find((f) => f.id === id)
-    if (!file) continue
-    upsertFile({ ...file, folderId: '' })
-  }
-  persistAll()
-  render()
-})
-
-deleteFolderBtn?.addEventListener('click', () => {
-  const folderId = state.folderFilter
-  if (!folderId) return
-  const folder = state.folders.find((f) => f.id === folderId)
-  if (!folder) return
-  if (!confirm(`Delete folder "${folder.name}"?`)) return
-
-  const folderFileIds = state.files.filter((f) => f.folderId === folderId).map((f) => f.id)
-  const moveToDeleted = confirm(
-    'Also move all files in this folder to Deleted files? They can be restored from Deleted.'
-  )
-  if (
-    moveToDeleted &&
-    !confirm('Final confirmation: move these files to Deleted and remove this folder?')
-  ) {
-    return
-  }
-
-  if (moveToDeleted) {
-    const now = Date.now()
-    for (const id of folderFileIds) {
-      state.deleted.add(id)
-      state.deletedAt[id] = now
-      const file = state.files.find((item) => item.id === id)
-      if (file) file.folderId = ''
-    }
-  } else {
-    for (const file of state.files) {
-      if (file.folderId === folderId) file.folderId = ''
-    }
-  }
-
-  state.folders = state.folders.filter((f) => f.id !== folderId)
-  state.folderFilter = ''
-  updateFolderOptions()
-  renderSidebarFolders()
-  persistAll()
-  render()
-})
-
-rowsEl.addEventListener('click', async (event) => {
-  const target = event.target
-  if (!(target instanceof Element)) return
-  const actionNode = target.closest('[data-action]')
-  if (!(actionNode instanceof Element)) return
-  const action = actionNode.dataset.action
-  const id = actionNode.dataset.id
-  const index = Number(actionNode.dataset.index || -1)
-  if (!action) return
-
-  if (action === 'invite-select') {
+  driveRowsEl.addEventListener('click', (event) => {
+    const target = event.target
+    if (!(target instanceof HTMLElement)) return
+    const node = target.closest('[data-action]')
+    if (!(node instanceof HTMLElement)) return
+    const action = String(node.dataset.action || '')
+    const index = Number(node.dataset.index || -1)
+    if (action !== 'toggle') return
+    if (!Number.isInteger(index) || index < 0 || index >= state.inviteEntries.length) return
     const entry = state.inviteEntries[index]
-    if (!entry) return
-    const key = String(entry.drivePath || entry.name)
+    const key = entryKey(entry)
     if (state.inviteSelected.has(key)) state.inviteSelected.delete(key)
     else state.inviteSelected.add(key)
-    render()
-    return
-  }
+    renderDriveRows()
+  })
 
-  if (action === 'invite-download-one') {
-    const entry = state.inviteEntries[index]
-    if (!entry) return
-    state.inviteSelected = new Set([String(entry.drivePath || entry.name)])
-    await downloadInviteSelected('download')
-    return
-  }
-
-  if (action === 'history-select' && id) {
-    if (state.selectedHostHistory.has(id)) state.selectedHostHistory.delete(id)
-    else state.selectedHostHistory.add(id)
-    render()
-    return
-  }
-
-  if (action === 'select' && id) return void toggleSelect(id)
-  if (action === 'star' && id) {
-    if (state.starred.has(id)) state.starred.delete(id)
-    else state.starred.add(id)
-    persistAll()
-    return void render()
-  }
-  if (action === 'delete' && id) {
-    const alreadyDeleted = state.deleted.has(id)
-    if (alreadyDeleted) {
-      if (!confirm('Permanently remove this item from Deleted files?')) return
-      wipeDeletedFiles([id], true)
-      statusEl.textContent = 'Deleted item permanently removed.'
-      return void render()
+  hostsSelectToggleBtn.addEventListener('click', () => {
+    if (!state.activeHosts.length) return
+    const allSelected = state.selectedHosts.size === state.activeHosts.length
+    state.selectedHosts.clear()
+    if (!allSelected) {
+      for (const host of state.activeHosts) {
+        const invite = String(host.invite || '').trim()
+        if (invite) state.selectedHosts.add(invite)
+      }
     }
-    if (!confirm('Move this item to deleted?')) return
-    state.deleted.add(id)
-    state.deletedAt[id] = Date.now()
-    state.selected.delete(id)
-    persistAll()
-    return void render()
-  }
-  if (action === 'restore' && id) {
-    state.deleted.delete(id)
-    delete state.deletedAt[id]
-    persistAll()
-    return void render()
-  }
-  if (action === 'menu' && id) {
-    state.openMenuId = state.openMenuId === id ? '' : id
-    return void render()
-  }
-  if (action === 'preview' && id) return void openPreview(id)
-  if (action === 'copy' && id) {
-    const hostSummary = state.activeHosts.find((item) => `host:${item.invite}` === id)
-    const file = state.files.find((item) => item.id === id)
-    const invite = hostSummary?.invite || file?.invite || state.latestInvite
-    if (!invite) return void (statusEl.textContent = 'No invite available for this item.')
-    state.latestInvite = invite
-    updateInviteOutput()
-    await copyToClipboard(invite)
-    setCopyFeedback(`host-copy:${id}`, 'Copied')
-    return void (statusEl.textContent = 'Invite copied to clipboard.')
-  }
-  if (action === 'copy-history-invite' && id) {
-    const transfer = state.transfers.find((item) => item.id === id)
-    const invite = transfer?.invite || ''
-    if (!invite) return void (statusEl.textContent = 'No invite in history for this transfer.')
-    state.latestInvite = invite
-    updateInviteOutput()
-    await copyToClipboard(invite)
-    setCopyFeedback(`history-copy:${id}`, 'Copied')
-    return void (statusEl.textContent = 'History invite copied to clipboard.')
-  }
-  if (action === 'remove-history' && id) {
-    if (!confirm('Remove this host history item?')) return
-    removeFromHistory([id])
-    statusEl.textContent = 'History item removed.'
-    return void render()
-  }
-  if (action === 'host' && id) return void hostSelectedFiles([id])
-  if (action === 'folder' && id) return void assignFolderToSelection([id])
-  if (action === 'unfolder' && id) {
-    const file = state.files.find((f) => f.id === id)
-    if (!file) return
-    upsertFile({ ...file, folderId: '' })
-    persistAll()
-    return void render()
-  }
-  if (action === 'folder-invite' && id) {
-    const file = state.files.find((item) => item.id === id)
-    if (!file?.folderId) return void (statusEl.textContent = 'This file is not in a folder yet.')
-    const ids = state.files.filter((item) => item.folderId === file.folderId).map((item) => item.id)
-    return void hostSelectedFiles(ids)
-  }
-  if (action === 'open-host' && id) {
-    state.hostDetailInvite = id
-    return void render()
-  }
-  if (action === 'stop-host' && id) {
-    if (!confirm('Stop this hosting session?')) return
-    await state.rpc.request(RpcCommand.STOP_HOST, { invite: id })
-    if (state.hostDetailInvite === id) state.hostDetailInvite = ''
-    await refreshActiveHosts()
-    render()
-    return void (statusEl.textContent = 'Hosting stopped.')
-  }
-  if (action === 'restart-host' && id) {
-    const row = getHostHistoryRows().find((item) => hostHistoryEntryKey(item) === id)
-    if (!row) return
-    await startHostFromHistoryItem(row)
-  }
-})
+    renderHosts()
+  })
 
-function toggleSelect(id) {
-  if (state.selected.has(id)) state.selected.delete(id)
-  else state.selected.add(id)
-  render()
+  hostsCopySelectedBtn.addEventListener('click', () => void copySelectedHosts())
+  hostsStarSelectedBtn.addEventListener('click', () => {
+    if (!state.selectedHosts.size) {
+      setStatus('Select at least one active host first.')
+      return
+    }
+    for (const invite of state.selectedHosts) state.starredHosts.add(invite)
+    persistStarredHosts()
+    renderHosts()
+    setStatus(`Starred ${state.selectedHosts.size} host${state.selectedHosts.size === 1 ? '' : 's'}.`)
+  })
+  hostsStopSelectedBtn.addEventListener('click', () => void stopSelectedHosts())
+
+  historySelectToggleBtn.addEventListener('click', () => {
+    if (!state.hostHistory.length) return
+    const allSelected = state.selectedHistory.size === state.hostHistory.length
+    state.selectedHistory.clear()
+    if (!allSelected) {
+      for (const row of state.hostHistory) state.selectedHistory.add(row.id)
+    }
+    renderHistory()
+  })
+
+  historyRehostSelectedBtn.addEventListener('click', () => void rehostSelectedHistory())
+  historyRemoveSelectedBtn.addEventListener('click', () => {
+    if (!state.selectedHistory.size) {
+      setStatus('Select at least one history item first.')
+      return
+    }
+    const before = state.hostHistory.length
+    state.hostHistory = state.hostHistory.filter((row) => !state.selectedHistory.has(row.id))
+    const removed = before - state.hostHistory.length
+    state.selectedHistory.clear()
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(state.hostHistory))
+    renderHistory()
+    setStatus(`Removed ${removed} history entr${removed === 1 ? 'y' : 'ies'}.`)
+  })
+
+  sourcesGridEl.addEventListener('click', (event) => {
+    const target = event.target
+    if (!(target instanceof HTMLElement)) return
+    const card = target.closest('[data-source-id]')
+    if (!(card instanceof HTMLElement)) return
+    const id = String(card.dataset.sourceId || '')
+    if (!id) return
+
+    const actionNode = target.closest('[data-action]')
+    const action = String(actionNode?.getAttribute('data-action') || '')
+
+    if (action === 'remove-source') {
+      state.sources = state.sources.filter((row) => row.id !== id)
+      state.selectedSources.delete(id)
+      persistSources()
+      renderSources()
+      return
+    }
+
+    if (action === 'toggle-source') {
+      if (state.selectedSources.has(id)) state.selectedSources.delete(id)
+      else state.selectedSources.add(id)
+      renderSources()
+      return
+    }
+
+    if (action === 'preview-source') {
+      const previewUrl = String(actionNode?.getAttribute('data-preview-url') || '').trim()
+      if (previewUrl) window.open(previewUrl, '_blank', 'noopener,noreferrer')
+    }
+  })
+
+  hostsRowsEl.addEventListener('click', (event) => {
+    const target = event.target
+    if (!(target instanceof HTMLElement)) return
+    const row = target.closest('[data-invite]')
+    if (!(row instanceof HTMLElement)) return
+    const invite = String(row.dataset.invite || '').trim()
+    if (!invite) return
+
+    const actionNode = target.closest('[data-action]')
+    const action = String(actionNode?.getAttribute('data-action') || '')
+
+    if (action === 'copy') {
+      void copyToClipboard(invite)
+      return
+    }
+    if (action === 'star') {
+      if (state.starredHosts.has(invite)) state.starredHosts.delete(invite)
+      else state.starredHosts.add(invite)
+      persistStarredHosts()
+      renderHosts()
+      return
+    }
+    if (action === 'stop') {
+      void stopHost(invite)
+      return
+    }
+
+    if (state.selectedHosts.has(invite)) state.selectedHosts.delete(invite)
+    else state.selectedHosts.add(invite)
+    renderHosts()
+  })
+
+  historyRowsEl.addEventListener('click', (event) => {
+    const target = event.target
+    if (!(target instanceof HTMLElement)) return
+    const row = target.closest('[data-history-id]')
+    if (!(row instanceof HTMLElement)) return
+    const id = String(row.dataset.historyId || '').trim()
+    if (!id) return
+
+    const actionNode = target.closest('[data-action]')
+    const action = String(actionNode?.getAttribute('data-action') || '')
+
+    if (action === 'remove') {
+      state.hostHistory = state.hostHistory.filter((entry) => entry.id !== id)
+      state.selectedHistory.delete(id)
+      localStorage.setItem(HISTORY_KEY, JSON.stringify(state.hostHistory))
+      renderHistory()
+      return
+    }
+
+    if (action === 'rehost') {
+      const item = state.hostHistory.find((entry) => entry.id === id)
+      if (!item) return
+      void rehostHistoryItem(item)
+      return
+    }
+
+    if (state.selectedHistory.has(id)) state.selectedHistory.delete(id)
+    else state.selectedHistory.add(id)
+    renderHistory()
+  })
+
+  starredRowsEl.addEventListener('click', (event) => {
+    const target = event.target
+    if (!(target instanceof HTMLElement)) return
+    const row = target.closest('[data-starred-invite]')
+    if (!(row instanceof HTMLElement)) return
+    const invite = String(row.dataset.starredInvite || '').trim()
+    if (!invite) return
+
+    const actionNode = target.closest('[data-action]')
+    const action = String(actionNode?.getAttribute('data-action') || '')
+
+    if (action === 'copy') {
+      void copyToClipboard(invite)
+      return
+    }
+    if (action === 'unstar') {
+      state.starredHosts.delete(invite)
+      persistStarredHosts()
+      renderHosts()
+      return
+    }
+    if (action === 'stop') {
+      void stopHost(invite)
+      return
+    }
+    if (action === 'rehost') {
+      const historyId = String(actionNode?.getAttribute('data-history-id') || '').trim()
+      if (!historyId) {
+        setStatus('No saved host history available for this starred host.')
+        return
+      }
+      const historyItem = state.hostHistory.find((entry) => String(entry.id || '') === historyId)
+      if (!historyItem) {
+        setStatus('No saved host history available for this starred host.')
+        return
+      }
+      void rehostHistoryItem(historyItem)
+    }
+  })
 }
 
-async function hostSelectedFiles(ids) {
-  if (state.hostingBusy) return void (statusEl.textContent = 'Host upload is already in progress.')
-  if (!state.rpc) return void (statusEl.textContent = 'Worker is still starting.')
-  const activeFiles = ids
-    .map((id) => state.files.find((file) => file.id === id))
-    .filter(Boolean)
-    .filter((file) => !state.deleted.has(file.id))
-  if (!activeFiles.length) {
-    return void (statusEl.textContent = 'Select at least one active file first.')
-  }
-
-  const payloadFiles = []
-  for (const file of activeFiles) {
-    const payload = await toUploadPayload(file)
-    if (payload) payloadFiles.push(payload)
-  }
-  if (!payloadFiles.length) {
-    return void (statusEl.textContent = 'Selected files are not available locally for hosting.')
-  }
-
-  const sessionNameInput = await requestHostSessionName('Host Session')
-  if (sessionNameInput === null) return
-  const sessionName = String(sessionNameInput || '').trim() || 'Host Session'
-
-  state.hostingBusy = true
-  state.latestInvite = ''
-  updateInviteOutput()
-  render()
-  upsertWorkerActivityBar('host', 'Preparing selected files...', 1, 4)
-  setWorkerLogMessage('preparing host upload')
-  statusEl.textContent = `Hosting ${payloadFiles.length} selected file(s)...`
+async function boot() {
   try {
-    upsertWorkerActivityBar('host', 'Starting host session...', 2, 4)
-    setWorkerLogMessage('starting host session')
+    setWorkerLogMessage('starting worker')
+    await bridge.startWorker(workerSpecifier)
+    state.rpc = createRpcClient()
+
+    setWorkerLogMessage('initializing worker RPC')
+    await state.rpc.request(RpcCommand.INIT, {})
+
+    const mode = await bridge.getThemeMode?.()
+    applyThemeMode(mode)
+
+    await refreshActiveHosts()
+    renderAll()
+    setStatus('Ready.')
+    setWorkerLogMessage('ready')
+  } catch (error) {
+    setStatus(`Worker start failed: ${error.message || String(error)}`)
+    setWorkerLogMessage(`start failed: ${error.message || String(error)}`)
+  }
+}
+
+function createRpcClient() {
+  const ipc = {
+    on(event, listener) {
+      if (event === 'data') {
+        bridge.onWorkerIPC(workerSpecifier, (chunk) => listener(Buffer.from(chunk)))
+      }
+      return ipc
+    },
+    write(data) {
+      Promise.resolve(bridge.writeWorkerIPC(workerSpecifier, data)).catch((error) => {
+        const message = String(error?.message || error || '')
+        if (message) setWorkerLogMessage(`IPC write failed: ${message}`)
+      })
+      return true
+    }
+  }
+
+  const client = new RPC(ipc, () => {})
+  return {
+    async request(command, payload = {}) {
+      const req = client.request(command)
+      req.send(Buffer.from(JSON.stringify(payload), 'utf8'))
+      const reply = await req.reply()
+      const parsed = JSON.parse(Buffer.from(reply).toString('utf8'))
+      if (parsed && parsed.ok === false) throw new Error(parsed.error || 'RPC request failed')
+      return parsed && parsed.ok === true ? parsed.result : parsed
+    }
+  }
+}
+
+function renderAll() {
+  renderTabs()
+  renderSourceMenu()
+  renderSources()
+  renderHosts()
+  renderHistory()
+  renderDriveRows()
+}
+
+function setTab(nextTab) {
+  state.currentTab = nextTab === 'download' ? 'download' : 'upload'
+  renderTabs()
+}
+
+function renderTabs() {
+  const isUpload = state.currentTab === 'upload'
+  uploadTabBtn.classList.toggle('active', isUpload)
+  downloadTabBtn.classList.toggle('active', !isUpload)
+  uploadPageEl.classList.toggle('hidden', !isUpload)
+  downloadPageEl.classList.toggle('hidden', isUpload)
+}
+
+function renderSourceMenu() {
+  sourceAddMenuEl.classList.toggle('hidden', !state.sourceMenuOpen)
+}
+
+function renderSources() {
+  sourcesGridEl.textContent = ''
+  const allSelected = state.sources.length > 0 && state.selectedSources.size === state.sources.length
+  sourceSelectToggleBtn.textContent = allSelected ? 'Deselect All' : 'Select All'
+
+  if (!state.sources.length) {
+    sourcesGridEl.innerHTML = '<div class="muted-empty">No local sources added yet.</div>'
+    return
+  }
+
+  for (const source of state.sources) {
+    const selected = state.selectedSources.has(source.id)
+    const previewHtml = renderSourcePreview(source)
+    const card = document.createElement('article')
+    card.className = `source-card${selected ? ' selected' : ''}`
+    card.dataset.sourceId = source.id
+    card.innerHTML = `
+      <div class="source-card-main">
+        ${previewHtml}
+        <div>
+          <div class="source-name">${escapeHtml(source.name || source.path)}</div>
+          <div class="source-path">${escapeHtml(source.type.toUpperCase())} · ${escapeHtml(source.path)}</div>
+        </div>
+        <div class="source-select">
+          <input type="checkbox" data-action="toggle-source" ${selected ? 'checked' : ''} />
+        </div>
+      </div>
+      <div class="controls" style="margin-top:8px;">
+        <button class="btn alt" data-action="remove-source">Remove</button>
+      </div>
+    `
+    sourcesGridEl.appendChild(card)
+  }
+}
+
+function renderSourcePreview(source) {
+  const type = source?.type === 'folder' ? 'folder' : 'file'
+  if (type === 'folder') return '<div class="source-preview">DIR</div>'
+
+  const srcPath = String(source?.path || '').trim()
+  const mime = guessMimeType(srcPath)
+  if (mime.startsWith('image/')) {
+    const src = safeFileUrl(srcPath)
+    if (src) {
+      return `<button class="source-preview-btn" type="button" data-action="preview-source" data-preview-url="${escapeHtmlAttr(src)}"><div class="source-preview"><img src="${escapeHtmlAttr(src)}" alt="preview"></div></button>`
+    }
+  }
+  if (mime.startsWith('video/')) return '<div class="source-preview">VID</div>'
+  const ext = nodePath.extname(srcPath).replace('.', '').slice(0, 4).toUpperCase() || 'FILE'
+  return `<div class="source-preview">${escapeHtml(ext)}</div>`
+}
+
+function safeFileUrl(filePath) {
+  const localPath = String(filePath || '').trim()
+  if (!localPath) return ''
+  try {
+    return pathToFileURL(localPath).toString()
+  } catch {
+    return ''
+  }
+}
+
+function renderHosts() {
+  hostsRowsEl.textContent = ''
+
+  const hosts = state.activeHosts.slice().sort((a, b) => {
+    const aInvite = String(a.invite || '')
+    const bInvite = String(b.invite || '')
+    const aStar = state.starredHosts.has(aInvite) ? 1 : 0
+    const bStar = state.starredHosts.has(bInvite) ? 1 : 0
+    if (aStar !== bStar) return bStar - aStar
+    return Number(b.createdAt || 0) - Number(a.createdAt || 0)
+  })
+
+  const allSelected = hosts.length > 0 && state.selectedHosts.size === hosts.length
+  hostsSelectToggleBtn.textContent = allSelected ? 'Deselect All' : 'Select All'
+
+  if (!hosts.length) {
+    hostsRowsEl.innerHTML = '<div class="muted-empty">No active hosts.</div>'
+    renderStarredHosts()
+    return
+  }
+
+  for (const host of hosts) {
+    const invite = String(host.invite || '').trim()
+    const selected = state.selectedHosts.has(invite)
+    const starred = state.starredHosts.has(invite)
+
+    const row = document.createElement('div')
+    row.className = 'row-item'
+    row.dataset.invite = invite
+    row.innerHTML = `
+      <input type="checkbox" ${selected ? 'checked' : ''} />
+      <div>
+        <div class="row-title">${starred ? '<span class="star">★</span> ' : ''}${escapeHtml(host.sessionLabel || invite || 'Host')}</div>
+        <div class="row-sub">${formatBytes(Number(host.totalBytes || 0))}</div>
+      </div>
+      <div class="controls">
+        <button class="btn alt" data-action="copy">Copy</button>
+        <button class="btn alt" data-action="star">${starred ? 'Unstar' : 'Star'}</button>
+        <button class="btn warn" data-action="stop">Stop</button>
+      </div>
+    `
+    hostsRowsEl.appendChild(row)
+  }
+  renderStarredHosts()
+}
+
+function renderStarredHosts() {
+  starredRowsEl.textContent = ''
+
+  const starredInvites = Array.from(state.starredHosts)
+  if (!starredInvites.length) {
+    starredRowsEl.innerHTML = '<div class="muted-empty">No starred hosts.</div>'
+    return
+  }
+
+  const activeByInvite = new Map(
+    state.activeHosts.map((host) => [String(host.invite || '').trim(), host])
+  )
+  const historyByInvite = new Map()
+  for (const entry of state.hostHistory) {
+    const invite = String(entry?.invite || '').trim()
+    if (!invite || historyByInvite.has(invite)) continue
+    historyByInvite.set(invite, entry)
+  }
+
+  for (const invite of starredInvites) {
+    const host = activeByInvite.get(invite)
+    const historyItem = historyByInvite.get(invite)
+    const label = host?.sessionLabel || 'Starred Host'
+    const size = host ? formatBytes(Number(host.totalBytes || 0)) : 'Not active'
+    const canStop = Boolean(host)
+    const canRehost = Boolean(historyItem && Array.isArray(historyItem.sourceRefs) && historyItem.sourceRefs.length)
+    const primaryActionHtml = canStop
+      ? '<button class="btn warn" data-action="stop">Stop</button>'
+      : canRehost
+        ? `<button class="btn alt" data-action="rehost" data-history-id="${escapeHtmlAttr(String(historyItem.id || ''))}">Re-host</button>`
+        : ''
+
+    const row = document.createElement('div')
+    row.className = 'row-item'
+    row.dataset.starredInvite = invite
+    row.innerHTML = `
+      <div class="star">★</div>
+      <div>
+        <div class="row-title">${escapeHtml(label)}</div>
+        <div class="row-sub">${escapeHtml(size)}</div>
+      </div>
+      <div class="controls">
+        ${primaryActionHtml}
+        <button class="btn alt" data-action="copy">Copy</button>
+        <button class="btn alt" data-action="unstar">Unstar</button>
+      </div>
+    `
+    starredRowsEl.appendChild(row)
+  }
+}
+
+function renderHistory() {
+  historyRowsEl.textContent = ''
+
+  const allSelected =
+    state.hostHistory.length > 0 && state.selectedHistory.size === state.hostHistory.length
+  historySelectToggleBtn.textContent = allSelected ? 'Deselect All' : 'Select All'
+
+  if (!state.hostHistory.length) {
+    historyRowsEl.innerHTML = '<div class="muted-empty">No host history yet.</div>'
+    return
+  }
+
+  for (const item of state.hostHistory) {
+    const selected = state.selectedHistory.has(item.id)
+    const sourceSummary = (item.sourceRefs || []).map((ref) => ref.path).join(' | ') || 'No source paths'
+
+    const row = document.createElement('div')
+    row.className = 'row-item'
+    row.dataset.historyId = String(item.id || '')
+    row.innerHTML = `
+      <input type="checkbox" ${selected ? 'checked' : ''} />
+      <div>
+        <div class="row-title">${escapeHtml(item.sessionName || 'Host Session')}</div>
+        <div class="row-sub">${escapeHtml(sourceSummary)}</div>
+      </div>
+      <div class="controls">
+        <button class="btn alt" data-action="rehost">Re-host</button>
+        <button class="btn warn" data-action="remove">Remove</button>
+      </div>
+    `
+    historyRowsEl.appendChild(row)
+  }
+}
+
+function renderDriveRows() {
+  driveRowsEl.textContent = ''
+
+  const allSelected =
+    state.inviteEntries.length > 0 && state.inviteSelected.size === state.inviteEntries.length
+  driveSelectToggleBtn.textContent = allSelected ? 'Deselect All' : 'Select All'
+
+  if (!state.inviteEntries.length) {
+    const tr = document.createElement('tr')
+    tr.innerHTML = '<td colspan="4" class="small">No drive loaded.</td>'
+    driveRowsEl.appendChild(tr)
+    checkAllDriveEl.checked = false
+    checkAllDriveEl.indeterminate = false
+    return
+  }
+
+  let selectedCount = 0
+  for (let i = 0; i < state.inviteEntries.length; i++) {
+    const entry = state.inviteEntries[i]
+    const key = entryKey(entry)
+    const checked = state.inviteSelected.has(key)
+    if (checked) selectedCount += 1
+    const tr = document.createElement('tr')
+    tr.innerHTML = `
+      <td><input type="checkbox" data-action="toggle" data-index="${i}" ${checked ? 'checked' : ''}></td>
+      <td>${escapeHtml(entry.name || nodePath.basename(String(entry.drivePath || '')) || `File ${i + 1}`)}</td>
+      <td class="small">${escapeHtml(String(entry.drivePath || ''))}</td>
+      <td class="small">${formatBytes(Number(entry.byteLength || 0))}</td>
+    `
+    driveRowsEl.appendChild(tr)
+  }
+
+  checkAllDriveEl.checked = selectedCount === state.inviteEntries.length
+  checkAllDriveEl.indeterminate = selectedCount > 0 && selectedCount < state.inviteEntries.length
+}
+
+async function openInviteFiles() {
+  if (!state.rpc) return setStatus('Worker is still starting.')
+  const invite = normalizeInvite(inviteInputEl.value)
+  if (!invite) return setStatus('Paste a peardrops invite URL first.')
+
+  try {
+    setWorkerLogMessage('loading invite manifest')
+    const manifest = await state.rpc.request(RpcCommand.GET_MANIFEST, { invite })
+    const entries = Array.isArray(manifest?.files) ? manifest.files : []
+    state.inviteSource = invite
+    state.inviteEntries = entries
+    state.inviteSelected = new Set(entries.map((entry) => entryKey(entry)))
+    renderDriveRows()
+    setStatus(`Drive loaded (${entries.length} file${entries.length === 1 ? '' : 's'}).`)
+  } catch (error) {
+    setStatus(`View drive failed: ${error.message || String(error)}`)
+  }
+}
+
+async function downloadInviteSelected() {
+  if (!state.rpc) return setStatus('Worker is still starting.')
+  if (!state.inviteSource) return setStatus('Load an invite drive first.')
+
+  const selected = state.inviteEntries.filter((entry) => state.inviteSelected.has(entryKey(entry)))
+  if (!selected.length) return setStatus('Select at least one drive file to download.')
+
+  let targetDir = String((await bridge.pickDirectory?.()) || '').trim()
+  if (!targetDir) targetDir = String((await bridge.getDownloadsPath?.()) || '').trim()
+  if (!targetDir) return setStatus('No destination selected.')
+
+  try {
+    upsertWorkerActivityBar('download-selected', 'Downloading selected files', 0, selected.length)
+
+    for (let i = 0; i < selected.length; i++) {
+      const entry = selected[i]
+      const drivePath = String(entry?.drivePath || '').trim()
+      if (!drivePath) continue
+      const outputPath = resolveOutputPath(targetDir, entry)
+      await fs.mkdir(nodePath.dirname(outputPath), { recursive: true })
+      await writeEntryToFile(state.rpc, state.inviteSource, drivePath, outputPath, Number(entry.byteLength || 0))
+      upsertWorkerActivityBar('download-selected', 'Downloading selected files', i + 1, selected.length)
+    }
+
+    clearWorkerActivityBar('download-selected')
+    setStatus(`Downloaded ${selected.length} file${selected.length === 1 ? '' : 's'} to ${targetDir}.`)
+  } catch (error) {
+    clearWorkerActivityBar('download-selected')
+    setStatus(`Download failed: ${error.message || String(error)}`)
+  }
+}
+
+async function hostSelectedSources() {
+  if (!state.rpc) return setStatus('Worker is still starting.')
+
+  const ids = Array.from(state.selectedSources)
+  if (!ids.length) return setStatus('Select at least one local source first.')
+
+  const picked = state.sources.filter((item) => ids.includes(item.id))
+  if (!picked.length) return setStatus('Selected sources are no longer available.')
+
+  try {
+    upsertWorkerActivityBar('host-expand', 'Indexing local sources', 0, picked.length)
+
+    const files = []
+    for (let i = 0; i < picked.length; i++) {
+      const source = picked[i]
+      // Re-host/source-host must fail when saved source paths no longer exist.
+      // eslint-disable-next-line no-await-in-loop
+      const expanded = await expandSourceToFiles(source)
+      files.push(...expanded)
+      upsertWorkerActivityBar('host-expand', 'Indexing local sources', i + 1, picked.length)
+    }
+
+    clearWorkerActivityBar('host-expand')
+
+    if (!files.length) return setStatus('No readable files found in selected sources.')
+
+    setWorkerLogMessage('creating upload host')
+    upsertWorkerActivityBar('host-upload', 'Creating host upload', 0, 1)
+
+    const sessionName = `Host ${new Date().toLocaleString()}`
     const response = await state.rpc.request(RpcCommand.CREATE_UPLOAD, {
-      files: payloadFiles,
+      files,
       sessionName
     })
-    upsertWorkerActivityBar('host', 'Generating invite...', 3, 4)
-    rememberHostHistory(response?.transfer, {
+
+    clearWorkerActivityBar('host-upload')
+
+    const invite = String(response?.nativeInvite || response?.invite || '').trim()
+    rememberHistory({
+      id: `hist:${Date.now()}:${Math.random().toString(16).slice(2, 8)}`,
+      sourceRefs: picked.map((item) => ({ type: item.type, path: item.path, name: item.name })),
+      invite,
       sessionName,
-      manifest: response?.manifest || [],
-      invite: response?.nativeInvite || response?.invite || '',
-      totalBytes: payloadFiles.reduce((sum, item) => sum + Number(item?.byteLength || 0), 0),
-      fileCount: payloadFiles.length
+      createdAt: Date.now(),
+      fileCount: Array.isArray(response?.manifest) ? response.manifest.length : files.length,
+      totalBytes: Number(response?.transfer?.totalBytes || files.reduce((sum, row) => sum + Number(row.byteLength || 0), 0))
     })
-    const invite = response.nativeInvite || response.invite || ''
-    state.latestInvite = invite
-    updateInviteOutput()
-    const now = Date.now()
-    for (const file of activeFiles) {
-      upsertFile({ ...file, invite, updatedAt: now, source: 'upload' })
-    }
-    upsertWorkerActivityBar('host', 'Host ready', 4, 4)
-    setWorkerLogMessage('host session ready')
-    statusEl.textContent = `Hosting ready for ${payloadFiles.length} file(s).`
-    await Promise.all([refreshTransfers(), refreshActiveHosts()])
-    render()
-  } catch (error) {
-    setWorkerLogMessage(`host upload failed - ${error.message || String(error)}`)
-    statusEl.textContent = `Host upload failed: ${error.message || String(error)}`
-  } finally {
-    setTimeout(() => clearWorkerActivityBar('host'), 700)
-    state.hostingBusy = false
-    render()
-  }
-}
 
-async function toUploadPayload(file) {
-  const localPath = String(
-    file.path || file.localPath || file.absolutePath || file.downloadPath || ''
-  ).trim()
-  if (localPath) {
-    return { name: file.name, mimeType: file.mimeType || guessMime(file.name), path: localPath }
-  }
-  if (typeof file.dataBase64 === 'string') {
-    return {
-      name: file.name,
-      mimeType: file.mimeType || guessMime(file.name),
-      dataBase64: file.dataBase64
-    }
-  }
-
-  if (file.invite && state.rpc) {
-    try {
-      const manifest = await state.rpc.request(RpcCommand.GET_MANIFEST, { invite: file.invite })
-      const files = Array.isArray(manifest?.files) ? manifest.files : []
-      const manifestEntry =
-        files.find((entry) => String(entry.drivePath || '') === String(file.drivePath || '')) ||
-        files.find((entry) => String(entry.name || '') === String(file.name || '')) ||
-        files[0]
-      if (manifestEntry?.drivePath) {
-        const read = await state.rpc.request(RpcCommand.READ_ENTRY, {
-          invite: file.invite,
-          drivePath: manifestEntry.drivePath
-        })
-        const dataBase64 = String(read?.dataBase64 || '')
-        if (dataBase64) {
-          upsertFile({
-            ...file,
-            dataBase64,
-            drivePath: manifestEntry.drivePath,
-            mimeType: file.mimeType || manifestEntry.mimeType || guessMime(file.name)
-          })
-          return {
-            name: file.name,
-            mimeType: file.mimeType || manifestEntry.mimeType || guessMime(file.name),
-            dataBase64
-          }
-        }
-      }
-    } catch {
-      // fall through to null if invite re-hydration is unavailable
-    }
-  }
-
-  return null
-}
-
-function assignFolderToSelection(ids) {
-  const uniqueIds = Array.from(new Set(ids))
-  if (!uniqueIds.length) return void (statusEl.textContent = 'Select at least one file first.')
-  openFolderModal(uniqueIds)
-}
-
-async function bootstrap() {
-  try {
-    const initial = await requestInitWithRetry(state.rpc, 4)
-    state.transfers = initial.transfers || []
-    syncHostHistoryFromTransfers(state.transfers)
+    state.selectedSources.clear()
     await refreshActiveHosts()
-    transferCountEl.textContent = `${state.transfers.length} transfers indexed`
-    statusEl.textContent = `Ready (${initial.version})`
-    render()
+    renderAll()
+    setStatus('Hosting started.')
   } catch (error) {
-    statusEl.textContent = `Init failed: ${error.message}`
+    clearWorkerActivityBar('host-expand')
+    clearWorkerActivityBar('host-upload')
+    setStatus(`Host failed: ${error.message || String(error)}`)
   }
-}
-
-async function startDesktop() {
-  try {
-    await withTimeout(
-      Promise.resolve(bridge.startWorker(workerSpecifier)),
-      15000,
-      'Worker start request timed out'
-    )
-    state.rpc = createRpcClient()
-    statusEl.textContent = 'Worker started. Initializing...'
-    await bootstrap()
-  } catch (error) {
-    statusEl.textContent = `Worker start failed: ${error.message || String(error)}`
-  }
-}
-
-async function refreshTransfers() {
-  if (!state.rpc) return
-  const response = await state.rpc.request(RpcCommand.LIST_TRANSFERS, {})
-  state.transfers = response.transfers || []
-  syncHostHistoryFromTransfers(state.transfers)
-  transferCountEl.textContent = `${state.transfers.length} transfers indexed`
 }
 
 async function refreshActiveHosts() {
   if (!state.rpc) return
-  const response = await state.rpc.request(RpcCommand.LIST_ACTIVE_HOSTS, {})
-  state.activeHosts = response.hosts || []
-}
-
-function render() {
-  for (const item of navItems) {
-    const isAllFilesTab = item.dataset.view === 'all-files'
-    const active =
-      item.dataset.view === state.view &&
-      !(isAllFilesTab && state.folderFilter && state.view === 'all-files')
-    item.classList.toggle('active', active)
-  }
-  folderFilterEl.classList.toggle('active-filter', Boolean(state.folderFilter))
-  renderSidebarFolders()
-  updateInviteOutput()
-  const files = selectVisibleFiles()
-
-  if (state.view === 'home') {
-    sectionTitleEl.textContent = 'Home'
-    sectionSubtitleEl.textContent = 'Quick access to what matters most.'
-    clearDeletedBtn?.classList.add('hidden')
-    homeViewEl.classList.remove('hidden')
-    listViewEl.classList.add('hidden')
-    homeViewEl.textContent = ''
-    return
-  }
-
-  const titles = {
-    'all-files': ['All files', 'Everything available in the app.'],
-    'search-results': ['Search results', 'Local files matching your search query.'],
-    'invite-files': ['View drive', 'Browse invite drive and choose what to add or download.'],
-    recent: ['Recent', 'Last 10 files added locally (upload or download).'],
-    starred: ['Starred', 'Starred files and folder-contained files.'],
-    host: ['Host', 'Active host sessions and upload history.'],
-    deleted: ['Deleted files', 'Auto-cleaned after 30 days.']
-  }
-  const [title, sub] = titles[state.view] || titles['all-files']
-  if (state.view === 'all-files' && state.folderFilter) {
-    const folder = state.folders.find((item) => item.id === state.folderFilter)
-    sectionTitleEl.textContent = folder?.name || 'All files'
-    sectionSubtitleEl.textContent = folder
-      ? `Files inside "${folder.name}".`
-      : 'Everything available in the app.'
-  } else {
-    sectionTitleEl.textContent =
-      state.view === 'host' && state.hostDetailInvite ? 'Host details' : title
-    sectionSubtitleEl.textContent = sub
-  }
-  sectionBackBtn?.classList.toggle('hidden', !(state.view === 'host' && state.hostDetailInvite))
-  clearDeletedBtn?.classList.toggle('hidden', state.view !== 'deleted')
-  homeViewEl.classList.add('hidden')
-  listViewEl.classList.remove('hidden')
-  folderActionsEl.classList.toggle('hidden', !state.folderFilter)
-  inviteDownloadBarEl?.classList.toggle('hidden', state.view !== 'invite-files')
-  folderFilterEl.disabled = state.view === 'invite-files'
-  if (state.view === 'host') {
-    renderBulkBar([])
-    renderHostHistoryBar(getHostHistoryRows())
-    renderHostRows()
-  } else if (state.view === 'invite-files') {
-    renderBulkBar([])
-    renderHostHistoryBar([])
-    renderInviteRows()
-  } else {
-    renderBulkBar(files)
-    renderHostHistoryBar([])
-    renderRows(files)
-  }
-  renderLoadMore(files)
-}
-
-function renderBulkBar(files) {
-  const selectedVisible = files.filter((item) => state.selected.has(item.id)).length
-  if (!selectedVisible) {
-    bulkBarEl.classList.add('hidden')
-    bulkNoteEl.textContent = '0 selected'
-  } else {
-    bulkBarEl.classList.remove('hidden')
-    bulkNoteEl.textContent = `${selectedVisible} selected`
-  }
-  const ids = Array.from(state.selected)
-  const shouldUnstar = ids.length > 0 && ids.every((id) => state.starred.has(id))
-  bulkStarBtn.textContent = shouldUnstar ? '★' : '☆'
-  bulkInviteBtn.textContent = state.hostingBusy ? 'Hosting...' : 'Host Upload'
-  bulkInviteBtn.disabled = state.hostingBusy
-}
-
-function renderHostHistoryBar(historyRows) {
-  if (!hostHistoryBarEl || !hostHistoryNoteEl) return
-  const rows = Array.isArray(historyRows) ? historyRows : []
-  const selected = rows.filter((row) =>
-    state.selectedHostHistory.has(hostHistoryEntryKey(row))
-  ).length
-  if (state.view !== 'host' || state.hostDetailInvite || selected === 0) {
-    hostHistoryBarEl.classList.add('hidden')
-    hostHistoryNoteEl.textContent = '0 selected'
-    return
-  }
-  hostHistoryBarEl.classList.remove('hidden')
-  hostHistoryNoteEl.textContent = `${selected} selected`
-}
-
-function setView(view, options = {}) {
-  const keepFolderFilter = Boolean(options.keepFolderFilter)
-  const previousView = state.view
-  if (state.view === 'host' && view !== 'host') state.hostDetailInvite = ''
-  state.view = view
-  if (previousView !== view) {
-    state.latestInvite = ''
-    updateInviteOutput()
-  }
-  state.selected.clear()
-  state.selectedHostHistory.clear()
-  state.inviteSelected.clear()
-  state.openMenuId = ''
-  if (view === 'recent') state.recentVisible = 10
-  if (view === 'deleted') state.deletedVisible = 10
-  if (view === 'all-files') {
-    state.hostDetailInvite = ''
-    if (!keepFolderFilter) {
-      state.folderFilter = ''
-      folderFilterEl.value = ''
-    }
-  }
-  if (view !== 'search-results') state.searchResultsQuery = ''
-  if (view !== 'invite-files') state.inviteEntries = []
-  if (view === 'host') {
-    void refreshActiveHosts().then(() => render())
-  }
-  render()
-}
-
-function renderHostRows() {
-  rowsEl.textContent = ''
-
-  if (state.hostDetailInvite) {
-    const host = state.activeHosts.find((item) => item.invite === state.hostDetailInvite)
-    if (!host) {
-      state.hostDetailInvite = ''
-      return renderHostRows()
-    }
-    sectionSubtitleEl.textContent = `${host.sessionLabel || host.invite} · ${host.fileCount} file(s)`
-    const files = (host.manifest || []).map((entry) => ({
-      id: `${host.invite}:${entry.drivePath || entry.name}`,
-      name: entry.name,
-      byteLength: Number(entry.byteLength || 0),
-      updatedAt: Number(host.createdAt || Date.now()),
-      source: 'upload',
-      invite: host.invite,
-      mimeType: entry.mimeType || 'application/octet-stream'
-    }))
-    renderRows(files)
-    return
-  }
-
-  const output = []
-  for (const host of state.activeHosts) {
-    output.push({
-      id: `host:${host.invite}`,
-      name: host.sessionLabel || host.invite,
-      byteLength: Number(host.totalBytes || 0),
-      updatedAt: Number(host.createdAt || Date.now()),
-      source: 'host-session',
-      invite: host.invite,
-      hostSummary: true,
-      sessionName: host.sessionName || 'Host Session',
-      manifest: host.manifest || [],
-      transferId: host.transferId
-    })
-  }
-
-  const history = getHostHistoryRows().map((transfer) => ({
-    id: `history:${hostHistoryEntryKey(transfer)}`,
-    historyKey: hostHistoryEntryKey(transfer),
-    name: transfer.sessionLabel || transfer.sessionName || transfer.invite || 'Upload history',
-    byteLength: Number(transfer.totalBytes || 0),
-    updatedAt: Number(transfer.createdAt || Date.now()),
-    source: 'history',
-    invite: transfer.invite || '',
-    transferId: String(transfer.transferId || transfer.id || ''),
-    manifest: transfer.manifest || [],
-    historySummary: true
-  }))
-
-  if (history.length) {
-    output.push({ separator: true, label: 'History' }, ...history)
-  }
-
-  renderRows(output)
-}
-
-function getHostHistoryRows() {
-  const activeInvites = new Set(state.activeHosts.map((host) => String(host.invite || '')))
-  const activeTransferIds = new Set(state.activeHosts.map((host) => String(host.transferId || '')))
-  return mergeHostHistory(
-    state.hostHistory,
-    state.transfers.filter((item) => item.type === 'upload')
-  )
-    .filter((item) => !state.hostHistoryRemoved.has(hostHistoryEntryKey(item)))
-    .filter((item) => {
-      const invite = String(item.invite || '')
-      const transferId = String(item.transferId || item.id || '')
-      if (invite && activeInvites.has(invite)) return false
-      if (transferId && activeTransferIds.has(transferId)) return false
-      return true
-    })
-    .slice(0, 15)
-}
-
-function removeFromHistory(keys) {
-  const removeKeys = new Set(
-    (Array.isArray(keys) ? keys : []).map((value) => String(value || '').trim()).filter(Boolean)
-  )
-  if (!removeKeys.size) return
-  state.hostHistory = state.hostHistory.filter((item) => !removeKeys.has(hostHistoryEntryKey(item)))
-  for (const key of removeKeys) state.hostHistoryRemoved.add(key)
-  for (const key of removeKeys) state.selectedHostHistory.delete(key)
-  persistAll()
-}
-
-async function startHostFromHistoryItem(historyEntry) {
-  if (!historyEntry) return
-  const transferId = String(historyEntry.transferId || historyEntry.id || '').trim()
-  if (!transferId) return
-  const key = hostHistoryEntryKey(historyEntry)
-  const sessionName =
-    String(historyEntry.sessionName || historyEntry.sessionLabel || 'Host Session').trim() ||
-    'Host Session'
-  upsertWorkerActivityBar('host', 'Starting host session...', 1, 3)
-  setWorkerLogMessage('starting host from history')
   try {
-    const response = await state.rpc.request(RpcCommand.START_HOST_FROM_TRANSFER, {
-      transferId,
-      sessionName
-    })
-    upsertWorkerActivityBar('host', 'Preparing invite...', 2, 3)
-    rememberHostHistory(response?.transfer, {
-      sessionName,
-      manifest: response?.manifest || [],
-      invite: response?.nativeInvite || response?.invite || ''
-    })
-    const invite = response.nativeInvite || response.invite || ''
-    if (invite) {
-      state.latestInvite = invite
-      updateInviteOutput()
-      statusEl.textContent = 'Hosting started from history.'
-    }
-    upsertWorkerActivityBar('host', 'Host ready', 3, 3)
-    setWorkerLogMessage('host from history ready')
-    state.selectedHostHistory.delete(key)
-    await Promise.all([refreshTransfers(), refreshActiveHosts()])
-    render()
-  } catch (error) {
-    setWorkerLogMessage(`host from history failed - ${error.message || String(error)}`)
-    statusEl.textContent = `Host start failed: ${error.message || String(error)}`
-  } finally {
-    setTimeout(() => clearWorkerActivityBar('host'), 600)
+    const response = await state.rpc.request(RpcCommand.LIST_ACTIVE_HOSTS, {})
+    const hosts = Array.isArray(response?.hosts) ? response.hosts : []
+    state.activeHosts = hosts
+
+    const validInvites = new Set(hosts.map((host) => String(host.invite || '').trim()).filter(Boolean))
+    state.selectedHosts = new Set(Array.from(state.selectedHosts).filter((invite) => validInvites.has(invite)))
+
+    renderHosts()
+  } catch {
+    state.activeHosts = []
+    state.selectedHosts.clear()
+    renderHosts()
   }
 }
 
-async function startSelectedHistoryHosts() {
-  const keys = Array.from(state.selectedHostHistory)
-  if (!keys.length) {
-    statusEl.textContent = 'Select one or more history items first.'
+async function copySelectedHosts() {
+  const invites = Array.from(state.selectedHosts).filter(Boolean)
+  if (!invites.length) {
+    setStatus('Select at least one active host first.')
     return
   }
-  const rows = getHostHistoryRows().filter((row) => keys.includes(hostHistoryEntryKey(row)))
-  if (!rows.length) {
-    statusEl.textContent = 'Selected history items are no longer available.'
-    state.selectedHostHistory.clear()
-    render()
-    return
-  }
-  for (const row of rows) {
-    // Start sequentially to keep worker state transitions clear.
-    // eslint-disable-next-line no-await-in-loop
-    await startHostFromHistoryItem(row)
-  }
-  render()
+  await copyToClipboard(invites.join('\n'))
+  setStatus(`Copied ${invites.length} invite${invites.length === 1 ? '' : 's'}.`)
 }
 
-function renderRows(files) {
-  rowsEl.textContent = ''
-  const rows = Array.isArray(files) ? files : []
-  const allDataRows = rows.filter((row) => !row.separator)
-  const selectableRows =
-    state.view === 'host'
-      ? allDataRows.filter((row) => row.historySummary)
-      : allDataRows.filter((row) => !row.hostSummary && !row.historySummary)
-  const selectedVisible =
-    state.view === 'host'
-      ? selectableRows.filter((row) => state.selectedHostHistory.has(row.historyKey)).length
-      : selectableRows.filter((row) => state.selected.has(row.id)).length
+async function stopSelectedHosts() {
+  if (!state.rpc) return setStatus('Worker is still starting.')
+  const invites = Array.from(state.selectedHosts).filter(Boolean)
+  if (!invites.length) return setStatus('Select at least one active host first.')
 
-  if (state.view === 'host') {
-    const allHistorySelected =
-      selectableRows.length > 0 && selectedVisible === selectableRows.length
-    const includesNonSelectableRows = allDataRows.length > selectableRows.length
-    checkAllEl.checked = allHistorySelected && !includesNonSelectableRows
-    checkAllEl.indeterminate =
-      selectedVisible > 0 && (!allHistorySelected || includesNonSelectableRows)
-  } else {
-    checkAllEl.checked = selectableRows.length > 0 && selectedVisible === selectableRows.length
-    checkAllEl.indeterminate = selectedVisible > 0 && selectedVisible < selectableRows.length
+  upsertWorkerActivityBar('hosts-stop', 'Stopping selected hosts', 0, invites.length)
+
+  for (let i = 0; i < invites.length; i++) {
+    const invite = invites[i]
+    try {
+      // eslint-disable-next-line no-await-in-loop
+      await state.rpc.request(RpcCommand.STOP_HOST, { invite })
+    } catch {}
+    upsertWorkerActivityBar('hosts-stop', 'Stopping selected hosts', i + 1, invites.length)
   }
 
-  if (!rows.length) {
-    const tr = document.createElement('tr')
-    tr.innerHTML = '<td colspan="6" class="row-muted">No files in this section.</td>'
-    rowsEl.appendChild(tr)
-    return
-  }
-
-  for (const file of rows) {
-    if (file.separator) {
-      const sep = document.createElement('tr')
-      sep.innerHTML = `<td colspan="6" class="row-muted"><strong>${escapeHtml(file.label || 'Recent')}</strong></td>`
-      rowsEl.appendChild(sep)
-      continue
-    }
-    const starred = state.starred.has(file.id)
-    const folderName = folderNameById(file.folderId)
-    const checked = state.selected.has(file.id) ? 'checked' : ''
-    const isHostSummary = Boolean(file.hostSummary)
-    const isHistorySummary = Boolean(file.historySummary)
-    const historyPreview = isHistorySummary
-      ? (file.manifest || [])
-          .slice(0, 2)
-          .map((entry) => entry.name)
-          .join(', ')
-      : ''
-    const nameHtml = isHostSummary
-      ? `<button class="menu-item" data-action="open-host" data-id="${file.invite}">${escapeHtml(file.name)}</button>`
-      : isHistorySummary
-        ? `<div>${escapeHtml(file.name)}</div><div class="row-muted">${escapeHtml(historyPreview || 'No manifest preview')}</div>`
-        : `<div>${escapeHtml(file.name)}</div>${folderName ? `<div class="row-muted">Folder: ${escapeHtml(folderName)}</div>` : ''}`
-    const actionsHtml = isHostSummary
-      ? `<div class="actions-wrap"><button class="mini-btn" data-action="open-host" data-id="${file.invite}">Open</button><button class="mini-btn danger-btn" data-action="stop-host" data-id="${file.invite}">Stop hosting</button><button class="mini-btn" data-action="copy" data-id="${file.id}">${state.copyFeedbackKey === `host-copy:${file.id}` ? 'Copied' : 'Copy invite'}</button></div>`
-      : isHistorySummary
-        ? `<div class="actions-wrap"><button class="mini-btn" data-action="restart-host" data-id="${file.historyKey}">Start hosting</button><button class="mini-btn danger-btn" data-action="remove-history" data-id="${file.historyKey}">Remove</button>${file.invite ? `<button class="mini-btn" data-action="copy-history-invite" data-id="${file.transferId}">${state.copyFeedbackKey === `history-copy:${file.transferId}` ? 'Copied' : 'Copy invite'}</button>` : ''}</div>`
-        : `<div class="actions-wrap">
-          <button class="icon-btn ${starred ? 'starred' : ''}" data-action="star" data-id="${file.id}">${starred ? '★' : '☆'}</button>
-          <button class="icon-btn delete" data-action="delete" data-id="${file.id}">${TRASH_SVG}</button>
-          <span class="menu">
-            <button class="icon-btn" data-action="menu" data-id="${file.id}">⋯</button>
-            ${state.openMenuId === file.id ? `<div class="menu-panel"><button class="menu-item" data-action="host" data-id="${file.id}" ${state.hostingBusy ? 'disabled' : ''}>${state.hostingBusy ? 'Hosting...' : 'Host Upload'}</button><button class="menu-item" data-action="copy" data-id="${file.id}">Copy Invite</button><button class="menu-item" data-action="folder" data-id="${file.id}">Put In Folder</button>${file.folderId ? `<button class="menu-item" data-action="unfolder" data-id="${file.id}">Remove From Folder</button>` : ''}<button class="menu-item" data-action="folder-invite" data-id="${file.id}">Invite Folder</button></div>` : ''}
-          </span>
-        </div>`
-    const checkHtml = isHostSummary
-      ? ''
-      : isHistorySummary
-        ? `<input type="checkbox" data-action="history-select" data-id="${file.historyKey}" ${state.selectedHostHistory.has(file.historyKey) ? 'checked' : ''} />`
-        : `<input type="checkbox" data-action="select" data-id="${file.id}" ${checked} />`
-    const tr = document.createElement('tr')
-    tr.innerHTML = `
-      <td>${checkHtml}</td>
-      <td>${previewHtml(file)}</td>
-      <td>${nameHtml}</td>
-      <td class="row-muted">${formatDate(file.updatedAt)}</td>
-      <td class="row-muted">${formatBytes(file.byteLength)}</td>
-      <td>${actionsHtml}</td>
-    `
-    rowsEl.appendChild(tr)
-  }
+  clearWorkerActivityBar('hosts-stop')
+  state.selectedHosts.clear()
+  await refreshActiveHosts()
+  setStatus(`Stopped ${invites.length} host${invites.length === 1 ? '' : 's'}.`)
 }
 
-function previewHtml(file) {
-  if (file.hostSummary) {
-    return '<div class="preview">HOST</div>'
-  }
-  if (file.historySummary) {
-    return '<div class="preview">HIST</div>'
-  }
-  const type = classifyFile(file)
-  const start = `<button class="preview-btn" data-action="preview" data-id="${file.id}" title="Open preview">`
-  const end = '</button>'
-  if (type === 'image') {
-    const src = resolveImageSrc(file)
-    if (src) return `${start}<div class="preview"><img alt="preview" src="${src}" /></div>${end}`
-  }
-  if (type === 'video') return `${start}<div class="preview preview-video">▶</div>${end}`
-  if (type === 'audio') return `${start}<div class="preview">AUDIO</div>${end}`
-  return `${start}<div class="preview">${escapeHtml(fileExt(file.name).toUpperCase() || 'FILE')}</div>${end}`
-}
-
-function classifyFile(file) {
-  const mime = String(file.mimeType || '').toLowerCase()
-  const ext = fileExt(file.name)
-  if (mime.startsWith('image/') || ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp'].includes(ext)) {
-    return 'image'
-  }
-  if (mime.startsWith('video/') || ['mp4', 'mov', 'mkv', 'webm'].includes(ext)) return 'video'
-  if (mime.startsWith('audio/') || ['mp3', 'wav', 'aac'].includes(ext)) return 'audio'
-  return 'other'
-}
-
-function fileExt(name) {
-  const text = String(name || '')
-  const idx = text.lastIndexOf('.')
-  return idx < 0 ? '' : text.slice(idx + 1).toLowerCase()
-}
-
-function sanitizeName(name) {
-  return String(name || '')
-    .replaceAll('/', '_')
-    .replaceAll('\\', '_')
-}
-
-function folderNameById(id) {
-  if (!id) return ''
-  return state.folders.find((folder) => folder.id === id)?.name || ''
-}
-
-function selectVisibleFiles() {
-  const query = state.view === 'search-results' ? state.searchResultsQuery : state.search
-  return selectByView(state.view).filter((file) => {
-    if (file.separator) return true
-    if (state.view !== 'search-results' && state.view !== 'invite-files') {
-      if (state.folderFilter && file.folderId !== state.folderFilter) return false
-    }
-    if (!query) return true
-    return file.name.toLowerCase().includes(query)
-  })
-}
-
-function renderInviteRows() {
-  rowsEl.textContent = ''
-  const entries = state.inviteEntries
-  const selectedCount = entries.filter((entry) =>
-    state.inviteSelected.has(String(entry.drivePath || entry.name))
-  ).length
-  if (inviteDownloadNoteEl) inviteDownloadNoteEl.textContent = `${selectedCount} selected`
-  checkAllEl.checked = entries.length > 0 && selectedCount === entries.length
-  checkAllEl.indeterminate = selectedCount > 0 && selectedCount < entries.length
-
-  if (!entries.length) {
-    const tr = document.createElement('tr')
-    tr.innerHTML = '<td colspan="6" class="row-muted">No files loaded from invite.</td>'
-    rowsEl.appendChild(tr)
-    return
-  }
-
-  for (let i = 0; i < entries.length; i++) {
-    const entry = entries[i]
-    const key = String(entry.drivePath || entry.name)
-    const checked = state.inviteSelected.has(key) ? 'checked' : ''
-    const tr = document.createElement('tr')
-    tr.innerHTML = `
-      <td><input type="checkbox" data-action="invite-select" data-index="${i}" ${checked} /></td>
-      <td><div class="preview">${escapeHtml(fileExt(entry.name).toUpperCase() || 'FILE')}</div></td>
-      <td>${escapeHtml(entry.name || `File ${i + 1}`)}</td>
-      <td class="row-muted">--</td>
-      <td class="row-muted">${formatBytes(Number(entry.byteLength || 0))}</td>
-      <td><button class="mini-btn" data-action="invite-download-one" data-index="${i}">Download</button></td>
-    `
-    rowsEl.appendChild(tr)
-  }
-}
-
-function selectByView(view) {
-  const all = state.files
-  if (view === 'invite-files') return []
-  if (view === 'search-results') {
-    return all
-      .filter((file) => !state.deleted.has(file.id))
-      .slice()
-      .sort((a, b) => b.updatedAt - a.updatedAt)
-  }
-  if (view === 'deleted') {
-    const items = all
-      .filter((file) => state.deleted.has(file.id))
-      .sort(
-        (a, b) => (state.deletedAt[b.id] || b.updatedAt) - (state.deletedAt[a.id] || a.updatedAt)
-      )
-    return items.slice(0, state.deletedVisible)
-  }
-
-  const active = all.filter((file) => !state.deleted.has(file.id))
-  if (view === 'recent') {
-    return active
-      .slice()
-      .sort((a, b) => b.updatedAt - a.updatedAt)
-      .slice(0, state.recentVisible)
-  }
-  if (view === 'starred') {
-    return active
-      .filter((file) => state.starred.has(file.id))
-      .sort((a, b) => b.updatedAt - a.updatedAt)
-  }
-  if (view === 'host') {
-    return active.filter((file) => Boolean(file.invite)).sort((a, b) => b.updatedAt - a.updatedAt)
-  }
-  return active.slice().sort((a, b) => b.updatedAt - a.updatedAt)
-}
-
-function renderLoadMore(files) {
-  if (!loadMoreBtn) return
-  if (state.view === 'invite-files' || state.view === 'search-results') {
-    loadMoreBtn.classList.add('hidden')
-    return
-  }
-  let show = false
-  if (state.view === 'recent') {
-    const total = state.files.filter((f) => !state.deleted.has(f.id)).length
-    show = files.filter((f) => !f.separator).length < total
-  }
-  if (state.view === 'deleted') {
-    const total = state.files.filter((f) => state.deleted.has(f.id)).length
-    show = files.filter((f) => !f.separator).length < total
-  }
-  loadMoreBtn.classList.toggle('hidden', !show)
-}
-
-function updateInviteOutput() {
-  if (!inviteOutputTextEl) return
-  const invite = String(state.latestInvite || '').trim()
-  inviteOutputTextEl.textContent = invite
-  if (inviteRowEl) inviteRowEl.classList.toggle('hidden', !invite)
-}
-
-async function onSearchAction() {
-  const raw = String(searchInput.value || '').trim()
-  if (!raw) {
-    statusEl.textContent = 'Enter search text or paste an invite URL.'
-    return
-  }
-
-  const isInvite = raw.startsWith('peardrops://invite') || raw.startsWith('peardrops-web://join')
-  if (isInvite) {
-    await openInviteFiles(raw)
-    return
-  }
-
-  state.search = raw.toLowerCase()
-  state.searchResultsQuery = state.search
-  setView('search-results')
-  statusEl.textContent = `Local search for "${raw}"`
-}
-
-async function openInviteFilesFromSearch() {
-  const invite = String(searchInput.value || '').trim()
-  if (!invite) {
-    statusEl.textContent = 'Paste an invite URL into the search field first.'
-    return
-  }
-  await openInviteFiles(invite)
-}
-
-async function openInviteFiles(invite) {
-  if (!state.rpc) {
-    statusEl.textContent = 'Worker is still starting.'
-    return
-  }
-  try {
-    statusEl.textContent = 'Loading invite manifest...'
-    const manifest = await state.rpc.request(RpcCommand.GET_MANIFEST, { invite })
-    state.inviteSource = invite
-    state.inviteEntries = Array.isArray(manifest.files) ? manifest.files : []
-    state.search = ''
-    state.searchResultsQuery = ''
-    setView('invite-files')
-    state.inviteSelected = new Set(
-      state.inviteEntries.map((entry) => String(entry.drivePath || entry.name))
-    )
-    render()
-    statusEl.textContent = `Loaded ${state.inviteEntries.length} drive file(s).`
-  } catch (error) {
-    statusEl.textContent = `Invite load failed: ${error.message || String(error)}`
-  }
-}
-
-async function downloadInviteSelected(mode) {
+async function stopHost(invite) {
   if (!state.rpc) return
-  const selectedEntries = state.inviteEntries.filter((entry) =>
-    state.inviteSelected.has(String(entry.drivePath || entry.name))
-  )
-  const picked = mode === 'add-drive-folder' ? state.inviteEntries.slice() : selectedEntries
-  if (!picked.length) {
-    statusEl.textContent = 'Select one or more drive files first.'
-    return
+  try {
+    await state.rpc.request(RpcCommand.STOP_HOST, { invite })
+    state.selectedHosts.delete(invite)
+    await refreshActiveHosts()
+    setStatus('Host stopped.')
+  } catch (error) {
+    setStatus(`Stop failed: ${error.message || String(error)}`)
+  }
+}
+
+async function rehostSelectedHistory() {
+  const picked = state.hostHistory.filter((item) => state.selectedHistory.has(item.id))
+  if (!picked.length) return setStatus('Select at least one history item first.')
+
+  upsertWorkerActivityBar('rehost-bulk', 'Re-hosting selected history', 0, picked.length)
+
+  for (let i = 0; i < picked.length; i++) {
+    // eslint-disable-next-line no-await-in-loop
+    await rehostHistoryItem(picked[i])
+    upsertWorkerActivityBar('rehost-bulk', 'Re-hosting selected history', i + 1, picked.length)
   }
 
-  const shouldDownload = mode === 'download'
-  const shouldAddToApp = mode === 'add-selected' || mode === 'add-drive-folder'
+  clearWorkerActivityBar('rehost-bulk')
+  await refreshActiveHosts()
+  renderAll()
+}
 
-  let targetDir = ''
-  if (shouldDownload) {
-    targetDir = String((await bridge.getDownloadsPath?.()) || '')
-    if (!targetDir) {
-      statusEl.textContent = 'Could not resolve default Downloads folder.'
+async function rehostHistoryItem(historyItem) {
+  if (!state.rpc) return setStatus('Worker is still starting.')
+  try {
+    const refs = Array.isArray(historyItem.sourceRefs) ? historyItem.sourceRefs : []
+    if (!refs.length) throw new Error('History entry does not include saved source paths')
+
+    upsertWorkerActivityBar('rehost-expand', 'Validating history paths', 0, refs.length)
+
+    for (let i = 0; i < refs.length; i++) {
+      const ref = refs[i]
+      // eslint-disable-next-line no-await-in-loop
+      const exists = await pathExists(ref.path)
+      if (!exists) throw new Error(`Cannot re-host: source no longer exists (${ref.path})`)
+      upsertWorkerActivityBar('rehost-expand', 'Validating history paths', i + 1, refs.length)
+    }
+
+    const files = []
+    for (const ref of refs) {
+      // eslint-disable-next-line no-await-in-loop
+      const expanded = await expandSourceToFiles(ref)
+      files.push(...expanded)
+    }
+
+    clearWorkerActivityBar('rehost-expand')
+
+    if (!files.length) throw new Error('No files available from saved sources')
+
+    const response = await state.rpc.request(RpcCommand.CREATE_UPLOAD, {
+      files,
+      sessionName: String(historyItem.sessionName || 'Host Session').trim() || 'Host Session'
+    })
+
+    const invite = String(response?.nativeInvite || response?.invite || '').trim()
+    const next = {
+      ...historyItem,
+      invite,
+      createdAt: Date.now(),
+      fileCount: Array.isArray(response?.manifest) ? response.manifest.length : files.length,
+      totalBytes: Number(response?.transfer?.totalBytes || historyItem.totalBytes || 0)
+    }
+
+    state.hostHistory = [next, ...state.hostHistory.filter((row) => row.id !== historyItem.id)].slice(0, 200)
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(state.hostHistory))
+    setStatus('Re-host started.')
+  } catch (error) {
+    clearWorkerActivityBar('rehost-expand')
+    setStatus(`Re-host failed: ${error.message || String(error)}`)
+  }
+}
+
+function addLocalSources(entries) {
+  const now = Date.now()
+  const next = state.sources.slice()
+
+  for (const entry of entries) {
+    const srcPath = String(entry.path || '').trim()
+    if (!srcPath) continue
+    const type = entry.type === 'folder' ? 'folder' : 'file'
+    const exists = next.find((row) => row.path === srcPath && row.type === type)
+    if (exists) continue
+    next.unshift({
+      id: `src:${now}:${Math.random().toString(16).slice(2, 8)}`,
+      type,
+      path: srcPath,
+      name: nodePath.basename(srcPath) || srcPath,
+      addedAt: Date.now()
+    })
+  }
+
+  state.sources = next.slice(0, 300)
+  persistSources()
+  renderSources()
+  setStatus(`Source list updated (${state.sources.length}).`)
+}
+
+function rememberHistory(entry) {
+  state.hostHistory = [entry, ...state.hostHistory].slice(0, 200)
+  localStorage.setItem(HISTORY_KEY, JSON.stringify(state.hostHistory))
+}
+
+function persistSources() {
+  localStorage.setItem(SOURCES_KEY, JSON.stringify(state.sources))
+}
+
+function persistStarredHosts() {
+  localStorage.setItem(STARRED_HOSTS_KEY, JSON.stringify(Array.from(state.starredHosts)))
+}
+
+async function expandSourceToFiles(source) {
+  const srcPath = String(source?.path || '').trim()
+  const srcType = source?.type === 'folder' ? 'folder' : 'file'
+  if (!srcPath) return []
+
+  const exists = await pathExists(srcPath)
+  if (!exists) throw new Error(`Source path does not exist: ${srcPath}`)
+
+  if (srcType === 'file') {
+    const stat = await fs.stat(srcPath)
+    if (!stat.isFile()) throw new Error(`Source is not a file: ${srcPath}`)
+    return [
+      {
+        name: nodePath.basename(srcPath),
+        path: srcPath,
+        drivePath: `/files/${sanitizePathPart(nodePath.basename(srcPath))}`,
+        byteLength: Number(stat.size || 0),
+        mimeType: guessMimeType(srcPath)
+      }
+    ]
+  }
+
+  const files = []
+  await walkDir(srcPath, async (filePath) => {
+    const rel = nodePath.relative(srcPath, filePath).split(nodePath.sep).join('/')
+    const stat = await fs.stat(filePath)
+    files.push({
+      name: nodePath.basename(filePath),
+      path: filePath,
+      drivePath: `/files/${sanitizeRelativePath(rel)}`,
+      byteLength: Number(stat.size || 0),
+      mimeType: guessMimeType(filePath)
+    })
+  })
+
+  return files
+}
+
+async function writeEntryToFile(rpc, invite, drivePath, outputPath, byteLength) {
+  const fd = await fs.open(outputPath, 'w')
+  const chunkSize = 256 * 1024
+
+  try {
+    const total = Math.max(0, Number(byteLength || 0))
+    let offset = 0
+
+    if (total <= 0) {
+      while (true) {
+        // eslint-disable-next-line no-await-in-loop
+        const chunk = await rpc.request(RpcCommand.READ_ENTRY_CHUNK, {
+          invite,
+          drivePath,
+          offset,
+          length: chunkSize
+        })
+        const bytes = Buffer.from(String(chunk?.dataBase64 || ''), 'base64')
+        if (!bytes.byteLength) break
+        // eslint-disable-next-line no-await-in-loop
+        await fd.write(bytes)
+        offset += bytes.byteLength
+        if (bytes.byteLength < chunkSize) break
+      }
       return
     }
-  }
 
-  let folderId = ''
-  if (mode === 'add-drive-folder') {
-    const folder = ensureFolder(`Drive ${new Date().toLocaleDateString()}`)
-    folderId = folder.id
-  }
-
-  statusEl.textContent = shouldDownload
-    ? `Downloading ${picked.length} file(s)...`
-    : mode === 'add-drive-folder'
-      ? `Adding ${picked.length} drive file(s) as folder...`
-      : `Adding ${picked.length} selected file(s) to app...`
-  setWorkerLogMessage(
-    shouldDownload ? 'downloading selected invite files' : 'adding selected drive files to app'
-  )
-  const knownTotalBytes = picked.reduce(
-    (sum, entry) => sum + Math.max(0, Number(entry?.byteLength || 0)),
-    0
-  )
-  const totalBytes = Math.max(1, knownTotalBytes)
-  const useByteProgress = knownTotalBytes > 0
-  let downloadedBytes = 0
-  upsertWorkerActivityBar(
-    'download',
-    'Downloading selected files...',
-    0,
-    useByteProgress ? totalBytes : picked.length,
-    {
-      subtitle: 'Current file: preparing...',
-      displayMode: useByteProgress ? 'bytes' : 'count'
-    }
-  )
-  try {
-    const now = Date.now()
-    for (let i = 0; i < picked.length; i++) {
-      const entry = picked[i]
-      upsertWorkerActivityBar(
-        'download',
-        'Downloading selected files...',
-        useByteProgress ? downloadedBytes : i,
-        useByteProgress ? totalBytes : picked.length,
-        {
-          subtitle: `Current file: ${entry.name || `file-${i + 1}`}`,
-          displayMode: useByteProgress ? 'bytes' : 'count'
-        }
-      )
-      let writtenPath = ''
-      let writer = null
-      const fileBuffers = []
-      let fileDoneBytes = 0
-      const expectedFileBytes = Math.max(0, Number(entry.byteLength || 0))
-      if (shouldDownload) {
-        const outDir = String((await bridge.getDownloadsPath?.()) || targetDir)
-        if (!outDir) continue
-        await fs.mkdir(outDir, { recursive: true })
-        writtenPath = nodePath.join(outDir, sanitizeName(entry.name || `file-${i + 1}`))
-        writer = nodeFs.createWriteStream(writtenPath)
-      }
-
-      const includeData = false
-      if (expectedFileBytes > 0) {
-        while (fileDoneBytes < expectedFileBytes) {
-          const chunk = await state.rpc.request(RpcCommand.READ_ENTRY_CHUNK, {
-            invite: state.inviteSource,
-            drivePath: entry.drivePath,
-            offset: fileDoneBytes,
-            length: Math.min(256 * 1024, expectedFileBytes - fileDoneBytes)
-          })
-          const bytes = Buffer.from(String(chunk?.dataBase64 || ''), 'base64')
-          if (!bytes.byteLength) break
-          fileDoneBytes += bytes.byteLength
-          if (writer) writer.write(bytes)
-          if (includeData) fileBuffers.push(bytes)
-          downloadedBytes += bytes.byteLength
-          upsertWorkerActivityBar(
-            'download',
-            'Downloading selected files...',
-            useByteProgress ? downloadedBytes : i,
-            useByteProgress ? totalBytes : picked.length,
-            {
-              subtitle: `Current file: ${entry.name || `file-${i + 1}`}`,
-              displayMode: useByteProgress ? 'bytes' : 'count'
-            }
-          )
-        }
-      } else {
-        const read = await state.rpc.request(RpcCommand.READ_ENTRY, {
-          invite: state.inviteSource,
-          drivePath: entry.drivePath
-        })
-        const bytes = Buffer.from(String(read.dataBase64 || ''), 'base64')
-        fileDoneBytes = bytes.byteLength
-        if (writer) writer.write(bytes)
-        if (includeData) fileBuffers.push(bytes)
-        downloadedBytes += bytes.byteLength
-      }
-
-      if (writer) await new Promise((resolve) => writer.end(resolve))
-
-      if (shouldAddToApp) {
-        upsertFile({
-          id: `invite:${now}:${i}:${entry.name}`,
-          name: entry.name || `file-${i + 1}`,
-          byteLength: fileDoneBytes || Number(entry.byteLength || 0),
-          updatedAt: Date.now(),
-          source: 'download',
-          invite: state.inviteSource,
-          mimeType: entry.mimeType || 'application/octet-stream',
-          dataBase64: includeData ? Buffer.concat(fileBuffers).toString('base64') : '',
-          path: writtenPath,
-          drivePath: entry.drivePath || '',
-          folderId
-        })
-      }
-      upsertWorkerActivityBar(
-        'download',
-        'Downloading selected files...',
-        useByteProgress ? downloadedBytes : i + 1,
-        useByteProgress ? totalBytes : picked.length,
-        {
-          subtitle: `Current file: ${entry.name || `file-${i + 1}`}`,
-          displayMode: useByteProgress ? 'bytes' : 'count'
-        }
-      )
-    }
-
-    await refreshTransfers()
-    render()
-    statusEl.textContent = shouldDownload
-      ? `Downloaded ${picked.length} file(s).`
-      : mode === 'add-drive-folder'
-        ? `Added drive as folder with ${picked.length} file(s).`
-        : `Added ${picked.length} selected file(s) to app.`
-  } finally {
-    clearWorkerActivityBar('download')
-  }
-}
-
-function upsertFile(file) {
-  const existingIndex = state.files.findIndex((item) => item.id === file.id)
-  if (existingIndex >= 0) state.files[existingIndex] = { ...state.files[existingIndex], ...file }
-  else state.files.push(file)
-  persistAll()
-}
-
-function wipeDeletedFiles(ids, permanent = true) {
-  const removeIds = new Set(ids)
-  if (permanent) {
-    state.files = state.files.filter((f) => !removeIds.has(f.id))
-  }
-  for (const id of ids) {
-    state.deleted.delete(id)
-    state.starred.delete(id)
-    state.selected.delete(id)
-    delete state.deletedAt[id]
-  }
-  persistAll()
-}
-
-function persistAll() {
-  localStorage.setItem(PREF_KEY, JSON.stringify(state.files.slice(-600)))
-  localStorage.setItem(STARRED_KEY, JSON.stringify(Array.from(state.starred)))
-  localStorage.setItem(DELETED_KEY, JSON.stringify(Array.from(state.deleted)))
-  localStorage.setItem(DELETED_AT_KEY, JSON.stringify(state.deletedAt))
-  localStorage.setItem(FOLDERS_KEY, JSON.stringify(state.folders))
-  localStorage.setItem(HOST_HISTORY_KEY, JSON.stringify(state.hostHistory.slice(0, 300)))
-  localStorage.setItem(
-    HOST_HISTORY_REMOVED_KEY,
-    JSON.stringify(Array.from(state.hostHistoryRemoved).slice(0, 600))
-  )
-}
-
-function syncHostHistoryFromTransfers(transfers) {
-  const uploads = Array.isArray(transfers)
-    ? transfers.filter((item) => String(item?.type || '') === 'upload')
-    : []
-  if (!uploads.length) return
-  const merged = mergeHostHistory(state.hostHistory, uploads)
-  if (merged.length === state.hostHistory.length) return
-  state.hostHistory = merged
-  persistAll()
-}
-
-function rememberHostHistory(transfer, fallback = {}) {
-  const record = transfer || fallback
-  if (!record || typeof record !== 'object') return
-  const normalized = normalizeHostHistoryRecord(record, fallback)
-  if (!normalized) return
-  state.hostHistoryRemoved.delete(hostHistoryEntryKey(normalized))
-  state.hostHistory = mergeHostHistory([normalized], state.hostHistory)
-  persistAll()
-}
-
-function mergeHostHistory(primary, secondary) {
-  const map = new Map()
-  const combined = [
-    ...(Array.isArray(primary) ? primary : []),
-    ...(Array.isArray(secondary) ? secondary : [])
-  ]
-  for (const entry of combined) {
-    const normalized = normalizeHostHistoryRecord(entry)
-    if (!normalized) continue
-    const key =
-      String(normalized.transferId || normalized.id || '') ||
-      String(normalized.invite || '') ||
-      `${String(normalized.sessionLabel || normalized.sessionName || 'upload')}:${Number(normalized.createdAt || 0)}`
-    if (!key) continue
-    const existing = map.get(key)
-    if (!existing || Number(normalized.createdAt || 0) >= Number(existing.createdAt || 0)) {
-      map.set(key, normalized)
-    }
-  }
-  return Array.from(map.values())
-    .sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0))
-    .slice(0, 300)
-}
-
-function normalizeHostHistoryRecord(entry, fallback = {}) {
-  if (!entry || typeof entry !== 'object') return null
-  const invite = String(entry.invite || fallback.invite || '')
-  const transferId = String(entry.transferId || fallback.transferId || entry.id || '')
-  const manifest = Array.isArray(entry.manifest)
-    ? entry.manifest
-    : Array.isArray(fallback.manifest)
-      ? fallback.manifest
-      : []
-  return {
-    ...entry,
-    type: 'upload',
-    transferId: transferId || String(entry.id || ''),
-    invite,
-    sessionName: String(entry.sessionName || fallback.sessionName || 'Host Session'),
-    sessionLabel: String(
-      entry.sessionLabel || fallback.sessionLabel || entry.sessionName || fallback.sessionName || ''
-    ),
-    createdAt: Number(entry.createdAt || fallback.createdAt || Date.now()),
-    totalBytes: Number(entry.totalBytes || fallback.totalBytes || 0),
-    fileCount: Number(entry.fileCount || fallback.fileCount || manifest.length || 0),
-    manifest
-  }
-}
-
-function hostHistoryEntryKey(entry) {
-  if (!entry || typeof entry !== 'object') return ''
-  return String(entry.transferId || entry.id || entry.invite || '').trim()
-}
-
-function readThemeMode() {
-  const raw = String(localStorage.getItem(THEME_MODE_KEY) || 'system').toLowerCase()
-  if (raw === 'light' || raw === 'dark' || raw === 'system') return raw
-  return 'system'
-}
-
-function applyThemeMode(mode) {
-  const systemDark = window.matchMedia?.('(prefers-color-scheme: dark)').matches
-  const resolved = mode === 'system' ? (systemDark ? 'dark' : 'light') : mode
-  document.body.classList.toggle('theme-light', resolved === 'light')
-}
-
-function loadJson(key, fallback) {
-  try {
-    const raw = localStorage.getItem(key)
-    const parsed = raw ? JSON.parse(raw) : fallback
-    return parsed ?? fallback
-  } catch {
-    return fallback
-  }
-}
-
-function updateFolderOptions() {
-  const current = state.folderFilter
-  folderFilterEl.textContent = ''
-  const all = document.createElement('option')
-  all.value = ''
-  all.textContent = 'All folders'
-  folderFilterEl.appendChild(all)
-  for (const folder of state.folders) {
-    const opt = document.createElement('option')
-    opt.value = folder.id
-    opt.textContent = folder.name
-    folderFilterEl.appendChild(opt)
-  }
-  folderFilterEl.value = current
-}
-
-function renderSidebarFolders() {
-  if (!folderListEl) return
-  folderListEl.textContent = ''
-  if (!state.folders.length) {
-    const empty = document.createElement('div')
-    empty.className = 'row-muted'
-    empty.style.padding = '0 12px'
-    empty.textContent = 'No folders yet'
-    folderListEl.appendChild(empty)
-    return
-  }
-  for (const folder of state.folders) {
-    const btn = document.createElement('button')
-    const active = state.view === 'all-files' && state.folderFilter === folder.id
-    btn.className = `folder-item${active ? ' active' : ''}`
-    btn.textContent = `📁 ${folder.name}`
-    btn.addEventListener('click', () => {
-      state.folderFilter = folder.id
-      folderFilterEl.value = folder.id
-      setView('all-files', { keepFolderFilter: true })
-    })
-    folderListEl.appendChild(btn)
-  }
-}
-
-function ensureFolder(folderName) {
-  let folder = state.folders.find((item) => item.name.toLowerCase() === folderName.toLowerCase())
-  if (!folder) {
-    folder = {
-      id: `folder:${Date.now()}:${Math.random().toString(16).slice(2, 8)}`,
-      name: folderName
-    }
-    state.folders.push(folder)
-    updateFolderOptions()
-    renderSidebarFolders()
-    persistAll()
-  }
-  return folder
-}
-
-function applyFolderToIds(folderId, ids) {
-  for (const id of ids) {
-    const file = state.files.find((item) => item.id === id)
-    if (!file) continue
-    upsertFile({ ...file, folderId })
-  }
-  persistAll()
-  statusEl.textContent = `Moved ${ids.length} file(s) into folder.`
-}
-
-function openFolderModal(ids) {
-  state.folderAssignIds = ids.slice()
-  folderOptionsEl.textContent = ''
-  folderNewInputEl.value = ''
-  if (!state.folders.length) {
-    const note = document.createElement('div')
-    note.className = 'row-muted'
-    note.textContent = 'No folders yet. Create one below.'
-    folderOptionsEl.appendChild(note)
-  } else {
-    for (const folder of state.folders) {
-      const button = document.createElement('button')
-      button.className = 'folder-pill'
-      button.textContent = folder.name
-      button.addEventListener('click', () => {
-        applyFolderToIds(folder.id, state.folderAssignIds)
-        closeFolderModal()
-        render()
+    while (offset < total) {
+      const length = Math.min(chunkSize, total - offset)
+      // eslint-disable-next-line no-await-in-loop
+      const chunk = await rpc.request(RpcCommand.READ_ENTRY_CHUNK, {
+        invite,
+        drivePath,
+        offset,
+        length
       })
-      folderOptionsEl.appendChild(button)
+      const bytes = Buffer.from(String(chunk?.dataBase64 || ''), 'base64')
+      if (!bytes.byteLength) throw new Error(`Empty chunk at offset ${offset}`)
+      // eslint-disable-next-line no-await-in-loop
+      await fd.write(bytes)
+      offset += bytes.byteLength
     }
+  } finally {
+    await fd.close()
   }
-  folderModalEl.classList.remove('hidden')
 }
 
-function closeFolderModal() {
-  folderModalEl.classList.add('hidden')
-  state.folderAssignIds = []
-}
-
-function requestHostSessionName(defaultValue = 'Host Session') {
-  return new Promise((resolve) => {
-    pendingHostNameResolve = resolve
-    if (hostNameInputEl) hostNameInputEl.value = defaultValue
-    hostModalEl?.classList.remove('hidden')
-    hostNameInputEl?.focus()
-    hostNameInputEl?.select()
-  })
-}
-
-function closeHostNameModal(value) {
-  hostModalEl?.classList.add('hidden')
-  if (!pendingHostNameResolve) return
-  const resolve = pendingHostNameResolve
-  pendingHostNameResolve = null
-  if (value === null) resolve(null)
-  else resolve(String(value || '').trim())
-}
-
-function cleanupExpiredDeleted() {
-  const now = Date.now()
-  let changed = false
-  for (const id of Array.from(state.deleted)) {
-    const ts = Number(state.deletedAt[id] || 0)
-    if (!ts) continue
-    if (now - ts >= THIRTY_DAYS_MS) {
-      state.deleted.delete(id)
-      delete state.deletedAt[id]
-      state.files = state.files.filter((f) => f.id !== id)
-      changed = true
+async function walkDir(root, onFile) {
+  const entries = await fs.readdir(root, { withFileTypes: true })
+  for (const entry of entries) {
+    const fullPath = nodePath.join(root, entry.name)
+    if (entry.isDirectory()) {
+      // eslint-disable-next-line no-await-in-loop
+      await walkDir(fullPath, onFile)
+      continue
     }
+    if (!entry.isFile()) continue
+    // eslint-disable-next-line no-await-in-loop
+    await onFile(fullPath)
   }
-  if (changed) {
-    persistAll()
-    render()
+}
+
+function resolveOutputPath(baseDir, entry) {
+  const drivePath = String(entry?.drivePath || '').trim()
+  if (drivePath.startsWith('/files/')) {
+    const rel = sanitizeRelativePath(drivePath.slice('/files/'.length))
+    return nodePath.join(baseDir, rel)
   }
+  const safeName = sanitizePathPart(String(entry?.name || 'download.bin'))
+  return nodePath.join(baseDir, safeName)
 }
 
-function formatBytes(bytes) {
-  const value = Number(bytes || 0)
-  if (value < 1024) return `${value} B`
-  if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`
-  return `${(value / (1024 * 1024)).toFixed(2)} MB`
-}
-
-function formatDate(value) {
-  return new Date(Number(value || Date.now())).toLocaleString()
-}
-
-function escapeHtml(value) {
-  return String(value).replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')
-}
-
-function guessMime(name) {
-  const ext = fileExt(name)
-  if (ext === 'png') return 'image/png'
-  if (ext === 'jpg' || ext === 'jpeg') return 'image/jpeg'
-  if (ext === 'gif') return 'image/gif'
-  if (ext === 'webp') return 'image/webp'
-  if (ext === 'mp4') return 'video/mp4'
-  if (ext === 'mov') return 'video/quicktime'
+function guessMimeType(filePath) {
+  const ext = nodePath.extname(String(filePath || '')).toLowerCase()
+  if (ext === '.png') return 'image/png'
+  if (ext === '.jpg' || ext === '.jpeg') return 'image/jpeg'
+  if (ext === '.webp') return 'image/webp'
+  if (ext === '.gif') return 'image/gif'
+  if (ext === '.mp4') return 'video/mp4'
+  if (ext === '.txt') return 'text/plain'
+  if (ext === '.json') return 'application/json'
   return 'application/octet-stream'
 }
 
-function openPreview(fileId) {
-  const file = state.files.find((item) => item.id === fileId)
-  if (!file) return
-  state.previewFileId = fileId
-  previewTitleEl.textContent = file.name
-  renderPreviewContent(file)
-  previewOverlayEl.classList.remove('hidden')
+function entryKey(entry) {
+  return String(entry?.drivePath || entry?.name || '').trim()
 }
 
-function closePreview() {
-  if (!state.previewFileId) return
-  state.previewFileId = ''
-  previewOverlayEl.classList.add('hidden')
-  previewFrameEl.textContent = ''
+function sanitizePathPart(value) {
+  return String(value || '')
+    .replaceAll('\\', '_')
+    .replaceAll('/', '_')
+    .replace(/\s+/g, ' ')
+    .trim() || 'file'
 }
 
-function renderPreviewContent(file) {
-  previewFrameEl.textContent = ''
-  const type = classifyFile(file)
-  if (type === 'image') {
-    const src = resolveImageSrc(file)
-    if (!src) {
-      const fallback = document.createElement('div')
-      fallback.className = 'preview-frame-fallback'
-      fallback.innerHTML = `<h3>${escapeHtml(file.name)}</h3><p>No inline preview available for this file type.</p>`
-      previewFrameEl.appendChild(fallback)
-      return
-    }
-    const img = document.createElement('img')
-    img.src = src
-    img.alt = file.name
-    previewFrameEl.appendChild(img)
-    return
-  }
-  if (type === 'video') {
-    const src = resolveVideoSrc(file)
-    if (!src) {
-      const fallback = document.createElement('div')
-      fallback.className = 'preview-frame-fallback'
-      fallback.innerHTML = `<h3>${escapeHtml(file.name)}</h3><p>No inline preview available for this file type.</p>`
-      previewFrameEl.appendChild(fallback)
-      return
-    }
-    const video = document.createElement('video')
-    video.controls = true
-    video.autoplay = true
-    video.src = src
-    previewFrameEl.appendChild(video)
-    return
-  }
-  const fallback = document.createElement('div')
-  fallback.className = 'preview-frame-fallback'
-  fallback.innerHTML = `<h3>${escapeHtml(file.name)}</h3><p>No inline preview available for this file type.</p>`
-  previewFrameEl.appendChild(fallback)
+function sanitizeRelativePath(value) {
+  return String(value || '')
+    .split('/')
+    .map((part) => sanitizePathPart(part))
+    .filter(Boolean)
+    .join('/')
 }
 
-function resolveImageSrc(file) {
-  if (typeof file.dataBase64 === 'string') {
-    return `data:${file.mimeType || guessMime(file.name)};base64,${file.dataBase64}`
+function normalizePathList(value) {
+  if (!Array.isArray(value)) return []
+  return value.map((entry) => String(entry || '').trim()).filter(Boolean)
+}
+
+function normalizeInvite(raw) {
+  const text = String(raw || '').trim()
+  if (!text) return ''
+  if (text.startsWith('peardrops://invite') || text.startsWith('peardrops-web://join')) {
+    return text
   }
-  const localPath = String(file.path || '').trim()
-  if (!localPath) return ''
   try {
-    return pathToFileURL(localPath).toString()
-  } catch {
-    return ''
-  }
-}
-
-function resolveVideoSrc(file) {
-  if (typeof file.dataBase64 === 'string') {
-    return `data:${file.mimeType || guessMime(file.name)};base64,${file.dataBase64}`
-  }
-  const localPath = String(file.path || '').trim()
-  if (!localPath) return ''
-  try {
-    return pathToFileURL(localPath).toString()
-  } catch {
-    return ''
-  }
+    const parsed = new URL(text)
+    const nested = parsed.searchParams.get('invite')
+    if (nested && nested.startsWith('peardrops://invite')) return nested
+  } catch {}
+  return ''
 }
 
 function setWorkerLogMessage(message) {
-  if (!workerLogEl) return
-  const text = String(message || '').trim()
-  workerLogEl.textContent = `Worker log: ${text || 'waiting for events.'}`
+  const text = redactInviteText(String(message || '').trim())
+  for (const el of workerLogEls) {
+    if (!el) continue
+    el.textContent = `Worker log: ${text || 'waiting for events.'}`
+  }
+}
+
+function redactInviteText(value) {
+  const text = String(value || '')
+  return text
+    .replace(/peardrops:\/\/invite[^\s)]+/gi, '[invite hidden]')
+    .replace(/peardrops-web:\/\/join[^\s)]+/gi, '[invite hidden]')
+    .replace(/([?&]invite=)[^&\s)]+/gi, '$1[invite hidden]')
 }
 
 function upsertWorkerActivityBar(id, label, done, total, options = {}) {
@@ -1861,168 +1214,104 @@ function upsertWorkerActivityBar(id, label, done, total, options = {}) {
 
 function clearWorkerActivityBar(id) {
   const key = String(id || '').trim()
-  if (!key) return
-  if (!workerActivityBars.has(key)) return
+  if (!key || !workerActivityBars.has(key)) return
   workerActivityBars.delete(key)
   renderWorkerActivityBars()
 }
 
 function renderWorkerActivityBars() {
-  if (!workerActivityBarsEl) return
-  if (workerActivityBars.size === 0) {
-    workerActivityBarsEl.classList.add('hidden')
-    workerActivityBarsEl.textContent = ''
-    return
-  }
-  workerActivityBarsEl.classList.remove('hidden')
+  if (!workerActivityBarsEls.length) return
   const barsHtml = Array.from(workerActivityBars.values())
     .map((bar) => {
-      const percent = Math.round(
-        (Number(bar.done || 0) / Math.max(1, Number(bar.total || 1))) * 100
-      )
+      const percent = Math.round((Number(bar.done || 0) / Math.max(1, Number(bar.total || 1))) * 100)
       const progressText =
         bar.displayMode === 'bytes'
           ? `${percent}% (${formatBytes(Number(bar.done || 0))} / ${formatBytes(Number(bar.total || 0))})`
           : `${Number(bar.done || 0)}/${Math.max(1, Number(bar.total || 1))}`
       const subtitleHtml = bar.subtitle
-        ? `<div class="activity-progress-sub">${escapeHtml(bar.subtitle)}</div>`
+        ? `<div class="activity-label" style="margin-top:3px;">${escapeHtml(bar.subtitle)}</div>`
         : ''
-      return `<div class="activity-progress"><div class="activity-progress-label">${escapeHtml(bar.label)} ${progressText}</div>${subtitleHtml}<div class="activity-progress-track"><div class="activity-progress-fill" style="width:${percent}%"></div></div></div>`
+      return `<div class="activity-bar"><div class="activity-label">${escapeHtml(bar.label)} ${progressText}</div>${subtitleHtml}<div class="activity-track"><div class="activity-fill" style="width:${percent}%"></div></div></div>`
     })
     .join('')
-  workerActivityBarsEl.innerHTML = barsHtml
-}
 
-function setCopyFeedback(key, label = 'Copied') {
-  state.copyFeedbackKey = String(key || '')
-  if (copyFeedbackEl) {
-    copyFeedbackEl.textContent = label
-    copyFeedbackEl.classList.remove('hidden')
+  for (const el of workerActivityBarsEls) {
+    if (!el) continue
+    if (workerActivityBars.size === 0) {
+      el.classList.add('hidden')
+      el.textContent = ''
+      continue
+    }
+    el.classList.remove('hidden')
+    el.innerHTML = barsHtml
   }
-  render()
-  if (copyFeedbackTimer) clearTimeout(copyFeedbackTimer)
-  copyFeedbackTimer = setTimeout(() => {
-    state.copyFeedbackKey = ''
-    if (copyFeedbackEl) copyFeedbackEl.classList.add('hidden')
-    render()
-  }, 1400)
 }
 
-function normalizePathList(values) {
-  if (!Array.isArray(values)) return []
-  return values.map((value) => String(value || '')).filter(Boolean)
+function applyThemeMode(mode) {
+  const raw = String(mode || 'system').trim().toLowerCase()
+  state.themeMode = raw === 'dark' || raw === 'light' ? raw : 'system'
+  const next = state.themeMode === 'system' ? resolveSystemTheme() : state.themeMode
+  document.body.setAttribute('data-theme', next)
 }
 
-async function importPathsAsLocalFiles(paths) {
-  const picked = normalizePathList(paths)
-  if (!picked.length) return
-  setWorkerLogMessage('indexing selected local files')
-  upsertWorkerActivityBar('ingest', 'Loading files...', 0, picked.length)
-  statusEl.textContent = `Loading ${picked.length} file(s)...`
-  const now = Date.now()
-  const newEntries = []
+function resolveSystemTheme() {
+  const prefersDark = window.matchMedia?.('(prefers-color-scheme: dark)')?.matches
+  return prefersDark ? 'dark' : 'light'
+}
 
-  for (let i = 0; i < picked.length; i++) {
-    const filePath = picked[i]
-    let stats = null
-    try {
-      stats = await fs.stat(filePath)
-    } catch {}
-
-    const fileName = nodePath.basename(filePath) || `file-${i + 1}`
-    newEntries.push({
-      id: `local:${now}:${i}:${fileName}`,
-      name: fileName,
-      byteLength: Number(stats?.size || 0),
-      updatedAt: now,
-      source: 'local',
-      invite: '',
-      mimeType: guessMime(fileName),
-      path: filePath
-    })
-    upsertWorkerActivityBar('ingest', 'Loading files...', i + 1, picked.length)
-    if ((i + 1) % 25 === 0) await sleep(0)
+function setStatus(message) {
+  const text = String(message || '')
+  for (const el of statusEls) {
+    if (!el) continue
+    el.textContent = text
   }
+}
 
-  state.files.push(...newEntries)
-  persistAll()
-  clearWorkerActivityBar('ingest')
-  statusEl.textContent = `Added ${newEntries.length} file(s). Select and click "Host Upload" to create invite.`
-  render()
+async function pathExists(targetPath) {
+  try {
+    await fs.access(String(targetPath || ''), nodeFs.constants.F_OK)
+    return true
+  } catch {
+    return false
+  }
+}
+
+function formatBytes(value = 0) {
+  const n = Math.max(0, Number(value || 0))
+  if (n < 1024) return `${n} B`
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`
+}
+
+function loadJson(key, fallback) {
+  try {
+    const raw = localStorage.getItem(key)
+    if (!raw) return fallback
+    return JSON.parse(raw)
+  } catch {
+    return fallback
+  }
 }
 
 async function copyToClipboard(value) {
   try {
-    await navigator.clipboard.writeText(value)
+    await navigator.clipboard.writeText(String(value || ''))
   } catch {
-    const input = document.createElement('input')
-    input.value = value
-    document.body.appendChild(input)
-    input.select()
-    document.execCommand('copy')
-    input.remove()
+    setStatus('Could not copy automatically.')
+    return
   }
+  setStatus('Copied invite(s).')
 }
 
-async function requestInitWithRetry(rpc, attempts) {
-  let lastError = null
-  for (let i = 1; i <= attempts; i++) {
-    try {
-      return await withTimeout(rpc.request(RpcCommand.INIT, {}), 20000, 'Worker init RPC timed out')
-    } catch (error) {
-      lastError = error
-      if (i < attempts) await sleep(750)
-    }
-  }
-  throw lastError || new Error('Worker init failed')
+function escapeHtml(value) {
+  return String(value || '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;')
 }
 
-function withTimeout(promise, ms, message) {
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error(message)), ms)
-    promise.then(
-      (value) => {
-        clearTimeout(timer)
-        resolve(value)
-      },
-      (error) => {
-        clearTimeout(timer)
-        reject(error)
-      }
-    )
-  })
-}
-
-function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms))
-}
-
-function createRpcClient() {
-  const ipc = {
-    on(event, listener) {
-      if (event !== 'data') return ipc
-      bridge.onWorkerIPC(workerSpecifier, (chunk) => listener(chunk))
-      return ipc
-    },
-    write(data) {
-      Promise.resolve(bridge.writeWorkerIPC(workerSpecifier, data)).catch((error) => {
-        const message = String(error?.message || error || '')
-        if (!message.includes('No handler registered')) {
-          if (workerLogEl) workerLogEl.textContent = `Worker log: IPC write failed: ${message}`
-        }
-      })
-      return true
-    }
-  }
-  const client = new RPC(ipc, () => {})
-  return {
-    async request(command, payload = {}) {
-      const req = client.request(command)
-      req.send(Buffer.from(JSON.stringify(payload), 'utf8'))
-      const reply = await req.reply()
-      const parsed = JSON.parse(Buffer.from(reply).toString('utf8'))
-      if (parsed && parsed.ok === false) throw new Error(parsed.error || 'RPC request failed')
-      return parsed && parsed.ok === true ? parsed.result : parsed
-    }
-  }
+function escapeHtmlAttr(value) {
+  return escapeHtml(value).replaceAll('`', '&#96;')
 }
