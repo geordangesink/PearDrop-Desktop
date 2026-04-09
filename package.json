@@ -16,6 +16,7 @@
     "start:prod-relay": "PEARDROPS_RELAY_URL=wss://pear-drops.up.railway.app electron-forge start -- --no-updates",
     "package": "electron-forge package",
     "make:darwin": "electron-forge make --platform=darwin",
+    "make:darwin:builder": "electron-builder --mac dmg --arm64 --publish never",
     "make:win32": "electron-forge make --platform=win32",
     "make:win32:squirrel": "electron-forge make --platform=win32 --targets @electron-forge/maker-squirrel",
     "make:linux": "electron-forge package && ./scripts/build-app-image.sh",
@@ -42,11 +43,47 @@
     "@electron-forge/maker-zip": "^7.11.1",
     "app-builder-lib": "^26.8.1",
     "electron": "^40.2.1",
+    "electron-builder": "^26.0.12",
     "electron-forge-plugin-prune-prebuilds": "^1.0.0",
-    "electron-forge-plugin-universal-prebuilds": "^1.0.0",
     "hyperdht": "^6.19.1",
     "lunte": "^1.6.0",
     "prettier": "^3.8.1",
     "prettier-config-holepunch": "^2.0.0"
+  },
+  "build": {
+    "appId": "com.peardrop.desktop",
+    "productName": "Pear Drop",
+    "directories": {
+      "output": "out/make"
+    },
+    "files": [
+      "electron/**/*",
+      "renderer/**/*",
+      "workers/**/*",
+      "build/**/*",
+      "node_modules/**/*",
+      "package.json"
+    ],
+    "asar": true,
+    "asarUnpack": [
+      "**/*.node",
+      "**/*.bare",
+      "**/*.dylib"
+    ],
+    "afterSign": "scripts/mac-sign-after-pack.cjs",
+    "mac": {
+      "category": "public.app-category.productivity",
+      "target": [
+        "dmg"
+      ],
+      "identity": "${env.MAC_CODESIGN_IDENTITY}",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist"
+    },
+    "dmg": {
+      "sign": false
+    }
   }
 }

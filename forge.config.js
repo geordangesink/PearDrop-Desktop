@@ -142,10 +142,6 @@ module.exports = {
 
   plugins: [
     {
-      name: 'electron-forge-plugin-universal-prebuilds',
-      config: {}
-    },
-    {
       name: 'electron-forge-plugin-prune-prebuilds',
       config: {}
     }
