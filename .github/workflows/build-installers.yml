@@ -129,7 +129,44 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Import Apple code-signing certificate
+        env:
+          MAC_CODESIGN_CERT_P12_BASE64: ${{ secrets.MAC_CODESIGN_CERT_P12_BASE64 }}
+          MAC_CODESIGN_CERT_PASSWORD: ${{ secrets.MAC_CODESIGN_CERT_PASSWORD }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${MAC_CODESIGN_CERT_P12_BASE64:-}" ]; then
+            echo "Missing secret: MAC_CODESIGN_CERT_P12_BASE64"
+            exit 1
+          fi
+          if [ -z "${MAC_CODESIGN_CERT_PASSWORD:-}" ]; then
+            echo "Missing secret: MAC_CODESIGN_CERT_PASSWORD"
+            exit 1
+          fi
+
+          cert_path="$RUNNER_TEMP/mac_codesign_cert.p12"
+          keychain_path="$RUNNER_TEMP/pear-drop-signing.keychain-db"
+          keychain_password="$(openssl rand -hex 24)"
+
+          echo "$MAC_CODESIGN_CERT_P12_BASE64" | base64 --decode > "$cert_path"
+
+          security create-keychain -p "$keychain_password" "$keychain_path"
+          security set-keychain-settings -lut 21600 "$keychain_path"
+          security unlock-keychain -p "$keychain_password" "$keychain_path"
+          security import "$cert_path" -P "$MAC_CODESIGN_CERT_PASSWORD" -A -t cert -f pkcs12 -k "$keychain_path"
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$keychain_password" "$keychain_path"
+
+          security list-keychains -d user -s "$keychain_path" $(security list-keychains -d user | tr -d '"')
+          security default-keychain -d user -s "$keychain_path"
+          security find-identity -v -p codesigning "$keychain_path"
+
       - name: Build macOS artifacts
+        env:
+          MAC_CODESIGN_IDENTITY: ${{ secrets.MAC_CODESIGN_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: npm run make:darwin
 
       - name: Normalize publish filenames
@@ -179,6 +216,7 @@ jobs:
         env:
           DOWNLOADS_UPLOAD_URL: ${{ secrets.DOWNLOADS_UPLOAD_URL }}
           DOWNLOADS_UPLOAD_TOKEN: ${{ secrets.DOWNLOADS_UPLOAD_TOKEN }}
+          DOWNLOADS_OVERWRITE: ${{ vars.DOWNLOADS_OVERWRITE }}
         run: |
           set -euo pipefail
 
@@ -204,11 +242,13 @@ jobs:
               echo "Skipping missing file: $src"
               return 0
             fi
-            encoded_dst="${dst// /%20}"
-            head_status="$(curl -s -o /dev/null -w "%{http_code}" "${DOWNLOADS_UPLOAD_URL}/downloads/${encoded_dst}")"
-            if [ "$head_status" = "200" ]; then
-              echo "Destination already exists, skipping upload: $dst"
-              return 0
+            if [ "${DOWNLOADS_OVERWRITE:-0}" != "1" ]; then
+              encoded_dst="${dst// /%20}"
+              head_status="$(curl -s -o /dev/null -w "%{http_code}" "${DOWNLOADS_UPLOAD_URL}/downloads/${encoded_dst}")"
+              if [ "$head_status" = "200" ]; then
+                echo "Destination already exists, skipping upload: $dst"
+                return 0
+              fi
             fi
             echo "Uploading $src -> $dst"
             curl --fail --silent --show-error \
