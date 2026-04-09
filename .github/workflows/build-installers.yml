@@ -204,8 +204,17 @@ jobs:
               echo "Skipping missing file: $src"
               return 0
             fi
+            encoded_dst="${dst// /%20}"
+            head_status="$(curl -s -o /dev/null -w "%{http_code}" "${DOWNLOADS_UPLOAD_URL}/downloads/${encoded_dst}")"
+            if [ "$head_status" = "200" ]; then
+              echo "Destination already exists, skipping upload: $dst"
+              return 0
+            fi
             echo "Uploading $src -> $dst"
             curl --fail --silent --show-error \
+              --retry 5 \
+              --retry-delay 2 \
+              --retry-all-errors \
               -X PUT "${DOWNLOADS_UPLOAD_URL}/upload?path=${dst}" \
               -H "x-upload-token: ${DOWNLOADS_UPLOAD_TOKEN}" \
               --data-binary @"$src"
