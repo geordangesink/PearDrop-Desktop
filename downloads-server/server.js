@@ -34,8 +34,16 @@ app.put('/upload', async (req, res) => {
     const stream = fs.createWriteStream(absolute)
     req.pipe(stream)
     stream.on('finish', () => res.status(201).send('ok'))
-    stream.on('error', () => res.status(500).send('write error'))
+    stream.on('error', (error) => {
+      console.error('[upload] stream error', {
+        code: error?.code,
+        message: error?.message,
+        absolute
+      })
+      res.status(500).send(error?.code || 'write error')
+    })
   } catch {
+    console.error('[upload] request error')
     res.status(500).send('error')
   }
 })
@@ -70,8 +78,12 @@ app.post('/promote-latest', express.json({ limit: '32kb' }), async (req, res) =>
 
     return res.status(201).send('ok')
   } catch (error) {
+    console.error('[promote-latest] error', {
+      code: error?.code,
+      message: error?.message
+    })
     if (error && error.code === 'ENOENT') return res.status(404).send('source not found')
-    return res.status(500).send('error')
+    return res.status(500).send(error?.code || 'error')
   }
 })
 
