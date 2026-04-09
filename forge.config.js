@@ -42,11 +42,22 @@ if (process.env.MAC_CODESIGN_IDENTITY) {
       optionsForFile: () => ({
         entitlements: path.join(__dirname, 'build', 'entitlements.mac.plist')
       })
-    },
-    osxNotarize: {
-      appleId: process.env.APPLE_ID,
-      appleIdPassword: process.env.APPLE_PASSWORD,
-      teamId: process.env.APPLE_TEAM_ID
+    }
+  }
+
+  if (
+    process.env.MAC_NOTARIZE_ON_PACKAGE === '1' &&
+    process.env.APPLE_ID &&
+    process.env.APPLE_PASSWORD &&
+    process.env.APPLE_TEAM_ID
+  ) {
+    packagerConfig = {
+      ...packagerConfig,
+      osxNotarize: {
+        appleId: process.env.APPLE_ID,
+        appleIdPassword: process.env.APPLE_PASSWORD,
+        teamId: process.env.APPLE_TEAM_ID
+      }
     }
   }
 }

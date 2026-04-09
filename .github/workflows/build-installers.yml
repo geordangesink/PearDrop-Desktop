@@ -165,9 +165,7 @@ jobs:
       - name: Build macOS artifacts
         env:
           MAC_CODESIGN_IDENTITY: ${{ secrets.MAC_CODESIGN_IDENTITY }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          MAC_NOTARIZE_ON_PACKAGE: '0'
           DEBUG: electron-osx-sign*,electron-notarize*,@electron/osx-sign*,@electron/notarize*
         run: npm run make:darwin
 
@@ -188,6 +186,77 @@ jobs:
 
           echo "Published artifacts:"
           ls -la "$publish_dir"
+
+      - name: Notarize and staple DMG
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          version=$(node -p "require('./package.json').version")
+          dmg="out/publish/PearDrop-$version.dmg"
+          latest_dmg="out/publish/PearDrop.dmg"
+
+          if [ ! -f "$dmg" ]; then
+            echo "Missing DMG for notarization: $dmg"
+            exit 1
+          fi
+
+          echo "Submitting DMG for notarization..."
+          submit_json="$(xcrun notarytool submit "$dmg" \
+            --apple-id "$APPLE_ID" \
+            --password "$APPLE_PASSWORD" \
+            --team-id "$APPLE_TEAM_ID" \
+            --output-format json)"
+
+          submission_id="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<<"$submit_json")"
+          if [ -z "$submission_id" ]; then
+            echo "Could not read notarization submission id."
+            echo "$submit_json"
+            exit 1
+          fi
+          echo "Notarization submission id: $submission_id"
+
+          for _ in $(seq 1 120); do
+            info_json="$(xcrun notarytool info "$submission_id" \
+              --apple-id "$APPLE_ID" \
+              --password "$APPLE_PASSWORD" \
+              --team-id "$APPLE_TEAM_ID" \
+              --output-format json)"
+            status="$(python3 -c 'import json,sys; print(json.load(sys.stdin).get("status",""))' <<<"$info_json")"
+            echo "Notarization status: $status"
+
+            if [ "$status" = "Accepted" ]; then
+              echo "Notarization accepted."
+              xcrun stapler staple "$dmg"
+              if [ -f "$latest_dmg" ]; then
+                xcrun stapler staple "$latest_dmg" || true
+              fi
+              break
+            fi
+
+            if [ "$status" = "Invalid" ] || [ "$status" = "Rejected" ]; then
+              echo "Notarization failed."
+              xcrun notarytool log "$submission_id" \
+                --apple-id "$APPLE_ID" \
+                --password "$APPLE_PASSWORD" \
+                --team-id "$APPLE_TEAM_ID"
+              exit 1
+            fi
+
+            sleep 30
+          done
+
+          final_status="$(xcrun notarytool info "$submission_id" \
+            --apple-id "$APPLE_ID" \
+            --password "$APPLE_PASSWORD" \
+            --team-id "$APPLE_TEAM_ID" \
+            --output-format json | python3 -c 'import json,sys; print(json.load(sys.stdin).get("status",""))')"
+          if [ "$final_status" != "Accepted" ]; then
+            echo "Timed out waiting for notarization (final status: $final_status)"
+            exit 1
+          fi
 
       - name: Upload workflow artifacts
         uses: actions/upload-artifact@v4
