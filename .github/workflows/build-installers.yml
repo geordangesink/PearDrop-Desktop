@@ -118,6 +118,7 @@ jobs:
   macos-installers:
     name: macOS Installer (.dmg)
     runs-on: macos-latest
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
 
@@ -167,6 +168,7 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          DEBUG: electron-osx-sign*,electron-notarize*,@electron/osx-sign*,@electron/notarize*
         run: npm run make:darwin
 
       - name: Normalize publish filenames
