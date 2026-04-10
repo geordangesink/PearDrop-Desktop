@@ -2034,7 +2034,8 @@ function extractId3CoverDataUrl(bytes) {
     const frameId = bytes.toString('ascii', cursor, cursor + 4)
     if (!/^[A-Z0-9]{4}$/.test(frameId)) break
 
-    const frameSize = version === 4 ? readSynchsafe(bytes, cursor + 4) : readUInt32BE(bytes, cursor + 4)
+    const frameSize =
+      version === 4 ? readSynchsafe(bytes, cursor + 4) : readUInt32BE(bytes, cursor + 4)
     if (!Number.isFinite(frameSize) || frameSize <= 0) break
 
     const payloadStart = cursor + 10
@@ -2095,11 +2096,12 @@ function readSynchsafe(bytes, offset) {
 
 function readUInt32BE(bytes, offset) {
   return (
-    ((bytes[offset] & 0xff) << 24) |
-    ((bytes[offset + 1] & 0xff) << 16) |
-    ((bytes[offset + 2] & 0xff) << 8) |
-    (bytes[offset + 3] & 0xff)
-  ) >>> 0
+    (((bytes[offset] & 0xff) << 24) |
+      ((bytes[offset + 1] & 0xff) << 16) |
+      ((bytes[offset + 2] & 0xff) << 8) |
+      (bytes[offset + 3] & 0xff)) >>>
+    0
+  )
 }
 
 function formatBytes(value = 0) {
