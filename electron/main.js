@@ -10,7 +10,7 @@ const { isDeepLink, findDeepLink } = require('./lib/deep-link')
 
 const appName = pkg.productName || pkg.name
 const protocol = 'peardrops'
-const DEFAULT_DEV_RELAY = 'ws://localhost:49443'
+const DEFAULT_DEV_RELAY = 'wss://pear-drops.up.railway.app'
 const DEFAULT_PROD_RELAY = 'wss://pear-drops.up.railway.app'
 const workers = new Map()
 const exitedWorkers = new WeakSet()
@@ -136,6 +136,9 @@ function createAppMenu() {
     },
     {
       role: 'editMenu'
+    },
+    {
+      role: 'viewMenu'
     },
     {
       label: 'Options',
@@ -333,7 +336,7 @@ if (!lock) {
     if (isQuitting) return
     evt.preventDefault()
     isQuitting = true
-    sendToAll('app:quitting', { message: 'Shutting down Pear Drop...' })
+    sendToAll('app:quitting', { message: 'Shutting down PearDrop...' })
     shutdownWorkers()
       .catch((error) => {
         console.error('Failed while shutting down workers', error)

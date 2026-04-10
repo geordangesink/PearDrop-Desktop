@@ -27,11 +27,14 @@ const RpcCommand = {
 const SOURCES_KEY = 'peardrops.desktop.sources.v1'
 const HISTORY_KEY = 'peardrops.desktop.host-history.v1'
 const STARRED_HOSTS_KEY = 'peardrops.desktop.starred-hosts.v1'
-const PUBLIC_SITE_ORIGIN = 'https://pear-drops.vercel.app'
+const PUBLIC_SITE_ORIGIN = 'https://peardrop.online'
+const FALLBACK_RELAY_URL = 'wss://pear-drops.up.railway.app'
 const workerSpecifier = '/workers/main.js'
 const bridge = window.bridge
 const decoder = new TextDecoder('utf8')
 const workerActivityBars = new Map()
+const sourceCoverLoadsInFlight = new Set()
+const CLOSE_ICON = '<span aria-hidden="true">✕</span>'
 const BIN_ICON =
   '<span class="mini-trash" aria-hidden="true"><span class="mini-trash-lid"></span><span class="mini-trash-body"><span class="mini-trash-line"></span><span class="mini-trash-line"></span></span></span>'
 
@@ -72,7 +75,6 @@ const driveSelectToggleBtn = document.getElementById('drive-select-toggle')
 const hostsRowsEl = document.getElementById('hosts-rows')
 const starredRowsEl = document.getElementById('starred-rows')
 const hostsSelectToggleBtn = document.getElementById('hosts-select-toggle')
-const hostsCopySelectedBtn = document.getElementById('hosts-copy-selected')
 const hostsStarSelectedBtn = document.getElementById('hosts-star-selected')
 const hostsStopSelectedBtn = document.getElementById('hosts-stop-selected')
 
@@ -105,6 +107,11 @@ const state = {
   runningHistoryByInvite: new Map(),
   rehostingHistoryIds: new Set(),
   stoppingInvites: new Set(),
+  loadingInviteManifest: false,
+  downloadingSelected: false,
+  hostingSelected: false,
+  stoppingSelectedHosts: false,
+  rehostingSelectedBulk: false,
   inviteSource: '',
   themeMode: 'system',
   sourceMenuOpen: false,
@@ -113,6 +120,7 @@ const state = {
 let pendingHostNameResolve = null
 let copyFeedbackTimer = null
 let activeCopyFeedbackKey = ''
+let activeHostsPollTimer = null
 
 if (!bridge || typeof bridge.startWorker !== 'function') {
   setStatus('Desktop bridge failed to load. Check preload configuration.')
@@ -145,6 +153,7 @@ function wireGlobalEvents() {
   })
 
   bridge.onAppQuitting?.((payload) => {
+    stopActiveHostsPolling()
     finalizeSessionsFromActiveHosts(state.activeHosts)
     const message = String(payload?.message || '').trim()
     if (shutdownMessageEl && message) shutdownMessageEl.textContent = message
@@ -157,6 +166,18 @@ function wireGlobalEvents() {
 
   window.matchMedia?.('(prefers-color-scheme: dark)')?.addEventListener?.('change', () => {
     if (state.themeMode === 'system') applyThemeMode('system')
+  })
+
+  window.addEventListener('beforeunload', () => {
+    stopActiveHostsPolling()
+  })
+
+  window.addEventListener('focus', () => {
+    void pruneMissingSources('wakeup')
+  })
+
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) void pruneMissingSources('wakeup')
   })
 
   document.addEventListener('click', (event) => {
@@ -220,16 +241,25 @@ function wireUiEvents() {
   })
 
   sourceRemoveAllBtn.addEventListener('click', () => {
-    if (!state.sources.length) return
-    const removed = state.sources.length
-    state.sources = []
+    if (!state.selectedSources.size) {
+      setStatus('Select at least one source first.')
+      return
+    }
+    const selected = new Set(Array.from(state.selectedSources))
+    const cleared = state.sources.filter((row) => selected.has(String(row?.id || ''))).length
+    if (!cleared) {
+      setStatus('Select at least one source first.')
+      return
+    }
+    state.sources = state.sources.filter((row) => !selected.has(String(row?.id || '')))
     state.selectedSources.clear()
     persistSources()
     renderSources()
-    setStatus(`Removed ${removed} source entr${removed === 1 ? 'y' : 'ies'}.`)
+    setStatus(`Cleared ${cleared} selected source${cleared === 1 ? '' : 's'}.`)
   })
 
   hostSelectedBtn.addEventListener('click', async () => {
+    if (state.hostingSelected || pendingHostNameResolve) return
     const options = await promptForHostOptions('Host Session')
     if (options === null) return
     void hostSelectedSources(options.sessionName, options.packaging)
@@ -256,8 +286,14 @@ function wireUiEvents() {
     }
   })
 
-  viewDriveBtn.addEventListener('click', () => void openInviteFiles())
-  downloadSelectedBtn.addEventListener('click', () => void downloadInviteSelected())
+  viewDriveBtn.addEventListener('click', () => {
+    if (state.loadingInviteManifest) return
+    void openInviteFiles()
+  })
+  downloadSelectedBtn.addEventListener('click', () => {
+    if (state.downloadingSelected) return
+    void downloadInviteSelected()
+  })
 
   driveSelectToggleBtn.addEventListener('click', () => {
     if (!state.inviteEntries.length) return
@@ -328,7 +364,6 @@ function wireUiEvents() {
     renderHosts()
   })
 
-  hostsCopySelectedBtn.addEventListener('click', () => void copySelectedHosts())
   hostsStarSelectedBtn?.addEventListener('click', () => {
     if (!state.selectedHosts.size) {
       setStatus('Select at least one active host first.')
@@ -341,7 +376,10 @@ function wireUiEvents() {
       `Starred ${state.selectedHosts.size} host${state.selectedHosts.size === 1 ? '' : 's'}.`
     )
   })
-  hostsStopSelectedBtn.addEventListener('click', () => void stopSelectedHosts())
+  hostsStopSelectedBtn.addEventListener('click', () => {
+    if (state.stoppingSelectedHosts) return
+    void stopSelectedHosts()
+  })
 
   historySelectToggleBtn.addEventListener('click', () => {
     if (!state.hostHistory.length) return
@@ -353,7 +391,10 @@ function wireUiEvents() {
     renderHistory()
   })
 
-  historyRehostSelectedBtn.addEventListener('click', () => void rehostSelectedHistory())
+  historyRehostSelectedBtn.addEventListener('click', () => {
+    if (state.rehostingSelectedBulk) return
+    void rehostSelectedHistory()
+  })
   historyRemoveSelectedBtn.addEventListener('click', () => {
     if (!state.selectedHistory.size) {
       setStatus('Select at least one history item first.')
@@ -524,6 +565,8 @@ async function boot() {
     applyThemeMode(mode)
 
     await refreshActiveHosts()
+    await pruneMissingSources('launch')
+    startActiveHostsPolling()
     renderAll()
     setStatus('Ready.')
     setWorkerLogMessage('ready')
@@ -531,6 +574,19 @@ async function boot() {
     setStatus(`Worker start failed: ${error.message || String(error)}`)
     setWorkerLogMessage(`start failed: ${error.message || String(error)}`)
   }
+}
+
+function startActiveHostsPolling() {
+  stopActiveHostsPolling()
+  activeHostsPollTimer = setInterval(() => {
+    void refreshActiveHosts()
+  }, 4000)
+}
+
+function stopActiveHostsPolling() {
+  if (!activeHostsPollTimer) return
+  clearInterval(activeHostsPollTimer)
+  activeHostsPollTimer = null
 }
 
 function createRpcClient() {
@@ -570,6 +626,43 @@ function renderAll() {
   renderHosts()
   renderHistory()
   renderDriveRows()
+  renderActionButtons()
+}
+
+function renderActionButtons() {
+  if (hostSelectedBtn) {
+    hostSelectedBtn.disabled = state.hostingSelected || state.selectedSources.size === 0
+    hostSelectedBtn.innerHTML = state.hostingSelected
+      ? '<span class="mini-spinner"></span> Hosting...'
+      : 'Host Selected'
+  }
+  if (viewDriveBtn) {
+    viewDriveBtn.disabled = state.loadingInviteManifest
+    viewDriveBtn.innerHTML = state.loadingInviteManifest
+      ? '<span class="mini-spinner"></span> Loading...'
+      : 'View Drive'
+  }
+  if (downloadSelectedBtn) {
+    const disabled =
+      state.downloadingSelected || !state.inviteEntries.length || state.inviteSelected.size === 0
+    downloadSelectedBtn.disabled = disabled
+    downloadSelectedBtn.innerHTML = state.downloadingSelected
+      ? '<span class="mini-spinner"></span> Downloading...'
+      : 'Download Selected'
+  }
+  if (hostsStopSelectedBtn) {
+    hostsStopSelectedBtn.disabled = state.stoppingSelectedHosts || state.selectedHosts.size === 0
+    hostsStopSelectedBtn.innerHTML = state.stoppingSelectedHosts
+      ? '<span class="mini-spinner"></span>'
+      : '⏹'
+  }
+  if (historyRehostSelectedBtn) {
+    historyRehostSelectedBtn.disabled =
+      state.rehostingSelectedBulk || state.selectedHistory.size === 0
+    historyRehostSelectedBtn.innerHTML = state.rehostingSelectedBulk
+      ? '<span class="mini-spinner"></span>'
+      : '▶'
+  }
 }
 
 function promptForHostOptions(defaultValue = 'Host Session') {
@@ -622,6 +715,7 @@ function renderSources() {
 
   if (!state.sources.length) {
     sourcesGridEl.innerHTML = '<div class="muted-empty">No local sources added yet.</div>'
+    renderActionButtons()
     return
   }
 
@@ -643,11 +737,12 @@ function renderSources() {
         </div>
       </div>
       <div class="controls" style="margin-top:8px;">
-        <button class="btn alt icon icon-danger" data-action="remove-source" aria-label="Remove" title="Remove">${BIN_ICON}</button>
+        <button class="btn alt icon icon-danger" data-action="remove-source" aria-label="Remove from list" title="Remove from list">${CLOSE_ICON}</button>
       </div>
     `
     sourcesGridEl.appendChild(card)
   }
+  renderActionButtons()
 }
 
 function renderSourcePreview(source) {
@@ -655,12 +750,20 @@ function renderSourcePreview(source) {
   if (type === 'folder') return '<div class="source-preview">DIR</div>'
 
   const srcPath = String(source?.path || '').trim()
+  const coverArt = String(source?.coverArtDataUrl || '').trim()
+  if (coverArt) {
+    return `<div class="source-preview"><img src="${escapeHtmlAttr(coverArt)}" alt="audio cover"></div>`
+  }
   const mime = guessMimeType(srcPath)
   if (mime.startsWith('image/')) {
     const src = safeFileUrl(srcPath)
     if (src) {
       return `<button class="source-preview-btn" type="button" data-action="preview-source" data-preview-url="${escapeHtmlAttr(src)}"><div class="source-preview"><img src="${escapeHtmlAttr(src)}" alt="preview"></div></button>`
     }
+  }
+  if (isMp3Path(srcPath) && !sourceCoverLoadsInFlight.has(String(source?.id || ''))) {
+    void hydrateSourceCoverArt(source)
+    return '<div class="source-preview">MP3</div>'
   }
   if (mime.startsWith('video/')) return '<div class="source-preview">VID</div>'
   const ext = nodePath.extname(srcPath).replace('.', '').slice(0, 4).toUpperCase() || 'FILE'
@@ -695,6 +798,7 @@ function renderHosts() {
   if (!hosts.length) {
     hostsRowsEl.innerHTML = '<div class="muted-empty">No active hosts.</div>'
     renderStarredHosts()
+    renderActionButtons()
     return
   }
 
@@ -719,12 +823,13 @@ function renderHosts() {
       <div class="controls">
         <button class="btn alt icon" data-action="copy" aria-label="Copy" title="Copy">${isCopyFeedbackActive(`host:${invite}`) ? '✓' : '⧉'}</button>
         <button class="btn alt icon" data-action="star" aria-label="${starred ? 'Unstar' : 'Star'}" title="${starred ? 'Unstar' : 'Star'}">${starred ? '★' : '☆'}</button>
-        <button class="btn warn icon" data-action="stop" aria-label="Stop" title="Stop">${isStopping ? '<span class="mini-spinner"></span>' : '⏹'}</button>
+        <button class="btn warn icon" data-action="stop" aria-label="Stop" title="Stop" ${isStopping ? 'disabled' : ''}>${isStopping ? '<span class="mini-spinner"></span>' : '⏹'}</button>
       </div>
     `
     hostsRowsEl.appendChild(row)
   }
   renderStarredHosts()
+  renderActionButtons()
 }
 
 function renderStarredHosts() {
@@ -759,9 +864,9 @@ function renderStarredHosts() {
     const isRehosting =
       canRehost && state.rehostingHistoryIds.has(String(historyItem?.id || '').trim())
     const primaryActionHtml = canStop
-      ? `<button class="btn warn icon" data-action="stop" aria-label="Stop" title="Stop">${isStopping ? '<span class="mini-spinner"></span>' : '⏹'}</button>`
+      ? `<button class="btn warn icon" data-action="stop" aria-label="Stop" title="Stop" ${isStopping ? 'disabled' : ''}>${isStopping ? '<span class="mini-spinner"></span>' : '⏹'}</button>`
       : canRehost
-        ? `<button class="btn alt icon" data-action="rehost" data-history-id="${escapeHtmlAttr(String(historyItem.id || ''))}" aria-label="Re-host" title="Re-host">${isRehosting ? '<span class="mini-spinner"></span>' : '▶'}</button>`
+        ? `<button class="btn alt icon" data-action="rehost" data-history-id="${escapeHtmlAttr(String(historyItem.id || ''))}" aria-label="Re-host" title="Re-host" ${isRehosting ? 'disabled' : ''}>${isRehosting ? '<span class="mini-spinner"></span>' : '▶'}</button>`
         : ''
 
     const row = document.createElement('div')
@@ -792,6 +897,7 @@ function renderHistory() {
 
   if (!state.hostHistory.length) {
     historyRowsEl.innerHTML = '<div class="muted-empty">No host history yet.</div>'
+    renderActionButtons()
     return
   }
 
@@ -814,12 +920,13 @@ function renderHistory() {
         <div class="row-sub">${escapeHtml(sourceSummary)}</div>
       </div>
       <div class="controls">
-        <button class="btn alt icon" data-action="rehost" aria-label="Re-host" title="Re-host">${isRehosting ? '<span class="mini-spinner"></span>' : '▶'}</button>
+        <button class="btn alt icon" data-action="rehost" aria-label="Re-host" title="Re-host" ${isRehosting ? 'disabled' : ''}>${isRehosting ? '<span class="mini-spinner"></span>' : '▶'}</button>
         <button class="btn alt icon icon-danger" data-action="remove" aria-label="Remove" title="Remove">${BIN_ICON}</button>
       </div>
     `
     historyRowsEl.appendChild(row)
   }
+  renderActionButtons()
 }
 
 function renderDriveRows() {
@@ -835,6 +942,7 @@ function renderDriveRows() {
     driveRowsEl.appendChild(tr)
     checkAllDriveEl.checked = false
     checkAllDriveEl.indeterminate = false
+    renderActionButtons()
     return
   }
 
@@ -878,18 +986,41 @@ function renderDriveRows() {
 
   checkAllDriveEl.checked = selectedCount === state.inviteEntries.length
   checkAllDriveEl.indeterminate = selectedCount > 0 && selectedCount < state.inviteEntries.length
+  renderActionButtons()
 }
 
 async function openInviteFiles() {
   if (!state.rpc) return setStatus('Worker is still starting.')
+  if (state.loadingInviteManifest) return
   const invite = normalizeInvite(inviteInputEl.value)
   if (!invite) return setStatus('Paste a peardrops invite URL first.')
+  const inviteVariants = buildInviteManifestVariants(invite)
 
   try {
+    state.loadingInviteManifest = true
+    renderActionButtons()
     setWorkerLogMessage('loading invite manifest')
-    const manifest = await state.rpc.request(RpcCommand.GET_MANIFEST, { invite })
+    let manifest = null
+    let resolvedInvite = ''
+    let lastError = null
+
+    for (let i = 0; i < inviteVariants.length; i++) {
+      const candidate = inviteVariants[i]
+      try {
+        setWorkerLogMessage(`loading invite manifest (attempt ${i + 1}/${inviteVariants.length})`)
+        // eslint-disable-next-line no-await-in-loop
+        manifest = await state.rpc.request(RpcCommand.GET_MANIFEST, { invite: candidate })
+        resolvedInvite = candidate
+        break
+      } catch (error) {
+        lastError = error
+      }
+    }
+
+    if (!manifest) throw lastError || new Error('Failed to resolve invite manifest')
+
     const entries = Array.isArray(manifest?.files) ? manifest.files : []
-    state.inviteSource = invite
+    state.inviteSource = resolvedInvite || invite
     state.inviteEntries = entries
     state.inviteSelected = new Set(entries.map((entry) => entryKey(entry)))
     state.expandedDriveFolders.clear()
@@ -897,11 +1028,15 @@ async function openInviteFiles() {
     setStatus(`Drive loaded (${entries.length} file${entries.length === 1 ? '' : 's'}).`)
   } catch (error) {
     setStatus(`View drive failed: ${error.message || String(error)}`)
+  } finally {
+    state.loadingInviteManifest = false
+    renderActionButtons()
   }
 }
 
 async function downloadInviteSelected() {
   if (!state.rpc) return setStatus('Worker is still starting.')
+  if (state.downloadingSelected) return
   if (!state.inviteSource) return setStatus('Load an invite drive first.')
 
   const selected = state.inviteEntries.filter((entry) => state.inviteSelected.has(entryKey(entry)))
@@ -912,6 +1047,8 @@ async function downloadInviteSelected() {
   if (!targetDir) return setStatus('No destination selected.')
 
   try {
+    state.downloadingSelected = true
+    renderActionButtons()
     upsertWorkerActivityBar('download-selected', 'Downloading selected files', 0, selected.length)
 
     for (let i = 0; i < selected.length; i++) {
@@ -942,11 +1079,15 @@ async function downloadInviteSelected() {
   } catch (error) {
     clearWorkerActivityBar('download-selected')
     setStatus(`Download failed: ${error.message || String(error)}`)
+  } finally {
+    state.downloadingSelected = false
+    renderActionButtons()
   }
 }
 
 async function hostSelectedSources(sessionNameInput = 'Host Session', packaging = 'raw') {
   if (!state.rpc) return setStatus('Worker is still starting.')
+  if (state.hostingSelected) return
 
   const ids = Array.from(state.selectedSources)
   if (!ids.length) return setStatus('Select at least one local source first.')
@@ -955,6 +1096,8 @@ async function hostSelectedSources(sessionNameInput = 'Host Session', packaging 
   if (!picked.length) return setStatus('Selected sources are no longer available.')
 
   try {
+    state.hostingSelected = true
+    renderActionButtons()
     let files = []
     if (packaging === 'zip') {
       upsertWorkerActivityBar('host-expand', 'Preparing zip package', 0, 1)
@@ -1012,6 +1155,9 @@ async function hostSelectedSources(sessionNameInput = 'Host Session', packaging 
     clearWorkerActivityBar('host-expand')
     clearWorkerActivityBar('host-upload')
     setStatus(`Host failed: ${error.message || String(error)}`)
+  } finally {
+    state.hostingSelected = false
+    renderActionButtons()
   }
 }
 
@@ -1109,48 +1255,46 @@ async function refreshActiveHosts() {
   }
 }
 
-async function copySelectedHosts() {
-  const invites = Array.from(state.selectedHosts)
-    .map((invite) => toShareableInvite(invite) || String(invite || '').trim())
-    .filter(Boolean)
-  if (!invites.length) {
-    setStatus('Select at least one active host first.')
-    return
-  }
-  await copyToClipboard(invites.join('\n'))
-  setStatus(`Copied ${invites.length} invite${invites.length === 1 ? '' : 's'}.`)
-}
-
 async function stopSelectedHosts() {
   if (!state.rpc) return setStatus('Worker is still starting.')
+  if (state.stoppingSelectedHosts) return
   const invites = Array.from(state.selectedHosts).filter(Boolean)
   if (!invites.length) return setStatus('Select at least one active host first.')
 
-  upsertWorkerActivityBar('hosts-stop', 'Stopping selected hosts', 0, invites.length)
+  state.stoppingSelectedHosts = true
+  renderActionButtons()
+  try {
+    upsertWorkerActivityBar('hosts-stop', 'Stopping selected hosts', 0, invites.length)
 
-  for (let i = 0; i < invites.length; i++) {
-    const invite = invites[i]
-    const activeHost = state.activeHosts.find(
-      (host) => String(host?.invite || '').trim() === invite
-    )
-    try {
-      // eslint-disable-next-line no-await-in-loop
-      await state.rpc.request(RpcCommand.STOP_HOST, { invite })
-      finalizeStoppedSession(invite, activeHost)
-    } catch {}
-    upsertWorkerActivityBar('hosts-stop', 'Stopping selected hosts', i + 1, invites.length)
+    for (let i = 0; i < invites.length; i++) {
+      const invite = invites[i]
+      const activeHost = state.activeHosts.find(
+        (host) => String(host?.invite || '').trim() === invite
+      )
+      try {
+        // eslint-disable-next-line no-await-in-loop
+        await state.rpc.request(RpcCommand.STOP_HOST, { invite })
+        finalizeStoppedSession(invite, activeHost)
+      } catch {}
+      upsertWorkerActivityBar('hosts-stop', 'Stopping selected hosts', i + 1, invites.length)
+    }
+
+    clearWorkerActivityBar('hosts-stop')
+    state.selectedHosts.clear()
+    await refreshActiveHosts()
+    setStatus(`Stopped ${invites.length} host${invites.length === 1 ? '' : 's'}.`)
+  } finally {
+    state.stoppingSelectedHosts = false
+    clearWorkerActivityBar('hosts-stop')
+    renderActionButtons()
   }
-
-  clearWorkerActivityBar('hosts-stop')
-  state.selectedHosts.clear()
-  await refreshActiveHosts()
-  setStatus(`Stopped ${invites.length} host${invites.length === 1 ? '' : 's'}.`)
 }
 
 async function stopHost(invite) {
   if (!state.rpc) return
+  const key = String(invite || '').trim()
+  if (key && state.stoppingInvites.has(key)) return
   try {
-    const key = String(invite || '').trim()
     if (key) {
       state.stoppingInvites.add(key)
       renderHosts()
@@ -1177,25 +1321,35 @@ async function stopHost(invite) {
 }
 
 async function rehostSelectedHistory() {
+  if (state.rehostingSelectedBulk) return
   const picked = state.hostHistory.filter((item) => state.selectedHistory.has(item.id))
   if (!picked.length) return setStatus('Select at least one history item first.')
 
-  upsertWorkerActivityBar('rehost-bulk', 'Re-hosting selected history', 0, picked.length)
+  state.rehostingSelectedBulk = true
+  renderActionButtons()
+  try {
+    upsertWorkerActivityBar('rehost-bulk', 'Re-hosting selected history', 0, picked.length)
 
-  for (let i = 0; i < picked.length; i++) {
-    // eslint-disable-next-line no-await-in-loop
-    await rehostHistoryItem(picked[i])
-    upsertWorkerActivityBar('rehost-bulk', 'Re-hosting selected history', i + 1, picked.length)
+    for (let i = 0; i < picked.length; i++) {
+      // eslint-disable-next-line no-await-in-loop
+      await rehostHistoryItem(picked[i])
+      upsertWorkerActivityBar('rehost-bulk', 'Re-hosting selected history', i + 1, picked.length)
+    }
+
+    clearWorkerActivityBar('rehost-bulk')
+    await refreshActiveHosts()
+    renderAll()
+  } finally {
+    state.rehostingSelectedBulk = false
+    clearWorkerActivityBar('rehost-bulk')
+    renderActionButtons()
   }
-
-  clearWorkerActivityBar('rehost-bulk')
-  await refreshActiveHosts()
-  renderAll()
 }
 
 async function rehostHistoryItem(historyItem) {
   if (!state.rpc) return setStatus('Worker is still starting.')
   const rowId = String(historyItem?.id || '').trim()
+  if (rowId && state.rehostingHistoryIds.has(rowId)) return
   if (rowId) {
     state.rehostingHistoryIds.add(rowId)
     renderHistory()
@@ -1263,6 +1417,7 @@ async function rehostHistoryItem(historyItem) {
 function addLocalSources(entries) {
   const now = Date.now()
   const next = state.sources.slice()
+  const added = []
 
   for (const entry of entries) {
     const srcPath = String(entry.path || '').trim()
@@ -1270,19 +1425,26 @@ function addLocalSources(entries) {
     const type = entry.type === 'folder' ? 'folder' : 'file'
     const exists = next.find((row) => row.path === srcPath && row.type === type)
     if (exists) continue
-    next.unshift({
+    const row = {
       id: `src:${now}:${Math.random().toString(16).slice(2, 8)}`,
       type,
       path: srcPath,
       name: nodePath.basename(srcPath) || srcPath,
       addedAt: Date.now()
-    })
+    }
+    next.unshift(row)
+    added.push(row)
   }
 
   state.sources = next.slice(0, 300)
   persistSources()
   renderSources()
   setStatus(`Source list updated (${state.sources.length}).`)
+  for (const source of added) {
+    if (source?.type !== 'file') continue
+    if (!isMp3Path(source?.path)) continue
+    void hydrateSourceCoverArt(source)
+  }
 }
 
 function finalizeStoppedSession(invite, activeHost = null) {
@@ -1345,6 +1507,30 @@ function rememberHistory(entry) {
 
 function persistSources() {
   localStorage.setItem(SOURCES_KEY, JSON.stringify(state.sources))
+}
+
+async function pruneMissingSources(reason = 'refresh') {
+  if (!state.sources.length) return 0
+  const checks = await Promise.all(
+    state.sources.map(async (entry) => ({
+      entry,
+      exists: await pathExists(String(entry?.path || '').trim())
+    }))
+  )
+  const nextSources = checks.filter((row) => row.exists).map((row) => row.entry)
+  const removed = state.sources.length - nextSources.length
+  if (removed <= 0) return 0
+
+  state.sources = nextSources
+  const remainingIds = new Set(nextSources.map((entry) => String(entry.id || '')))
+  state.selectedSources = new Set(
+    Array.from(state.selectedSources).filter((id) => remainingIds.has(String(id || '')))
+  )
+  persistSources()
+  renderSources()
+  setWorkerLogMessage(`[sources] pruned ${removed} missing path(s) on ${reason}`)
+  setStatus(`Removed ${removed} missing source path${removed === 1 ? '' : 's'} from list.`)
+  return removed
 }
 
 function persistStarredHosts() {
@@ -1503,13 +1689,13 @@ function normalizePathList(value) {
 function normalizeInvite(raw) {
   const text = String(raw || '').trim()
   if (!text) return ''
-  if (text.startsWith('peardrops://invite')) return text
+  if (text.startsWith('peardrops://invite')) return ensureInviteRelay(text)
   if (text.startsWith('peardrops-web://join')) {
     try {
       const parsed = new URL(text)
       const nested = parsed.searchParams.get('invite')
-      if (nested && nested.startsWith('peardrops://invite')) return nested
-      if (parsed.search) return `peardrops://invite${parsed.search}`
+      if (nested && nested.startsWith('peardrops://invite')) return ensureInviteRelay(nested)
+      if (parsed.search) return ensureInviteRelay(`peardrops://invite${parsed.search}`)
     } catch {
       return ''
     }
@@ -1517,9 +1703,66 @@ function normalizeInvite(raw) {
   try {
     const parsed = new URL(text)
     const nested = parsed.searchParams.get('invite')
-    if (nested && nested.startsWith('peardrops://invite')) return nested
+    if (nested && nested.startsWith('peardrops://invite')) return ensureInviteRelay(nested)
   } catch {}
   return ''
+}
+
+function ensureInviteRelay(invite) {
+  const value = String(invite || '').trim()
+  if (!value.startsWith('peardrops://invite')) return value
+  try {
+    const parsed = new URL(value)
+    const relay = String(parsed.searchParams.get('relay') || '').trim()
+    const fallbackRelay = String(FALLBACK_RELAY_URL || '').trim()
+    const relayIsLocal =
+      relay.includes('localhost') || relay.includes('127.0.0.1') || relay.includes('0.0.0.0')
+    if (fallbackRelay && (!relay || relayIsLocal)) parsed.searchParams.set('relay', fallbackRelay)
+    return parsed.toString()
+  } catch {
+    return value
+  }
+}
+
+function buildInviteManifestVariants(invite) {
+  const base = ensureInviteRelay(invite)
+  const variants = []
+  const add = (value) => {
+    const next = String(value || '').trim()
+    if (!next) return
+    if (!variants.includes(next)) variants.push(next)
+  }
+
+  add(base)
+
+  try {
+    const parsed = new URL(base)
+    const drive = String(parsed.searchParams.get('drive') || '').trim()
+    const room = String(parsed.searchParams.get('room') || '').trim()
+    const relay = String(parsed.searchParams.get('relay') || '').trim()
+    const topic = String(parsed.searchParams.get('topic') || '').trim()
+    const web = String(parsed.searchParams.get('web') || '').trim()
+
+    if (room) {
+      const roomOnly = new URL('peardrops://invite')
+      roomOnly.searchParams.set('room', room)
+      if (relay) roomOnly.searchParams.set('relay', relay)
+      if (topic) roomOnly.searchParams.set('topic', topic)
+      if (web) roomOnly.searchParams.set('web', web)
+      roomOnly.searchParams.set('app', 'native')
+      add(roomOnly.toString())
+    }
+
+    if (drive) {
+      const driveOnly = new URL('peardrops://invite')
+      driveOnly.searchParams.set('drive', drive)
+      if (relay) driveOnly.searchParams.set('relay', relay)
+      driveOnly.searchParams.set('app', 'native')
+      add(driveOnly.toString())
+    }
+  } catch {}
+
+  return variants
 }
 
 function toShareableInvite(rawInvite) {
@@ -1735,6 +1978,128 @@ async function pathExists(targetPath) {
   } catch {
     return false
   }
+}
+
+function isMp3Path(filePath) {
+  const ext = nodePath.extname(String(filePath || '').trim()).toLowerCase()
+  return ext === '.mp3'
+}
+
+async function hydrateSourceCoverArt(source) {
+  const id = String(source?.id || '').trim()
+  if (!id || sourceCoverLoadsInFlight.has(id)) return
+  const srcPath = String(source?.path || '').trim()
+  if (!srcPath || !isMp3Path(srcPath)) return
+  sourceCoverLoadsInFlight.add(id)
+  try {
+    const cover = await extractMp3CoverDataUrl(srcPath)
+    if (!cover) return
+    const index = state.sources.findIndex((row) => String(row?.id || '') === id)
+    if (index < 0) return
+    state.sources[index] = {
+      ...state.sources[index],
+      coverArtDataUrl: cover
+    }
+    persistSources()
+    renderSources()
+  } catch {}
+  sourceCoverLoadsInFlight.delete(id)
+}
+
+async function extractMp3CoverDataUrl(filePath) {
+  const handle = await fs.open(filePath, 'r')
+  try {
+    const maxBytes = 4 * 1024 * 1024
+    const head = Buffer.allocUnsafe(maxBytes)
+    const { bytesRead } = await handle.read(head, 0, maxBytes, 0)
+    if (!bytesRead) return ''
+    const slice = head.subarray(0, bytesRead)
+    return extractId3CoverDataUrl(slice)
+  } finally {
+    await handle.close()
+  }
+}
+
+function extractId3CoverDataUrl(bytes) {
+  if (!bytes || bytes.length < 10) return ''
+  if (bytes.toString('ascii', 0, 3) !== 'ID3') return ''
+  const version = bytes[3]
+  if (version !== 3 && version !== 4) return ''
+
+  const tagSize = readSynchsafe(bytes, 6)
+  const tagEnd = Math.min(bytes.length, 10 + tagSize)
+  let cursor = 10
+
+  while (cursor + 10 <= tagEnd) {
+    const frameId = bytes.toString('ascii', cursor, cursor + 4)
+    if (!/^[A-Z0-9]{4}$/.test(frameId)) break
+
+    const frameSize = version === 4 ? readSynchsafe(bytes, cursor + 4) : readUInt32BE(bytes, cursor + 4)
+    if (!Number.isFinite(frameSize) || frameSize <= 0) break
+
+    const payloadStart = cursor + 10
+    const payloadEnd = payloadStart + frameSize
+    if (payloadEnd > tagEnd) break
+
+    if (frameId === 'APIC') {
+      const payload = bytes.subarray(payloadStart, payloadEnd)
+      const cover = parseApicFrame(payload)
+      if (cover) return cover
+    }
+
+    cursor = payloadEnd
+  }
+
+  return ''
+}
+
+function parseApicFrame(payload) {
+  if (!payload || payload.length < 4) return ''
+  const encoding = payload[0]
+  let cursor = 1
+  const mimeEnd = payload.indexOf(0x00, cursor)
+  if (mimeEnd < 0) return ''
+  const mimeType = payload.toString('latin1', cursor, mimeEnd).trim() || 'image/jpeg'
+  cursor = mimeEnd + 1
+  if (cursor >= payload.length) return ''
+  cursor += 1
+  if (cursor >= payload.length) return ''
+
+  if (encoding === 0x01 || encoding === 0x02) {
+    while (cursor + 1 < payload.length) {
+      if (payload[cursor] === 0x00 && payload[cursor + 1] === 0x00) {
+        cursor += 2
+        break
+      }
+      cursor += 2
+    }
+  } else {
+    const descEnd = payload.indexOf(0x00, cursor)
+    if (descEnd >= 0) cursor = descEnd + 1
+  }
+
+  if (cursor >= payload.length) return ''
+  const image = payload.subarray(cursor)
+  if (!image.length) return ''
+  return `data:${mimeType};base64,${image.toString('base64')}`
+}
+
+function readSynchsafe(bytes, offset) {
+  return (
+    ((bytes[offset] & 0x7f) << 21) |
+    ((bytes[offset + 1] & 0x7f) << 14) |
+    ((bytes[offset + 2] & 0x7f) << 7) |
+    (bytes[offset + 3] & 0x7f)
+  )
+}
+
+function readUInt32BE(bytes, offset) {
+  return (
+    ((bytes[offset] & 0xff) << 24) |
+    ((bytes[offset + 1] & 0xff) << 16) |
+    ((bytes[offset + 2] & 0xff) << 8) |
+    (bytes[offset + 3] & 0xff)
+  ) >>> 0
 }
 
 function formatBytes(value = 0) {

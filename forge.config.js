@@ -75,7 +75,14 @@ const makers = [
       name: windowsSlug,
       authors: windowsAuthors,
       setupExe: `${windowsSlug}-Setup-${pkg.version}.exe`,
-      noMsi: false
+      noMsi: false,
+      ...(process.env.WINDOWS_CERTIFICATE_FILE
+        ? {
+            certificateFile: process.env.WINDOWS_CERTIFICATE_FILE,
+            certificatePassword: process.env.WINDOWS_CERTIFICATE_PASSWORD,
+            signingHashAlgorithms: ['sha256']
+          }
+        : {})
     }
   }
 ]

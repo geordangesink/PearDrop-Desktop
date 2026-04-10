@@ -1,6 +1,6 @@
-# Pear Drops Desktop (MVP)
+# PearDrop Desktop (MVP)
 
-Electron + Pear runtime desktop app for native-first Pear Drops.
+Electron + Pear runtime desktop app for native-first PearDrop.
 
 ## What it does
 

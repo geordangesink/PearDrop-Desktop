@@ -25,6 +25,18 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Import Windows code-signing certificate
+        if: ${{ secrets.WINDOWS_CODESIGN_CERT_P12_BASE64 != '' && secrets.WINDOWS_CODESIGN_CERT_PASSWORD != '' }}
+        shell: pwsh
+        env:
+          WINDOWS_CODESIGN_CERT_P12_BASE64: ${{ secrets.WINDOWS_CODESIGN_CERT_P12_BASE64 }}
+          WINDOWS_CODESIGN_CERT_PASSWORD: ${{ secrets.WINDOWS_CODESIGN_CERT_PASSWORD }}
+        run: |
+          $certPath = Join-Path $env:RUNNER_TEMP "windows_codesign_cert.p12"
+          [IO.File]::WriteAllBytes($certPath, [Convert]::FromBase64String($env:WINDOWS_CODESIGN_CERT_P12_BASE64))
+          "WINDOWS_CERTIFICATE_FILE=$certPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "WINDOWS_CERTIFICATE_PASSWORD=$env:WINDOWS_CODESIGN_CERT_PASSWORD" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
       - name: Build Windows artifacts
         run: npm run make:win32:squirrel
 
@@ -57,6 +69,17 @@ jobs:
 
           Write-Host "Published artifacts:"
           Get-ChildItem $publishDir | ForEach-Object { Write-Host $_.FullName }
+
+      - name: Verify Windows signatures
+        if: ${{ secrets.WINDOWS_CODESIGN_CERT_P12_BASE64 != '' && secrets.WINDOWS_CODESIGN_CERT_PASSWORD != '' }}
+        shell: pwsh
+        run: |
+          $files = Get-ChildItem -Path out/publish -File -Include *.exe,*.msi
+          if (-not $files) { throw "No Windows installer artifacts found for signature verification." }
+          foreach ($file in $files) {
+            Write-Host "Verifying signature: $($file.FullName)"
+            signtool verify /pa /v "$($file.FullName)"
+          }
 
       - name: Upload workflow artifacts
         uses: actions/upload-artifact@v4

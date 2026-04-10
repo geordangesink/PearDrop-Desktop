@@ -1,4 +1,4 @@
-# Pear Drop Downloads Server
+# PearDrop Downloads Server
 
 Minimal upload + static download service for hosting installers without redirects.
 

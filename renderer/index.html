@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Pear Drop</title>
+    <title>PearDrop</title>
     <style>
       :root {
         color-scheme: dark;
@@ -136,6 +136,14 @@
         cursor: pointer;
         background: var(--brand);
         color: #fff;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+      }
+      .btn:disabled {
+        opacity: 0.58;
+        cursor: not-allowed;
       }
       .btn.alt {
         background: #242424;
@@ -639,7 +647,7 @@
                   </div>
                 </span>
                 <button id="source-select-toggle" class="btn alt">Select All</button>
-                <button id="source-remove-all" class="btn warn">Remove All</button>
+                <button id="source-remove-all" class="btn alt">Clear Selected</button>
                 <button id="host-selected" class="btn">Host Selected</button>
               </div>
             </div>
@@ -652,14 +660,6 @@
                 <h2 class="panel-title">Active Hosts</h2>
                 <div class="controls">
                   <button id="hosts-select-toggle" class="btn alt">Select All</button>
-                  <button
-                    id="hosts-copy-selected"
-                    class="btn alt icon"
-                    title="Copy Selected"
-                    aria-label="Copy Selected"
-                  >
-                    ⧉
-                  </button>
                   <button
                     id="hosts-stop-selected"
                     class="btn warn icon"
@@ -782,7 +782,7 @@
       <section id="shutdown-overlay" class="shutdown-overlay hidden">
         <div class="shutdown-card">
           <h2 class="shutdown-title">Shutting Down</h2>
-          <p id="shutdown-message" class="shutdown-sub">Closing Pear Drop safely</p>
+          <p id="shutdown-message" class="shutdown-sub">Closing PearDrop safely</p>
           <div class="shutdown-spinner" aria-hidden="true"></div>
         </div>
       </section>
