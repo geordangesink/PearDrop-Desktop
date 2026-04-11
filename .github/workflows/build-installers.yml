@@ -14,6 +14,9 @@ jobs:
   windows-installers:
     name: Windows Installers (.exe/.msi)
     runs-on: windows-latest
+    env:
+      WINDOWS_CODESIGN_CERT_P12_BASE64: ${{ secrets.WINDOWS_CODESIGN_CERT_P12_BASE64 }}
+      WINDOWS_CODESIGN_CERT_PASSWORD: ${{ secrets.WINDOWS_CODESIGN_CERT_PASSWORD }}
     steps:
       - uses: actions/checkout@v4
 
@@ -26,11 +29,8 @@ jobs:
         run: npm ci
 
       - name: Import Windows code-signing certificate
-        if: ${{ secrets.WINDOWS_CODESIGN_CERT_P12_BASE64 != '' && secrets.WINDOWS_CODESIGN_CERT_PASSWORD != '' }}
+        if: ${{ env.WINDOWS_CODESIGN_CERT_P12_BASE64 != '' && env.WINDOWS_CODESIGN_CERT_PASSWORD != '' }}
         shell: pwsh
-        env:
-          WINDOWS_CODESIGN_CERT_P12_BASE64: ${{ secrets.WINDOWS_CODESIGN_CERT_P12_BASE64 }}
-          WINDOWS_CODESIGN_CERT_PASSWORD: ${{ secrets.WINDOWS_CODESIGN_CERT_PASSWORD }}
         run: |
           $certPath = Join-Path $env:RUNNER_TEMP "windows_codesign_cert.p12"
           [IO.File]::WriteAllBytes($certPath, [Convert]::FromBase64String($env:WINDOWS_CODESIGN_CERT_P12_BASE64))
@@ -71,7 +71,7 @@ jobs:
           Get-ChildItem $publishDir | ForEach-Object { Write-Host $_.FullName }
 
       - name: Verify Windows signatures
-        if: ${{ secrets.WINDOWS_CODESIGN_CERT_P12_BASE64 != '' && secrets.WINDOWS_CODESIGN_CERT_PASSWORD != '' }}
+        if: ${{ env.WINDOWS_CODESIGN_CERT_P12_BASE64 != '' && env.WINDOWS_CODESIGN_CERT_PASSWORD != '' }}
         shell: pwsh
         run: |
           $files = Get-ChildItem -Path out/publish -File -Include *.exe,*.msi
