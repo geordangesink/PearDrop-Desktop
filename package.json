@@ -17,6 +17,7 @@
     "package": "electron-forge package",
     "make:darwin": "electron-forge make --platform=darwin",
     "make:darwin:builder": "electron-builder --mac dmg --arm64 --publish never",
+    "make:mas": "SKIP_MANUAL_MAC_SIGN=1 electron-builder --mac mas pkg --arm64 --publish never",
     "make:win32": "electron-forge make --platform=win32",
     "make:win32:squirrel": "electron-forge make --platform=win32 --targets @electron-forge/maker-squirrel",
     "make:linux": "electron-forge package && ./scripts/build-app-image.sh",
@@ -82,6 +83,16 @@
       "gatekeeperAssess": false,
       "entitlements": "build/entitlements.mac.plist",
       "entitlementsInherit": "build/entitlements.mac.plist"
+    },
+    "mas": {
+      "category": "public.app-category.productivity",
+      "hardenedRuntime": false,
+      "entitlements": "build/entitlements.mas.plist",
+      "entitlementsInherit": "build/entitlements.mas.inherit.plist",
+      "provisioningProfile": "${env.MAS_PROVISIONING_PROFILE}"
+    },
+    "pkg": {
+      "installLocation": "/Applications"
     },
     "dmg": {
       "sign": false

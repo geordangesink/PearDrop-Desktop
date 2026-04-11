@@ -34,3 +34,20 @@ Build distributable:
 ```bash
 npm run make:darwin
 ```
+
+Build Mac App Store package (`.pkg`) locally:
+
+```bash
+npm run make:mas
+```
+
+CI workflow for App Store Connect:
+
+- Workflow: `.github/workflows/build-store.yml`
+- Required secrets for build:
+  - `MAC_CODESIGN_CERT_P12_BASE64`
+  - `MAC_CODESIGN_CERT_PASSWORD`
+  - `MAC_APP_STORE_PROVISIONING_PROFILE_BASE64`
+- Additional secrets for upload (`submit: true`), either option works:
+  - Option A (App Store Connect API): `ASC_API_KEY_ID`, `ASC_API_ISSUER_ID`, `ASC_API_KEY_P8_BASE64`
+  - Option B (Apple account): `APPLE_ID`, `APPLE_PASSWORD` (optional: `APPLE_TEAM_ID`)

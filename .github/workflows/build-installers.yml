@@ -10,6 +10,9 @@ concurrency:
   group: build-installers-${{ github.ref }}
   cancel-in-progress: false
 
+env:
+  DESKTOP_BUILD_NUMBER: ${{ github.run_number }}
+
 jobs:
   windows-installers:
     name: Windows Installers (.exe/.msi)

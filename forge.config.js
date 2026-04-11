@@ -5,6 +5,7 @@ const appName = pkg.productName ?? pkg.name
 const windowsSlug = String(appName).replace(/\s+/g, '')
 const { isWindows } = require('which-runtime')
 const buildMsix = process.env.BUILD_MSIX === '1'
+const desktopBuildNumber = resolveDesktopBuildNumber()
 const windowsAuthors =
   typeof pkg.author === 'string' && pkg.author.trim().length > 0 ? pkg.author.trim() : appName
 
@@ -32,6 +33,13 @@ let packagerConfig = {
   icon: 'build/icon',
   protocols: [{ name: appName, schemes: [pkg.name] }],
   derefSymlinks: true
+}
+
+if (desktopBuildNumber > 0) {
+  packagerConfig = {
+    ...packagerConfig,
+    buildVersion: String(desktopBuildNumber)
+  }
 }
 
 if (process.env.MAC_CODESIGN_IDENTITY) {
@@ -118,7 +126,7 @@ module.exports = {
       if (!buildMsix) return
 
       const manifest = path.join(__dirname, 'build', 'AppxManifest.xml')
-      const msixVersion = pkg.version.replace(/^(\d+\.\d+\.\d+)$/, '$1.0')
+      const msixVersion = resolveMsixVersion(pkg.version, desktopBuildNumber)
       const xml = fs.readFileSync(manifest, 'utf-8')
       fs.writeFileSync(manifest, xml.replace(/Version="[^"]*"/, `Version="${msixVersion}"`))
     },
@@ -157,4 +165,26 @@ module.exports = {
       config: {}
     }
   ]
+}
+
+function resolveDesktopBuildNumber() {
+  const raw = String(process.env.DESKTOP_BUILD_NUMBER || '').trim()
+  if (!raw) return 0
+  const parsed = Number.parseInt(raw, 10)
+  if (!Number.isFinite(parsed) || parsed <= 0) return 0
+  return parsed
+}
+
+function resolveMsixVersion(version, buildNumber) {
+  const match = String(version || '').match(/^(\d+)\.(\d+)\.(\d+)/)
+  const major = match ? Number.parseInt(match[1], 10) : 0
+  const minor = match ? Number.parseInt(match[2], 10) : 0
+  const patch = match ? Number.parseInt(match[3], 10) : 0
+  const revision = normalizeMsixRevision(buildNumber)
+  return `${major}.${minor}.${patch}.${revision}`
+}
+
+function normalizeMsixRevision(buildNumber) {
+  if (!Number.isFinite(buildNumber) || buildNumber <= 0) return 0
+  return buildNumber % 65535
 }

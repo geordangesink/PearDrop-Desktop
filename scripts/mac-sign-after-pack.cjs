@@ -34,6 +34,11 @@ function codesign(target, identity, entitlements) {
 }
 
 module.exports = async (context) => {
+  if (process.env.SKIP_MANUAL_MAC_SIGN === '1') {
+    console.log('[mac-sign] SKIP_MANUAL_MAC_SIGN=1, skipping manual sign pass')
+    return
+  }
+
   const identity = process.env.MAC_CODESIGN_IDENTITY
   if (!identity) {
     console.log('[mac-sign] MAC_CODESIGN_IDENTITY is not set, skipping manual sign pass')

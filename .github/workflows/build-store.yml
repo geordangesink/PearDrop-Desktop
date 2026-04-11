@@ -1,0 +1,131 @@
+name: Build Desktop Store Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      submit:
+        description: Submit the built .pkg to App Store Connect
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-store-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-macos-store:
+    name: Build macOS App Store package (.pkg)
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: .
+    env:
+      MAC_CODESIGN_CERT_P12_BASE64: ${{ secrets.MAC_CODESIGN_CERT_P12_BASE64 }}
+      MAC_CODESIGN_CERT_PASSWORD: ${{ secrets.MAC_CODESIGN_CERT_PASSWORD }}
+      MAC_APP_STORE_PROVISIONING_PROFILE_BASE64: ${{ secrets.MAC_APP_STORE_PROVISIONING_PROFILE_BASE64 }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify required build secrets
+        run: |
+          set -euo pipefail
+          for key in MAC_CODESIGN_CERT_P12_BASE64 MAC_CODESIGN_CERT_PASSWORD MAC_APP_STORE_PROVISIONING_PROFILE_BASE64; do
+            if [ -z "${!key:-}" ]; then
+              echo "Missing secret: $key"
+              exit 1
+            fi
+          done
+
+      - name: Prepare certificate and provisioning profile
+        run: |
+          set -euo pipefail
+
+          cert_path="$RUNNER_TEMP/mas-signing-cert.p12"
+          profile_path="$RUNNER_TEMP/peardrop-mas.provisionprofile"
+
+          echo "$MAC_CODESIGN_CERT_P12_BASE64" | base64 --decode > "$cert_path"
+          echo "$MAC_APP_STORE_PROVISIONING_PROFILE_BASE64" | base64 --decode > "$profile_path"
+
+          echo "CSC_LINK=$cert_path" >> "$GITHUB_ENV"
+          echo "CSC_KEY_PASSWORD=$MAC_CODESIGN_CERT_PASSWORD" >> "$GITHUB_ENV"
+          echo "MAS_PROVISIONING_PROFILE=$profile_path" >> "$GITHUB_ENV"
+
+      - name: Build MAS package
+        run: npm run make:mas
+
+      - name: Locate built .pkg
+        run: |
+          set -euo pipefail
+          pkg="$(find out -type f -name '*.pkg' | head -n 1)"
+          if [ -z "$pkg" ]; then
+            echo "No .pkg produced for Mac App Store upload."
+            exit 1
+          fi
+          echo "PKG_PATH=$pkg" >> "$GITHUB_ENV"
+          echo "Built package: $pkg"
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-app-store-pkg
+          path: ${{ env.PKG_PATH }}
+          if-no-files-found: error
+
+      - name: Submit to App Store Connect
+        if: ${{ inputs.submit }}
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          ASC_API_KEY_ID: ${{ secrets.ASC_API_KEY_ID }}
+          ASC_API_ISSUER_ID: ${{ secrets.ASC_API_ISSUER_ID }}
+          ASC_API_KEY_P8_BASE64: ${{ secrets.ASC_API_KEY_P8_BASE64 }}
+        run: |
+          set -euo pipefail
+
+          if [ -n "${ASC_API_KEY_ID:-}" ] && [ -n "${ASC_API_ISSUER_ID:-}" ] && [ -n "${ASC_API_KEY_P8_BASE64:-}" ]; then
+            mkdir -p "$HOME/.appstoreconnect/private_keys"
+            key_path="$HOME/.appstoreconnect/private_keys/AuthKey_${ASC_API_KEY_ID}.p8"
+            echo "$ASC_API_KEY_P8_BASE64" | base64 --decode > "$key_path"
+            chmod 600 "$key_path"
+
+            xcrun altool --upload-app \
+              --type macos \
+              --file "$PKG_PATH" \
+              --apiKey "$ASC_API_KEY_ID" \
+              --apiIssuer "$ASC_API_ISSUER_ID" \
+              --verbose
+            exit 0
+          fi
+
+          if [ -n "${APPLE_ID:-}" ] && [ -n "${APPLE_PASSWORD:-}" ]; then
+            upload_args=(
+              --upload-app
+              --type macos
+              --file "$PKG_PATH"
+              --username "$APPLE_ID"
+              --password "$APPLE_PASSWORD"
+              --verbose
+            )
+            if [ -n "${APPLE_TEAM_ID:-}" ]; then
+              upload_args+=(--asc-provider "$APPLE_TEAM_ID")
+            fi
+            xcrun altool "${upload_args[@]}"
+            exit 0
+          fi
+
+          echo "Missing submit credentials. Provide either ASC_API_* secrets or APPLE_ID/APPLE_PASSWORD."
+          exit 1
