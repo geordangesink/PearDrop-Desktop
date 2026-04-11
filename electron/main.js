@@ -1,4 +1,5 @@
 const { app, BrowserWindow, ipcMain, dialog, Menu } = require('electron')
+const { execFileSync } = require('child_process')
 const os = require('os')
 const path = require('path')
 const PearRuntime = require('pear-runtime')
@@ -192,6 +193,10 @@ function getWorker(specifier) {
     launchId: `${Date.now()}-${process.pid}`
   }
 
+  if (app.isPackaged) {
+    killStaleWorkers(updaterConfig.storage)
+  }
+
   const runtimeStorage = path.join(appDir, 'runtime-storage')
   const worker = PearRuntime.run(
     workerPath,
@@ -220,6 +225,33 @@ function getWorker(specifier) {
 
   workers.set(specifier, worker)
   return worker
+}
+
+function killStaleWorkers(storagePath) {
+  if (!isMac && !isLinux) return
+  try {
+    const output = execFileSync('ps', ['-axo', 'pid=,args='], { encoding: 'utf8' })
+    const lines = String(output || '').split('\n')
+    for (const line of lines) {
+      const value = String(line || '').trim()
+      if (!value) continue
+
+      const splitIndex = value.indexOf(' ')
+      if (splitIndex === -1) continue
+
+      const pid = Number.parseInt(value.slice(0, splitIndex), 10)
+      if (!Number.isFinite(pid) || pid <= 0 || pid === process.pid) continue
+
+      const args = value.slice(splitIndex + 1)
+      if (!args.includes('bare-sidecar')) continue
+      if (!args.includes('workers/main.js') && !args.includes('workers\\main.js')) continue
+      if (storagePath && !args.includes(storagePath)) continue
+
+      try {
+        process.kill(pid, 'SIGKILL')
+      } catch {}
+    }
+  } catch {}
 }
 
 function resolveRelayUrl() {
