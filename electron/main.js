@@ -193,9 +193,13 @@ function getWorker(specifier) {
   }
 
   const runtimeStorage = path.join(appDir, 'runtime-storage')
-  const worker = PearRuntime.run(workerPath, [updaterConfig.storage, JSON.stringify(updaterConfig)], {
-    storage: runtimeStorage
-  })
+  const worker = PearRuntime.run(
+    workerPath,
+    [updaterConfig.storage, JSON.stringify(updaterConfig)],
+    {
+      storage: runtimeStorage
+    }
+  )
 
   const onStdout = (data) => sendToAll(`pear:worker:stdout:${specifier}`, data)
   const onStderr = (data) => sendToAll(`pear:worker:stderr:${specifier}`, data)
