@@ -559,7 +559,7 @@ async function boot() {
     state.rpc = createRpcClient()
 
     setWorkerLogMessage('initializing worker RPC')
-    await state.rpc.request(RpcCommand.INIT, {})
+    await state.rpc.request(RpcCommand.INIT, {}, { timeoutMs: 15000 })
 
     const mode = await bridge.getThemeMode?.()
     applyThemeMode(mode)
@@ -608,15 +608,32 @@ function createRpcClient() {
 
   const client = new RPC(ipc, () => {})
   return {
-    async request(command, payload = {}) {
+    async request(command, payload = {}, options = {}) {
+      const timeoutMs = Number(options.timeoutMs || 0)
       const req = client.request(command)
       req.send(Buffer.from(JSON.stringify(payload), 'utf8'))
-      const reply = await req.reply()
+      const replyPromise = req.reply()
+      const reply = timeoutMs > 0 ? await withTimeout(replyPromise, timeoutMs) : await replyPromise
       const parsed = JSON.parse(Buffer.from(reply).toString('utf8'))
       if (parsed && parsed.ok === false) throw new Error(parsed.error || 'RPC request failed')
       return parsed && parsed.ok === true ? parsed.result : parsed
     }
   }
+}
+
+function withTimeout(promise, timeoutMs) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`Timed out after ${timeoutMs}ms`)), timeoutMs)
+    Promise.resolve(promise)
+      .then((value) => {
+        clearTimeout(timer)
+        resolve(value)
+      })
+      .catch((error) => {
+        clearTimeout(timer)
+        reject(error)
+      })
+  })
 }
 
 function renderAll() {
