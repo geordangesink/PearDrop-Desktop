@@ -19,6 +19,15 @@ app.get('/health', (req, res) => {
   res.status(200).json({ ok: true })
 })
 
+// Railway and other platforms may probe "/" by default.
+app.get('/', (req, res) => {
+  res.status(200).json({ ok: true })
+})
+
+app.get('/healthz', (req, res) => {
+  res.status(200).json({ ok: true })
+})
+
 app.put('/upload', async (req, res) => {
   try {
     if (!uploadToken || req.header('x-upload-token') !== uploadToken) {
