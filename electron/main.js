@@ -31,8 +31,35 @@ cmd.parse(sanitizeCliArgs(app.isPackaged ? process.argv.slice(1) : process.argv.
 function sanitizeCliArgs(argv) {
   const input = Array.isArray(argv) ? argv : []
   const output = []
+  const squirrelFlags = new Set([
+    '--squirrel-install',
+    '--squirrel-updated',
+    '--squirrel-uninstall',
+    '--squirrel-obsolete',
+    '--squirrel-firstrun'
+  ])
   for (let i = 0; i < input.length; i++) {
     const value = String(input[i] || '')
+
+    // Squirrel.Windows passes lifecycle flags when launching right after setup.
+    // Ignore them so CLI parsing doesn't crash the app on first run.
+    if (
+      squirrelFlags.has(value) ||
+      value === '--processStart' ||
+      value === '--process-start-args' ||
+      value.startsWith('--processStart=') ||
+      value.startsWith('--process-start-args=') ||
+      value.startsWith('--squirrel-')
+    ) {
+      if (
+        (value === '--processStart' || value === '--process-start-args') &&
+        i + 1 < input.length &&
+        !String(input[i + 1]).startsWith('-')
+      ) {
+        i++
+      }
+      continue
+    }
 
     if (value === '--updates' || value === '--no-updates' || value.startsWith('--updates=')) {
       if (value === '--updates' && i + 1 < input.length && !String(input[i + 1]).startsWith('-')) {

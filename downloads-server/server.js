@@ -28,8 +28,13 @@ app.get('/health', (req, res) => {
   res.status(200).json({ ok: true })
 })
 
+// Railway and other platforms may probe "/" by default.
 app.get('/', (req, res) => {
   res.status(200).json({ ok: true, service: 'pear-drop-downloads-server' })
+})
+
+app.get('/healthz', (req, res) => {
+  res.status(200).json({ ok: true })
 })
 
 app.put('/upload', async (req, res) => {

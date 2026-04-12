@@ -2,3 +2,4 @@ out/
 node_modules/
 todo
 .DS_Store
+.dist/
