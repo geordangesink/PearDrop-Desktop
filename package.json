@@ -17,7 +17,7 @@
     "package": "electron-forge package",
     "make:darwin": "electron-forge make --platform=darwin",
     "make:darwin:builder": "electron-builder --mac dmg --arm64 --publish never",
-    "make:mas": "SKIP_MANUAL_MAC_SIGN=1 electron-builder --mac mas pkg --arm64 --publish never",
+    "make:mas": "test -n \"$MAS_PROVISIONING_PROFILE\" || { echo \"MAS_PROVISIONING_PROFILE is required\"; exit 1; }; SKIP_MANUAL_MAC_SIGN=1 electron-builder --mac mas pkg --arm64 --publish never -c.mas.provisioningProfile=\"$MAS_PROVISIONING_PROFILE\"",
     "make:win32": "electron-forge make --platform=win32",
     "make:win32:squirrel": "electron-forge make --platform=win32 --targets @electron-forge/maker-squirrel",
     "make:linux": "electron-forge package && ./scripts/build-app-image.sh",
@@ -53,7 +53,7 @@
     "prettier-config-holepunch": "^2.0.0"
   },
   "build": {
-    "appId": "com.peardrop.desktop",
+    "appId": "online.peardrop.app",
     "productName": "PearDrop",
     "directories": {
       "output": "out/make"

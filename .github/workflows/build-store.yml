@@ -1,12 +1,15 @@
 name: Build Desktop Store Release
 
 on:
+  push:
+    tags:
+      - 'desktop-v*'
   workflow_dispatch:
     inputs:
       submit:
         description: Submit the built .pkg to App Store Connect
         required: true
-        default: false
+        default: true
         type: boolean
 
 permissions:
@@ -26,6 +29,8 @@ jobs:
     env:
       MAC_CODESIGN_CERT_P12_BASE64: ${{ secrets.MAC_CODESIGN_CERT_P12_BASE64 }}
       MAC_CODESIGN_CERT_PASSWORD: ${{ secrets.MAC_CODESIGN_CERT_PASSWORD }}
+      MAC_INSTALLER_CERT_P12_BASE64: ${{ secrets.MAC_INSTALLER_CERT_P12_BASE64 }}
+      MAC_INSTALLER_CERT_PASSWORD: ${{ secrets.MAC_INSTALLER_CERT_PASSWORD }}
       MAC_APP_STORE_PROVISIONING_PROFILE_BASE64: ${{ secrets.MAC_APP_STORE_PROVISIONING_PROFILE_BASE64 }}
     steps:
       - uses: actions/checkout@v4
@@ -63,6 +68,16 @@ jobs:
           echo "CSC_KEY_PASSWORD=$MAC_CODESIGN_CERT_PASSWORD" >> "$GITHUB_ENV"
           echo "MAS_PROVISIONING_PROFILE=$profile_path" >> "$GITHUB_ENV"
 
+          if [ -n "${MAC_INSTALLER_CERT_P12_BASE64:-}" ] && [ -n "${MAC_INSTALLER_CERT_PASSWORD:-}" ]; then
+            installer_cert_path="$RUNNER_TEMP/mas-installer-cert.p12"
+            echo "$MAC_INSTALLER_CERT_P12_BASE64" | base64 --decode > "$installer_cert_path"
+            echo "CSC_INSTALLER_LINK=$installer_cert_path" >> "$GITHUB_ENV"
+            echo "CSC_INSTALLER_KEY_PASSWORD=$MAC_INSTALLER_CERT_PASSWORD" >> "$GITHUB_ENV"
+            echo "Using dedicated installer certificate for .pkg signing."
+          else
+            echo "No dedicated installer cert provided; using default signing cert for installer as fallback."
+          fi
+
       - name: Build MAS package
         run: npm run make:mas
 
@@ -85,7 +100,7 @@ jobs:
           if-no-files-found: error
 
       - name: Submit to App Store Connect
-        if: ${{ inputs.submit }}
+        if: ${{ github.event_name == 'push' || inputs.submit }}
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
