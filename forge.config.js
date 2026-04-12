@@ -84,7 +84,8 @@ const makers = [
       authors: windowsAuthors,
       setupExe: `${windowsSlug}-Setup-${pkg.version}.exe`,
       setupIcon: path.join(__dirname, 'build', 'icon.ico'),
-      iconUrl: 'https://raw.githubusercontent.com/geordangesink/PearDrop-Desktop/main/build/icon.ico',
+      iconUrl:
+        'https://raw.githubusercontent.com/geordangesink/PearDrop-Desktop/main/build/icon.ico',
       noMsi: false,
       ...(process.env.WINDOWS_CERTIFICATE_FILE
         ? {
