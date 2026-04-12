@@ -6,7 +6,8 @@ Minimal upload + static download service for hosting installers without redirect
 
 - `PORT` (optional): defaults to `3000`
 - `UPLOAD_TOKEN` (required): bearer token for upload endpoint
-- `DOWNLOAD_ROOT` (optional): defaults to `/data/downloads`
+- `DOWNLOAD_ROOT` (optional): defaults to `$RAILWAY_VOLUME_MOUNT_PATH/downloads` on Railway,
+  then `/data/downloads`
 
 ## Endpoints
 
@@ -22,7 +23,7 @@ Minimal upload + static download service for hosting installers without redirect
 3. Attach a volume mounted to `/data`.
 4. Set env vars:
    - `UPLOAD_TOKEN=<strong-random-token>`
-   - `DOWNLOAD_ROOT=/data/downloads`
+   - `DOWNLOAD_ROOT=/data/downloads` if you are not using Railway's automatic volume mount path
 
 ## Upload Example
 

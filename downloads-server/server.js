@@ -6,8 +6,17 @@ const path = require('path')
 const app = express()
 const port = Number(process.env.PORT || 3000)
 const uploadToken = String(process.env.UPLOAD_TOKEN || '')
-const configuredDownloadRoot = path.resolve(process.env.DOWNLOAD_ROOT || '/data/downloads')
-let activeDownloadRoot = configuredDownloadRoot
+let activeDownloadRoot = resolveConfiguredDownloadRoot()
+
+function resolveConfiguredDownloadRoot() {
+  const explicitRoot = String(process.env.DOWNLOAD_ROOT || '').trim()
+  if (explicitRoot) return path.resolve(explicitRoot)
+
+  const railwayVolumeRoot = String(process.env.RAILWAY_VOLUME_MOUNT_PATH || '').trim()
+  if (railwayVolumeRoot) return path.resolve(railwayVolumeRoot, 'downloads')
+
+  return path.resolve('/data/downloads')
+}
 
 function safeRelativePath(input) {
   const raw = decodeURIComponent(String(input || '')).replace(/^\/+/, '')
@@ -17,6 +26,10 @@ function safeRelativePath(input) {
 
 app.get('/health', (req, res) => {
   res.status(200).json({ ok: true })
+})
+
+app.get('/', (req, res) => {
+  res.status(200).json({ ok: true, service: 'pear-drop-downloads-server' })
 })
 
 app.put('/upload', async (req, res) => {
@@ -96,15 +109,47 @@ app.get('/downloads/*', (req, res) => {
   return res.sendFile(absolute)
 })
 
-app.listen(port, async () => {
+async function start() {
   try {
-    await fsp.mkdir(configuredDownloadRoot, { recursive: true })
-    activeDownloadRoot = configuredDownloadRoot
-  } catch {
+    await fsp.mkdir(activeDownloadRoot, { recursive: true })
+  } catch (error) {
+    console.error('[startup] download root unavailable, falling back to local storage', {
+      code: error?.code,
+      message: error?.message,
+      downloadRoot: activeDownloadRoot
+    })
     activeDownloadRoot = path.resolve(process.cwd(), 'downloads')
     await fsp.mkdir(activeDownloadRoot, { recursive: true })
   }
 
-  console.log(`pear-drop downloads server listening on ${port}`)
-  console.log(`serving ${activeDownloadRoot} at /downloads`)
+  const server = app.listen(port, () => {
+    console.log(`pear-drop downloads server listening on ${port}`)
+    console.log(`serving ${activeDownloadRoot} at /downloads`)
+  })
+
+  server.on('error', (error) => {
+    console.error('[server] listen error', {
+      code: error?.code,
+      message: error?.message
+    })
+    process.exitCode = 1
+  })
+
+  const shutdown = (signal) => {
+    console.log(`[server] received ${signal}, closing listener`)
+    server.close(() => {
+      process.exit(0)
+    })
+  }
+
+  process.once('SIGTERM', () => shutdown('SIGTERM'))
+  process.once('SIGINT', () => shutdown('SIGINT'))
+}
+
+start().catch((error) => {
+  console.error('[startup] fatal error', {
+    code: error?.code,
+    message: error?.message
+  })
+  process.exit(1)
 })

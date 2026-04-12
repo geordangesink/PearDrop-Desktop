@@ -50,13 +50,13 @@ jobs:
           $publishDir = "out/publish"
           New-Item -ItemType Directory -Path $publishDir -Force | Out-Null
 
-          $exe = Get-ChildItem -Path out -Recurse -Filter *.exe |
-            Where-Object { $_.Name -notmatch "Update|Squirrel|Stub" } |
+          $exe = Get-ChildItem -Path out/make -Recurse -Filter *Setup*.exe |
+            Where-Object { $_.Name -match "^PearDrop-Setup-.*\.exe$" } |
             Sort-Object Length -Descending |
             Select-Object -First 1
-          if (-not $exe) { throw "No .exe installer found." }
+          if (-not $exe) { throw "No Squirrel setup .exe installer found in out/make." }
 
-          $msi = Get-ChildItem -Path out -Recurse -Filter *.msi |
+          $msi = Get-ChildItem -Path out/make -Recurse -Filter *.msi |
             Sort-Object Length -Descending |
             Select-Object -First 1
 

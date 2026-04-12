@@ -132,9 +132,6 @@ module.exports = {
     },
     postMake: async (forgeConfig, results) => {
       if (!buildMsix) {
-        if (isWindows) {
-          fs.rmSync(path.join(__dirname, 'out', 'make'), { recursive: true, force: true })
-        }
         return
       }
 
