@@ -26,7 +26,9 @@ const cmd = command(
   flag('--relay', 'browser relay websocket endpoint')
 )
 
-cmd.parse(sanitizeCliArgs(app.isPackaged ? process.argv.slice(1) : process.argv.slice(2)))
+const launchArgs = app.isPackaged ? process.argv.slice(1) : process.argv.slice(2)
+for (const link of findAppLaunchPayloads(launchArgs)) pendingDeepLinks.push(link)
+cmd.parse(sanitizeCliArgs(launchArgs))
 
 function sanitizeCliArgs(argv) {
   const input = Array.isArray(argv) ? argv : []
@@ -40,6 +42,8 @@ function sanitizeCliArgs(argv) {
   ])
   for (let i = 0; i < input.length; i++) {
     const value = String(input[i] || '')
+
+    if (isAppLaunchPayload(value)) continue
 
     // Squirrel.Windows passes lifecycle flags when launching right after setup.
     // Ignore them so CLI parsing doesn't crash the app on first run.
@@ -80,6 +84,31 @@ function sanitizeCliArgs(argv) {
     output.push(input[i])
   }
   return output
+}
+
+function isAppLaunchPayload(value) {
+  return Boolean(normalizeAppLaunchPayload(value))
+}
+
+function findAppLaunchPayloads(argv) {
+  const links = []
+  for (const value of Array.isArray(argv) ? argv : []) {
+    const link = normalizeAppLaunchPayload(value)
+    if (link) links.push(link)
+  }
+  return links
+}
+
+function normalizeAppLaunchPayload(value) {
+  const raw = String(value || '').trim()
+  if (!raw) return ''
+  if (isDeepLink(raw, protocol)) return raw
+  if (raw.startsWith(`${protocol}:/`)) {
+    return `${protocol}://${raw.slice(`${protocol}:/`.length).replace(/^\/+/, '')}`
+  }
+  if (/^\/?invite\/?\?/i.test(raw)) return `${protocol}://${raw.replace(/^\/+/, '')}`
+  if (/^[?&](drive|room|topic|relay|web)=/i.test(raw)) return `${protocol}://invite${raw}`
+  return ''
 }
 
 function resolveBaseDir() {
