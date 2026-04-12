@@ -1,5 +1,6 @@
 const { app, BrowserWindow, ipcMain, dialog, Menu } = require('electron')
 const { execFileSync } = require('child_process')
+const fs = require('fs')
 const os = require('os')
 const path = require('path')
 const PearRuntime = require('pear-runtime')
@@ -27,8 +28,64 @@ const cmd = command(
 )
 
 const launchArgs = app.isPackaged ? process.argv.slice(1) : process.argv.slice(2)
+if (handleSquirrelStartupEvent(launchArgs)) process.exit(0)
 for (const link of findAppLaunchPayloads(launchArgs)) pendingDeepLinks.push(link)
 cmd.parse(sanitizeCliArgs(launchArgs))
+
+function handleSquirrelStartupEvent(argv) {
+  if (!app.isPackaged || !isWindows) return false
+
+  const command = (Array.isArray(argv) ? argv : []).find(isSquirrelArg)
+  if (!command) return false
+  const normalizedCommand = normalizeSquirrelArg(command)
+
+  const updateExe = path.resolve(path.dirname(process.execPath), '..', 'Update.exe')
+  const appExe = path.basename(process.execPath)
+
+  try {
+    if (normalizedCommand === 'install' || normalizedCommand === 'updated') {
+      execFileSync(updateExe, ['--createShortcut', appExe], { stdio: 'ignore' })
+      removeSquirrelPackageTemp(updateExe)
+      return true
+    }
+
+    if (normalizedCommand === 'uninstall') {
+      execFileSync(updateExe, ['--removeShortcut', appExe], { stdio: 'ignore' })
+      return true
+    }
+
+    if (normalizedCommand === 'obsolete') return true
+  } catch (error) {
+    console.error('Failed handling Squirrel startup event', {
+      command,
+      message: error?.message
+    })
+    return true
+  }
+
+  return false
+}
+
+function removeSquirrelPackageTemp(updateExe) {
+  try {
+    fs.rmSync(path.join(path.dirname(updateExe), 'packages', 'SquirrelTemp'), {
+      recursive: true,
+      force: true
+    })
+  } catch {}
+}
+
+function isSquirrelArg(value) {
+  return normalizeSquirrelArg(value).length > 0
+}
+
+function normalizeSquirrelArg(value) {
+  const raw = String(value || '')
+    .trim()
+    .toLowerCase()
+  const match = raw.match(/^(?:--|\/)?squirrel[-_]?([a-z]+)/)
+  return match ? match[1] : ''
+}
 
 function sanitizeCliArgs(argv) {
   const input = Array.isArray(argv) ? argv : []
@@ -49,6 +106,7 @@ function sanitizeCliArgs(argv) {
     // Ignore them so CLI parsing doesn't crash the app on first run.
     if (
       squirrelFlags.has(value) ||
+      isSquirrelArg(value) ||
       value === '--processStart' ||
       value === '--process-start-args' ||
       value.startsWith('--processStart=') ||
@@ -56,7 +114,10 @@ function sanitizeCliArgs(argv) {
       value.startsWith('--squirrel-')
     ) {
       if (
-        (value === '--processStart' || value === '--process-start-args') &&
+        (squirrelFlags.has(value) ||
+          isSquirrelArg(value) ||
+          value === '--processStart' ||
+          value === '--process-start-args') &&
         i + 1 < input.length &&
         !String(input[i + 1]).startsWith('-')
       ) {
@@ -81,7 +142,7 @@ function sanitizeCliArgs(argv) {
       }
     }
 
-    output.push(input[i])
+    if (!app.isPackaged) output.push(input[i])
   }
   return output
 }
@@ -119,7 +180,7 @@ function resolveBaseDir() {
     ? path.join(os.homedir(), 'Library', 'Application Support', appName)
     : isLinux
       ? path.join(os.homedir(), '.config', appName)
-      : path.join(os.homedir(), 'AppData', 'Local', appName)
+      : app.getPath('userData')
 }
 
 async function shutdownWorkers() {

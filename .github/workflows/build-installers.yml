@@ -15,7 +15,7 @@ env:
 
 jobs:
   windows-installers:
-    name: Windows Installers (.exe/.msi)
+    name: Windows Installer (.exe)
     runs-on: windows-latest
     env:
       WINDOWS_CODESIGN_CERT_P12_BASE64: ${{ secrets.WINDOWS_CODESIGN_CERT_P12_BASE64 }}
@@ -56,19 +56,8 @@ jobs:
             Select-Object -First 1
           if (-not $exe) { throw "No Squirrel setup .exe installer found in out/make." }
 
-          $msi = Get-ChildItem -Path out/make -Recurse -Filter *.msi |
-            Sort-Object Length -Descending |
-            Select-Object -First 1
-
           Copy-Item $exe.FullName "$publishDir/PearDrop-Setup-$version.exe" -Force
           Copy-Item $exe.FullName "$publishDir/PearDrop-Setup.exe" -Force
-          if ($msi) {
-            Copy-Item $msi.FullName "$publishDir/PearDrop-Setup-$version.msi" -Force
-            Copy-Item $msi.FullName "$publishDir/PearDrop-Setup.msi" -Force
-            Write-Host "MSI found and published."
-          } else {
-            Write-Host "No MSI found. Publishing EXE only."
-          }
 
           Write-Host "Published artifacts:"
           Get-ChildItem $publishDir | ForEach-Object { Write-Host $_.FullName }
@@ -77,7 +66,7 @@ jobs:
         if: ${{ env.WINDOWS_CODESIGN_CERT_P12_BASE64 != '' && env.WINDOWS_CODESIGN_CERT_PASSWORD != '' }}
         shell: pwsh
         run: |
-          $files = Get-ChildItem -Path out/publish -File -Include *.exe,*.msi
+          $files = Get-ChildItem -Path out/publish -File -Include *.exe
           if (-not $files) { throw "No Windows installer artifacts found for signature verification." }
           foreach ($file in $files) {
             Write-Host "Verifying signature: $($file.FullName)"
@@ -408,11 +397,9 @@ jobs:
           make_latest: false
           files: |
             release-assets/PearDrop-Setup.exe
-            release-assets/PearDrop-Setup.msi
             release-assets/PearDrop.AppImage
             release-assets/PearDrop.dmg
             release-assets/PearDrop-Setup-*.exe
-            release-assets/PearDrop-Setup-*.msi
             release-assets/PearDrop-*.AppImage
             release-assets/PearDrop-*.dmg
 
@@ -423,10 +410,8 @@ jobs:
           fail_on_unmatched_files: false
           files: |
             release-assets/PearDrop-Setup.exe
-            release-assets/PearDrop-Setup.msi
             release-assets/PearDrop.AppImage
             release-assets/PearDrop.dmg
             release-assets/PearDrop-Setup-*.exe
-            release-assets/PearDrop-Setup-*.msi
             release-assets/PearDrop-*.AppImage
             release-assets/PearDrop-*.dmg

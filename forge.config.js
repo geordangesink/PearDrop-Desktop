@@ -32,7 +32,14 @@ function getWindowsKitVersion() {
 let packagerConfig = {
   icon: 'build/icon',
   protocols: [{ name: appName, schemes: [pkg.name] }],
-  derefSymlinks: true
+  derefSymlinks: true,
+  win32metadata: {
+    CompanyName: appName,
+    FileDescription: appName,
+    InternalName: appName,
+    OriginalFilename: `${appName}.exe`,
+    ProductName: appName
+  }
 }
 
 if (desktopBuildNumber > 0) {
@@ -86,7 +93,7 @@ const makers = [
       setupIcon: path.join(__dirname, 'build', 'icon.ico'),
       iconUrl:
         'https://raw.githubusercontent.com/geordangesink/PearDrop-Desktop/main/build/icon.ico',
-      noMsi: false,
+      noMsi: true,
       ...(process.env.WINDOWS_CERTIFICATE_FILE
         ? {
             certificateFile: process.env.WINDOWS_CERTIFICATE_FILE,
