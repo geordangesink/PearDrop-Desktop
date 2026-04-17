@@ -86,13 +86,15 @@
     },
     "mas": {
       "category": "public.app-category.productivity",
+      "identity": "${env.MAC_CODESIGN_IDENTITY}",
       "hardenedRuntime": false,
       "entitlements": "build/entitlements.mas.plist",
       "entitlementsInherit": "build/entitlements.mas.inherit.plist",
       "provisioningProfile": "${env.MAS_PROVISIONING_PROFILE}"
     },
     "pkg": {
-      "installLocation": "/Applications"
+      "installLocation": "/Applications",
+      "identity": "${env.MAC_INSTALLER_IDENTITY}"
     },
     "dmg": {
       "sign": false
