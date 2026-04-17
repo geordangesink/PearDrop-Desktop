@@ -168,6 +168,7 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_ASC_PROVIDER: ${{ secrets.APPLE_ASC_PROVIDER }}
           ASC_API_KEY_ID: ${{ secrets.ASC_API_KEY_ID }}
           ASC_API_ISSUER_ID: ${{ secrets.ASC_API_ISSUER_ID }}
           ASC_API_KEY_P8_BASE64: ${{ secrets.ASC_API_KEY_P8_BASE64 }}
@@ -198,8 +199,8 @@ jobs:
               --password "$APPLE_PASSWORD"
               --verbose
             )
-            if [ -n "${APPLE_TEAM_ID:-}" ]; then
-              upload_args+=(--asc-provider "$APPLE_TEAM_ID")
+            if [ -n "${APPLE_ASC_PROVIDER:-}" ]; then
+              upload_args+=(--asc-provider "$APPLE_ASC_PROVIDER")
             fi
             xcrun altool "${upload_args[@]}"
             exit 0
