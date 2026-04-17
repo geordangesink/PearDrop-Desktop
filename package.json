@@ -17,7 +17,7 @@
     "package": "electron-forge package",
     "make:darwin": "electron-forge make --platform=darwin",
     "make:darwin:builder": "electron-builder --mac dmg --arm64 --publish never",
-    "make:mas": "test -n \"$MAS_PROVISIONING_PROFILE\" || { echo \"MAS_PROVISIONING_PROFILE is required\"; exit 1; }; SKIP_MANUAL_MAC_SIGN=1 electron-builder --mac mas --arm64 --publish never -c.mas.provisioningProfile=\"$MAS_PROVISIONING_PROFILE\"",
+    "make:mas": "test -n \"$MAS_PROVISIONING_PROFILE\" || { echo \"MAS_PROVISIONING_PROFILE is required\"; exit 1; }; test -n \"$MAC_CODESIGN_IDENTITY\" || { echo \"MAC_CODESIGN_IDENTITY is required\"; exit 1; }; test -n \"$MAC_INSTALLER_IDENTITY\" || { echo \"MAC_INSTALLER_IDENTITY is required\"; exit 1; }; CSC_IDENTITY_AUTO_DISCOVERY=false SKIP_MANUAL_MAC_SIGN=1 electron-builder --mac mas --arm64 --publish never -c.mac.identity=\"$MAC_CODESIGN_IDENTITY\" -c.mas.identity=\"$MAC_CODESIGN_IDENTITY\" -c.pkg.identity=\"$MAC_INSTALLER_IDENTITY\" -c.mas.provisioningProfile=\"$MAS_PROVISIONING_PROFILE\"",
     "make:win32": "electron-forge make --platform=win32",
     "make:win32:squirrel": "electron-forge make --platform=win32 --targets @electron-forge/maker-squirrel",
     "make:linux": "electron-forge package && ./scripts/build-app-image.sh",
