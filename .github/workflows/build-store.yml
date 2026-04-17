@@ -81,10 +81,27 @@ jobs:
       - name: Build MAS package
         run: npm run make:mas
 
+      - name: Validate MAS-only package output
+        run: |
+          set -euo pipefail
+          mapfile -t mas_pkgs < <(find out/make/mas-arm64 -type f -name '*.pkg' | sort)
+          if [ "${#mas_pkgs[@]}" -ne 1 ]; then
+            echo "Expected exactly one MAS .pkg in out/make/mas-arm64, found ${#mas_pkgs[@]}."
+            find out/make -type f -name '*.pkg' -print || true
+            exit 1
+          fi
+
+          mapfile -t all_pkgs < <(find out/make -type f -name '*.pkg' | sort)
+          if [ "${#all_pkgs[@]}" -ne 1 ]; then
+            echo "Expected only MAS package output, but found extra .pkg files:"
+            printf '%s\n' "${all_pkgs[@]}"
+            exit 1
+          fi
+
       - name: Locate built .pkg
         run: |
           set -euo pipefail
-          pkg="$(find out -type f -name '*.pkg' | head -n 1)"
+          pkg="$(find out/make/mas-arm64 -type f -name '*.pkg' | head -n 1)"
           if [ -z "$pkg" ]; then
             echo "No .pkg produced for Mac App Store upload."
             exit 1
