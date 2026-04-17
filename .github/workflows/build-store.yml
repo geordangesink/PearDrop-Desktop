@@ -106,15 +106,17 @@ jobs:
         run: |
           set -euo pipefail
 
-          identity_dump="$(security find-identity -v -p codesigning "$CSC_KEYCHAIN" || true)"
-          echo "$identity_dump"
+          app_identity_dump="$(security find-identity -v -p codesigning "$CSC_KEYCHAIN" || true)"
+          installer_cert_dump="$(security find-certificate -a -c "3rd Party Mac Developer Installer" -p "$CSC_KEYCHAIN" || true)"
 
-          if ! grep -q "3rd Party Mac Developer Application" <<<"$identity_dump"; then
+          echo "$app_identity_dump"
+
+          if ! grep -q "3rd Party Mac Developer Application" <<<"$app_identity_dump"; then
             echo "Keychain does not contain a usable '3rd Party Mac Developer Application' identity."
             exit 1
           fi
 
-          if ! grep -q "3rd Party Mac Developer Installer" <<<"$identity_dump"; then
+          if [ -z "$installer_cert_dump" ]; then
             echo "Keychain does not contain a usable '3rd Party Mac Developer Installer' identity."
             exit 1
           fi
