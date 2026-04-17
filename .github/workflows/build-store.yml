@@ -47,7 +47,12 @@ jobs:
       - name: Verify required build secrets
         run: |
           set -euo pipefail
-          for key in MAC_CODESIGN_CERT_P12_BASE64 MAC_CODESIGN_CERT_PASSWORD MAC_APP_STORE_PROVISIONING_PROFILE_BASE64; do
+          for key in \
+            MAC_CODESIGN_CERT_P12_BASE64 \
+            MAC_CODESIGN_CERT_PASSWORD \
+            MAC_INSTALLER_CERT_P12_BASE64 \
+            MAC_INSTALLER_CERT_PASSWORD \
+            MAC_APP_STORE_PROVISIONING_PROFILE_BASE64; do
             if [ -z "${!key:-}" ]; then
               echo "Missing secret: $key"
               exit 1
@@ -59,23 +64,45 @@ jobs:
           set -euo pipefail
 
           cert_path="$RUNNER_TEMP/mas-signing-cert.p12"
+          installer_cert_path="$RUNNER_TEMP/mas-installer-cert.p12"
           profile_path="$RUNNER_TEMP/peardrop-mas.provisionprofile"
 
           echo "$MAC_CODESIGN_CERT_P12_BASE64" | base64 --decode > "$cert_path"
+          echo "$MAC_INSTALLER_CERT_P12_BASE64" | base64 --decode > "$installer_cert_path"
           echo "$MAC_APP_STORE_PROVISIONING_PROFILE_BASE64" | base64 --decode > "$profile_path"
 
           echo "CSC_LINK=$cert_path" >> "$GITHUB_ENV"
           echo "CSC_KEY_PASSWORD=$MAC_CODESIGN_CERT_PASSWORD" >> "$GITHUB_ENV"
+          echo "CSC_INSTALLER_LINK=$installer_cert_path" >> "$GITHUB_ENV"
+          echo "CSC_INSTALLER_KEY_PASSWORD=$MAC_INSTALLER_CERT_PASSWORD" >> "$GITHUB_ENV"
           echo "MAS_PROVISIONING_PROFILE=$profile_path" >> "$GITHUB_ENV"
 
-          if [ -n "${MAC_INSTALLER_CERT_P12_BASE64:-}" ] && [ -n "${MAC_INSTALLER_CERT_PASSWORD:-}" ]; then
-            installer_cert_path="$RUNNER_TEMP/mas-installer-cert.p12"
-            echo "$MAC_INSTALLER_CERT_P12_BASE64" | base64 --decode > "$installer_cert_path"
-            echo "CSC_INSTALLER_LINK=$installer_cert_path" >> "$GITHUB_ENV"
-            echo "CSC_INSTALLER_KEY_PASSWORD=$MAC_INSTALLER_CERT_PASSWORD" >> "$GITHUB_ENV"
-            echo "Using dedicated installer certificate for .pkg signing."
-          else
-            echo "No dedicated installer cert provided; using default signing cert for installer as fallback."
+          echo "Using dedicated installer certificate for .pkg signing."
+
+      - name: Validate certificate subjects
+        run: |
+          set -euo pipefail
+
+          app_subject="$(
+            openssl pkcs12 -in "$CSC_LINK" -clcerts -nokeys -passin "pass:$CSC_KEY_PASSWORD" 2>/dev/null \
+              | openssl x509 -noout -subject 2>/dev/null || true
+          )"
+          installer_subject="$(
+            openssl pkcs12 -in "$CSC_INSTALLER_LINK" -clcerts -nokeys -passin "pass:$CSC_INSTALLER_KEY_PASSWORD" 2>/dev/null \
+              | openssl x509 -noout -subject 2>/dev/null || true
+          )"
+
+          echo "App cert subject: $app_subject"
+          echo "Installer cert subject: $installer_subject"
+
+          if [[ "$app_subject" != *"3rd Party Mac Developer Application"* ]]; then
+            echo "MAC_CODESIGN_CERT_P12_BASE64 must contain a valid '3rd Party Mac Developer Application' certificate + private key."
+            exit 1
+          fi
+
+          if [[ "$installer_subject" != *"3rd Party Mac Developer Installer"* ]]; then
+            echo "MAC_INSTALLER_CERT_P12_BASE64 must contain a valid '3rd Party Mac Developer Installer' certificate + private key."
+            exit 1
           fi
 
       - name: Build MAS package
