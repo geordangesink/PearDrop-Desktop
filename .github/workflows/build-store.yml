@@ -29,6 +29,7 @@ jobs:
     env:
       MAC_CODESIGN_CERT_P12_BASE64: ${{ secrets.MAC_CODESIGN_CERT_P12_BASE64 }}
       MAC_CODESIGN_CERT_PASSWORD: ${{ secrets.MAC_CODESIGN_CERT_PASSWORD }}
+      MAC_CODESIGN_IDENTITY: ${{ secrets.MAC_CODESIGN_IDENTITY }}
       MAC_INSTALLER_CERT_P12_BASE64: ${{ secrets.MAC_INSTALLER_CERT_P12_BASE64 }}
       MAC_INSTALLER_CERT_PASSWORD: ${{ secrets.MAC_INSTALLER_CERT_PASSWORD }}
       MAC_APP_STORE_PROVISIONING_PROFILE_BASE64: ${{ secrets.MAC_APP_STORE_PROVISIONING_PROFILE_BASE64 }}
@@ -73,11 +74,34 @@ jobs:
 
           echo "CSC_LINK=$cert_path" >> "$GITHUB_ENV"
           echo "CSC_KEY_PASSWORD=$MAC_CODESIGN_CERT_PASSWORD" >> "$GITHUB_ENV"
+          echo "CSC_NAME=3rd Party Mac Developer Application" >> "$GITHUB_ENV"
           echo "CSC_INSTALLER_LINK=$installer_cert_path" >> "$GITHUB_ENV"
           echo "CSC_INSTALLER_KEY_PASSWORD=$MAC_INSTALLER_CERT_PASSWORD" >> "$GITHUB_ENV"
+          echo "CSC_INSTALLER_NAME=3rd Party Mac Developer Installer" >> "$GITHUB_ENV"
           echo "MAS_PROVISIONING_PROFILE=$profile_path" >> "$GITHUB_ENV"
 
           echo "Using dedicated installer certificate for .pkg signing."
+
+      - name: Import certs into temporary keychain
+        run: |
+          set -euo pipefail
+
+          keychain_path="$RUNNER_TEMP/build-signing.keychain-db"
+          keychain_password="$(uuidgen)"
+
+          security create-keychain -p "$keychain_password" "$keychain_path"
+          security set-keychain-settings -lut 21600 "$keychain_path"
+          security unlock-keychain -p "$keychain_password" "$keychain_path"
+          security list-keychains -d user -s "$keychain_path" login.keychain-db
+          security default-keychain -s "$keychain_path"
+
+          security import "$CSC_LINK" -P "$CSC_KEY_PASSWORD" -A -t cert -f pkcs12 -k "$keychain_path"
+          security import "$CSC_INSTALLER_LINK" -P "$CSC_INSTALLER_KEY_PASSWORD" -A -t cert -f pkcs12 -k "$keychain_path"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$keychain_password" "$keychain_path"
+
+          echo "CSC_KEYCHAIN=$keychain_path" >> "$GITHUB_ENV"
+          echo "Using keychain: $keychain_path"
+          security find-identity -v -p codesigning "$keychain_path" || true
 
       - name: Validate certificate subjects
         run: |
