@@ -102,23 +102,6 @@ jobs:
           echo "CSC_KEYCHAIN=$keychain_path" >> "$GITHUB_ENV"
           echo "Using keychain: $keychain_path"
 
-      - name: Validate certificate private keys
-        run: |
-          set -euo pipefail
-
-          app_key_pem="$(openssl pkcs12 -legacy -in "$CSC_LINK" -nocerts -nodes -passin "pass:$CSC_KEY_PASSWORD" 2>/dev/null || true)"
-          installer_key_pem="$(openssl pkcs12 -legacy -in "$CSC_INSTALLER_LINK" -nocerts -nodes -passin "pass:$CSC_INSTALLER_KEY_PASSWORD" 2>/dev/null || true)"
-
-          if [[ "$app_key_pem" != *"PRIVATE KEY"* ]]; then
-            echo "MAC_CODESIGN_CERT_P12_BASE64 does not contain a private key. Export from Keychain Access > My Certificates (not Certificates)."
-            exit 1
-          fi
-
-          if [[ "$installer_key_pem" != *"PRIVATE KEY"* ]]; then
-            echo "MAC_INSTALLER_CERT_P12_BASE64 does not contain a private key. Export from Keychain Access > My Certificates (not Certificates)."
-            exit 1
-          fi
-
       - name: Validate imported keychain identities
         run: |
           set -euo pipefail
