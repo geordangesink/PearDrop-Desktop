@@ -125,7 +125,12 @@ jobs:
           fi
 
       - name: Build MAS package
-        run: npm run make:mas
+        env:
+          BUILD_NUMBER: ${{ github.run_number }}
+        run: |
+          set -euo pipefail
+          echo "Using macOS build number: $BUILD_NUMBER"
+          npm run make:mas -- -c.buildVersion="$BUILD_NUMBER"
 
       - name: Validate MAS-only package output
         run: |
