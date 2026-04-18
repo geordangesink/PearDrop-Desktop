@@ -1,9 +1,11 @@
 name: Build Desktop Store Release
 
 on:
-  push:
-    tags:
-      - 'desktop-v*'
+  workflow_run:
+    workflows:
+      - Build Installers
+    types:
+      - completed
   workflow_dispatch:
     inputs:
       submit:
@@ -16,12 +18,13 @@ permissions:
   contents: read
 
 concurrency:
-  group: desktop-store-${{ github.ref }}
+  group: desktop-store-${{ github.event_name == 'workflow_run' && github.event.workflow_run.id || github.ref }}
   cancel-in-progress: false
 
 jobs:
   build-macos-store:
     name: Build macOS App Store package (.pkg)
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push') }}
     runs-on: macos-latest
     defaults:
       run:
@@ -36,6 +39,8 @@ jobs:
       MAC_APP_STORE_PROVISIONING_PROFILE_BASE64: ${{ secrets.MAC_APP_STORE_PROVISIONING_PROFILE_BASE64 }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
 
       - uses: actions/setup-node@v4
         with:
@@ -168,7 +173,7 @@ jobs:
           if-no-files-found: error
 
       - name: Submit to App Store Connect
-        if: ${{ github.event_name == 'push' || inputs.submit }}
+        if: ${{ github.event_name == 'workflow_run' || inputs.submit }}
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
