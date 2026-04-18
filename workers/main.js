@@ -1,6 +1,7 @@
 const path = require('bare-path')
 const os = require('bare-os')
 const { bootstrapTransferWorker } = require('pear-drop-core')
+const WORKER_READY_TOKEN = '__PEARDROP_WORKER_RPC_READY__'
 
 async function run() {
   const storage = Bare.argv[2]
@@ -23,6 +24,9 @@ async function run() {
     updaterConfig,
     relayUrl: updaterConfig.relayUrl || ''
   })
+
+  // Explicit startup handshake for the renderer: RPC server is now bound and ready.
+  console.log(WORKER_READY_TOKEN)
 }
 
 run().catch((error) => {

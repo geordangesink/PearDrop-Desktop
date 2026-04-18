@@ -508,63 +508,47 @@
       .hidden {
         display: none !important;
       }
-      .skeleton-card {
+      .skeleton-container {
+        position: relative;
+        overflow: hidden;
         border: 1px solid var(--line);
         border-radius: 12px;
-        background: color-mix(in srgb, var(--card) 92%, #ffffff 8%);
-        padding: 12px;
-        margin-bottom: 10px;
+        background: color-mix(in srgb, var(--bg-soft) 80%, var(--card) 20%);
       }
-      .skeleton-row {
-        display: flex;
-        align-items: center;
-        gap: 12px;
+      .skeleton-container::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(
+          100deg,
+          rgba(255, 255, 255, 0) 18%,
+          rgba(255, 255, 255, 0.42) 45%,
+          rgba(255, 255, 255, 0) 72%
+        );
+        transform: translateX(-120%);
+        animation: skeletonShimmer 1.15s linear infinite;
       }
-      .skeleton-thumb {
-        width: 44px;
-        height: 44px;
-        border-radius: 10px;
-        background: var(--line);
-        opacity: 0.55;
+      .skeleton-container.source {
+        min-height: 248px;
       }
-      .skeleton-lines {
-        flex: 1;
-        min-width: 0;
+      .skeleton-container.hosts {
+        min-height: 168px;
       }
-      .skeleton-line {
-        height: 10px;
-        border-radius: 999px;
-        background: var(--line);
-        opacity: 0.62;
-        margin-bottom: 8px;
+      .skeleton-container.starred {
+        min-height: 132px;
       }
-      .skeleton-line:last-child {
-        margin-bottom: 0;
+      .skeleton-container.history {
+        min-height: 176px;
       }
-      .skeleton-line.w-90 {
-        width: 90%;
-      }
-      .skeleton-line.w-70 {
-        width: 70%;
-      }
-      .skeleton-line.w-55 {
-        width: 55%;
-      }
-      .skeleton-line.w-40 {
-        width: 40%;
+      .skeleton-container.drive {
+        min-height: 226px;
       }
       .skeleton-table-row td {
         padding: 10px 8px;
       }
-      .skeleton-pulse {
-        animation: skeletonPulse 1.15s ease-in-out infinite alternate;
-      }
-      @keyframes skeletonPulse {
-        from {
-          opacity: 0.44;
-        }
+      @keyframes skeletonShimmer {
         to {
-          opacity: 0.82;
+          transform: translateX(140%);
         }
       }
       .modal-root {

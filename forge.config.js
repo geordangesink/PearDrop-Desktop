@@ -86,7 +86,7 @@ const makers = [
     config: {
       name: appName,
       title: `${appName} Installer`,
-      icon: path.join(__dirname, 'build', 'icon.icns'),
+      icon: path.join(__dirname, 'build', 'installer-drive.png'),
       overwrite: true,
       format: 'ULFO',
       additionalDMGOptions: {

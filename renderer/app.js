@@ -30,9 +30,9 @@ const STARRED_HOSTS_KEY = 'peardrops.desktop.starred-hosts.v1'
 const PUBLIC_SITE_ORIGIN = 'https://peardrop.online'
 const FALLBACK_RELAY_URL = 'wss://pear-drops.up.railway.app'
 const workerSpecifier = '/workers/main.js'
-const WORKER_INIT_ATTEMPT_TIMEOUT_MS = 15000
-const WORKER_INIT_TOTAL_TIMEOUT_MS = 90000
-const WORKER_INIT_RETRY_DELAY_MS = 750
+const WORKER_READY_TOKEN = '__PEARDROP_WORKER_RPC_READY__'
+const WORKER_READY_TIMEOUT_MS = 45000
+const WORKER_INIT_TIMEOUT_MS = 30000
 const bridge = window.bridge
 const decoder = new TextDecoder('utf8')
 const workerActivityBars = new Map()
@@ -125,6 +125,8 @@ let pendingHostNameResolve = null
 let copyFeedbackTimer = null
 let activeCopyFeedbackKey = ''
 let activeHostsPollTimer = null
+let workerReadySeen = false
+let workerReadyWaiters = []
 
 if (!bridge || typeof bridge.startWorker !== 'function') {
   setStatus('Desktop bridge failed to load. Check preload configuration.')
@@ -140,6 +142,10 @@ function wireGlobalEvents() {
   bridge.onWorkerStdout?.(workerSpecifier, (data) => {
     const text = decoder.decode(data).trim()
     if (!text) return
+    if (text.includes(WORKER_READY_TOKEN)) {
+      markWorkerReady()
+      return
+    }
     setWorkerLogMessage(text)
   })
 
@@ -560,10 +566,13 @@ function wireUiEvents() {
 async function boot() {
   try {
     setWorkerLogMessage('starting worker')
+    workerReadySeen = false
     await bridge.startWorker(workerSpecifier)
-    state.rpc = createRpcClient()
 
-    await waitForWorkerInit()
+    await waitForWorkerReadySignal(WORKER_READY_TIMEOUT_MS)
+    state.rpc = createRpcClient()
+    setWorkerLogMessage('initializing worker RPC')
+    await state.rpc.request(RpcCommand.INIT, {}, { timeoutMs: WORKER_INIT_TIMEOUT_MS })
 
     const mode = await bridge.getThemeMode?.()
     applyThemeMode(mode)
@@ -591,68 +600,45 @@ function setStartupLoading(isLoading) {
 
 function renderStartupSkeletons() {
   if (!startupLoading) return
-  if (sourcesGridEl) sourcesGridEl.innerHTML = buildSkeletonCardsHtml(4)
-  if (hostsRowsEl) hostsRowsEl.innerHTML = buildSkeletonCardsHtml(3)
-  if (starredRowsEl) starredRowsEl.innerHTML = buildSkeletonCardsHtml(2)
-  if (historyRowsEl) historyRowsEl.innerHTML = buildSkeletonCardsHtml(3)
-  if (driveRowsEl) driveRowsEl.innerHTML = buildSkeletonTableRowsHtml(6, 4)
+  if (sourcesGridEl) sourcesGridEl.innerHTML = '<div class="skeleton-container source" aria-hidden="true"></div>'
+  if (hostsRowsEl) hostsRowsEl.innerHTML = '<div class="skeleton-container hosts" aria-hidden="true"></div>'
+  if (starredRowsEl)
+    starredRowsEl.innerHTML = '<div class="skeleton-container starred" aria-hidden="true"></div>'
+  if (historyRowsEl)
+    historyRowsEl.innerHTML = '<div class="skeleton-container history" aria-hidden="true"></div>'
+  if (driveRowsEl)
+    driveRowsEl.innerHTML =
+      '<tr class="skeleton-table-row" aria-hidden="true"><td colspan="4"><div class="skeleton-container drive"></div></td></tr>'
 }
 
-function buildSkeletonCardsHtml(count) {
-  return Array.from({ length: Math.max(1, Number(count || 1)) })
-    .map(
-      () => `
-      <div class="skeleton-card skeleton-pulse" aria-hidden="true">
-        <div class="skeleton-row">
-          <div class="skeleton-thumb"></div>
-          <div class="skeleton-lines">
-            <div class="skeleton-line w-90"></div>
-            <div class="skeleton-line w-55"></div>
-          </div>
-        </div>
-      </div>`
-    )
-    .join('')
-}
+function waitForWorkerReadySignal(timeoutMs) {
+  if (workerReadySeen) return Promise.resolve()
 
-function buildSkeletonTableRowsHtml(rows, cols) {
-  const rowCount = Math.max(1, Number(rows || 1))
-  const colCount = Math.max(1, Number(cols || 1))
-  return Array.from({ length: rowCount })
-    .map(() => {
-      const cells = Array.from({ length: colCount })
-        .map(() => '<td><div class="skeleton-line w-70 skeleton-pulse"></div></td>')
-        .join('')
-      return `<tr class="skeleton-table-row" aria-hidden="true">${cells}</tr>`
-    })
-    .join('')
-}
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      workerReadyWaiters = workerReadyWaiters.filter((waiter) => waiter !== onReady)
+      reject(new Error(`Worker ready signal timed out after ${timeoutMs}ms`))
+    }, timeoutMs)
 
-async function waitForWorkerInit() {
-  const startedAt = Date.now()
-  let attempt = 0
-  let lastError = null
-
-  while (Date.now() - startedAt < WORKER_INIT_TOTAL_TIMEOUT_MS) {
-    attempt += 1
-    const elapsedMs = Date.now() - startedAt
-    const elapsedSecs = (elapsedMs / 1000).toFixed(1)
-    setWorkerLogMessage(`initializing worker RPC (attempt ${attempt}, ${elapsedSecs}s)`)
-
-    try {
-      await bridge.startWorker(workerSpecifier)
-      await state.rpc.request(RpcCommand.INIT, {}, { timeoutMs: WORKER_INIT_ATTEMPT_TIMEOUT_MS })
-      return
-    } catch (error) {
-      lastError = error
-      const message = String(error?.message || error || '')
-      if (message) setWorkerLogMessage(`worker init attempt ${attempt} failed: ${message}`)
-      await delay(WORKER_INIT_RETRY_DELAY_MS)
+    const onReady = () => {
+      clearTimeout(timer)
+      resolve()
     }
-  }
 
-  const message = String(lastError?.message || lastError || 'Worker initialization timed out')
-  throw new Error(message)
+    workerReadyWaiters.push(onReady)
+  })
+}
+
+function markWorkerReady() {
+  if (workerReadySeen) return
+  workerReadySeen = true
+  const waiters = workerReadyWaiters
+  workerReadyWaiters = []
+  for (const waiter of waiters) {
+    try {
+      waiter()
+    } catch {}
+  }
 }
 
 function startActiveHostsPolling() {
@@ -713,10 +699,6 @@ function withTimeout(promise, timeoutMs) {
         reject(error)
       })
   })
-}
-
-function delay(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
 function renderAll() {

@@ -98,7 +98,7 @@
     },
     "dmg": {
       "sign": false,
-      "icon": "build/icon.icns",
+      "icon": "build/installer-drive.png",
       "title": "PearDrop Installer",
       "iconSize": 112,
       "window": {
