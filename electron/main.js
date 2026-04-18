@@ -33,7 +33,7 @@ let workersShuttingDown = null
 let themeMode = 'system'
 let tray = null
 let sleepBlockerId = null
-let quitPromptArmedUntil = 0
+let quitPromptOpen = false
 
 const cmd = command(
   appName,
@@ -331,6 +331,7 @@ function resolveTrayIconPath() {
 }
 
 function createTray() {
+  if (!isMac && !isLinux) return
   if (tray) return
   const iconPath = resolveTrayIconPath()
   if (!iconPath) return
@@ -368,11 +369,6 @@ function hideAllWindows() {
   }
 }
 
-function shouldConfirmQuit() {
-  if (forceQuit) return false
-  return Date.now() > quitPromptArmedUntil
-}
-
 function setHostingActive(shouldPreventSleep) {
   const active = Boolean(shouldPreventSleep)
   if (active) {
@@ -386,23 +382,34 @@ function setHostingActive(shouldPreventSleep) {
   sleepBlockerId = null
 }
 
-function confirmQuitWithHostWarning() {
-  if (!shouldConfirmQuit()) return 'quit'
-  const focused = BrowserWindow.getFocusedWindow() || BrowserWindow.getAllWindows()[0] || null
-  const choice = dialog.showMessageBoxSync(focused, {
-    type: 'warning',
-    buttons: ['Close Window', 'Quit PearDrop', 'Cancel'],
-    defaultId: 0,
-    cancelId: 2,
-    message: 'Quit PearDrop?',
+function presentQuitPrompt() {
+  quitPromptOpen = true
+  sendToAll('app:quit-prompt', {
+    open: true,
     detail:
       'Quitting PearDrop stops all active hosts. Choose "Close Window" to keep hosting in the background via the tray.'
   })
-  // Allow a quick second Cmd+Q to quit without showing this prompt again.
-  quitPromptArmedUntil = Date.now() + 15000
-  if (choice === 1) return 'quit'
-  if (choice === 0) return 'close-window'
-  return 'cancel'
+}
+
+function hideQuitPrompt() {
+  if (!quitPromptOpen) return
+  quitPromptOpen = false
+  sendToAll('app:quit-prompt', { open: false })
+}
+
+function beginGracefulQuit() {
+  if (isQuitting) return
+  isQuitting = true
+  hideQuitPrompt()
+  sendToAll('app:quitting', { message: 'Shutting down PearDrop...' })
+  shutdownWorkers()
+    .catch((error) => {
+      console.error('Failed while shutting down workers', error)
+    })
+    .finally(() => {
+      setHostingActive(false)
+      app.exit(0)
+    })
 }
 
 function getWorker(specifier) {
@@ -603,6 +610,24 @@ ipcMain.handle('app:setHostingActive', async (evt, active) => {
   return true
 })
 
+ipcMain.handle('app:quitPromptAction', async (evt, actionRaw) => {
+  const action = String(actionRaw || '').trim().toLowerCase()
+  if (action === 'close-window') {
+    hideQuitPrompt()
+    hideAllWindows()
+    return true
+  }
+  if (action === 'cancel') {
+    hideQuitPrompt()
+    return true
+  }
+  if (action === 'quit') {
+    beginGracefulQuit()
+    return true
+  }
+  return false
+})
+
 app.setAsDefaultProtocolClient(protocol)
 
 app.on('open-url', (evt, url) => {
@@ -640,28 +665,18 @@ if (!lock) {
   })
 
   app.on('before-quit', (evt) => {
-    if (isQuitting) return
-    const action = confirmQuitWithHostWarning()
-    if (action === 'cancel') {
-      evt.preventDefault()
-      return
-    }
-    if (action === 'close-window') {
-      evt.preventDefault()
-      hideAllWindows()
-      return
-    }
     evt.preventDefault()
-    isQuitting = true
-    sendToAll('app:quitting', { message: 'Shutting down PearDrop...' })
-    shutdownWorkers()
-      .catch((error) => {
-        console.error('Failed while shutting down workers', error)
-      })
-      .finally(() => {
-        setHostingActive(false)
-        app.exit(0)
-      })
+    if (isQuitting) return
+    if (forceQuit || quitPromptOpen) {
+      beginGracefulQuit()
+      return
+    }
+    const windows = BrowserWindow.getAllWindows().filter((win) => !win.isDestroyed())
+    if (!windows.length) {
+      beginGracefulQuit()
+      return
+    }
+    presentQuitPrompt()
   })
 
   app.on('window-all-closed', () => {

@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-SRC="$ROOT/../images/transparent.png"
+SRC="$ROOT/../images/appling.png"
 BUILD_DIR="$ROOT/build"
 ICONSET_DIR="$BUILD_DIR/icon.iconset"
 

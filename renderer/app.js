@@ -94,6 +94,12 @@ const hostNameBackdropEl = document.getElementById('host-name-backdrop')
 const hostNameInputEl = document.getElementById('host-name-input')
 const hostNameCancelBtn = document.getElementById('host-name-cancel')
 const hostNameSubmitBtn = document.getElementById('host-name-submit')
+const appQuitModalEl = document.getElementById('app-quit-modal')
+const appQuitBackdropEl = document.getElementById('app-quit-backdrop')
+const appQuitSubEl = document.getElementById('app-quit-sub')
+const appQuitCloseWindowBtn = document.getElementById('app-quit-close-window')
+const appQuitConfirmBtn = document.getElementById('app-quit-confirm')
+const appQuitCancelBtn = document.getElementById('app-quit-cancel')
 const shutdownOverlayEl = document.getElementById('shutdown-overlay')
 const shutdownMessageEl = document.getElementById('shutdown-message')
 const sessionEditorEl = document.getElementById('host-session-editor')
@@ -142,7 +148,8 @@ const state = {
   sessionEditorSessionName: 'Host Session',
   sessionEditorRefs: [],
   sessionEditorSelected: new Set(),
-  sessionEditorApplying: false
+  sessionEditorApplying: false,
+  quitPromptOpen: false
 }
 const dedupedInitialSources = dedupeSourceRows(state.sources)
 if (dedupedInitialSources.length !== state.sources.length) {
@@ -199,6 +206,17 @@ function wireGlobalEvents() {
     const message = String(payload?.message || '').trim()
     if (shutdownMessageEl && message) shutdownMessageEl.textContent = message
     shutdownOverlayEl?.classList.remove('hidden')
+  })
+
+  bridge.onQuitPrompt?.((payload) => {
+    const open = Boolean(payload?.open)
+    state.quitPromptOpen = open
+    appQuitModalEl?.classList.toggle('hidden', !open)
+    if (open) {
+      const detail = String(payload?.detail || '').trim()
+      if (detail && appQuitSubEl) appQuitSubEl.textContent = detail
+      appQuitConfirmBtn?.focus?.()
+    }
   })
 
   bridge.onThemeMode?.((payload) => {
@@ -337,6 +355,26 @@ function wireUiEvents() {
     if (event.key === 'Escape') {
       event.preventDefault()
       resolveHostNamePrompt(null)
+    }
+  })
+
+  appQuitBackdropEl?.addEventListener('click', () => {
+    void bridge.quitPromptAction?.('cancel')
+  })
+  appQuitCancelBtn?.addEventListener('click', () => {
+    void bridge.quitPromptAction?.('cancel')
+  })
+  appQuitCloseWindowBtn?.addEventListener('click', () => {
+    void bridge.quitPromptAction?.('close-window')
+  })
+  appQuitConfirmBtn?.addEventListener('click', () => {
+    void bridge.quitPromptAction?.('quit')
+  })
+  window.addEventListener('keydown', (event) => {
+    if (!state.quitPromptOpen) return
+    if (event.key === 'Escape') {
+      event.preventDefault()
+      void bridge.quitPromptAction?.('cancel')
     }
   })
 
