@@ -22,7 +22,8 @@ const RpcCommand = {
   LIST_ACTIVE_HOSTS: 7,
   STOP_HOST: 8,
   START_HOST_FROM_TRANSFER: 9,
-  READ_ENTRY_CHUNK: 10
+  READ_ENTRY_CHUNK: 10,
+  UPDATE_ACTIVE_HOST: 11
 }
 
 const SOURCES_KEY = 'peardrops.desktop.sources.v1'
@@ -42,6 +43,10 @@ const sourceCoverLoadsInFlight = new Set()
 const CLOSE_ICON = '<span aria-hidden="true">✕</span>'
 const BIN_ICON =
   '<span class="mini-trash" aria-hidden="true"><span class="mini-trash-lid"></span><span class="mini-trash-body"><span class="mini-trash-line"></span><span class="mini-trash-line"></span></span></span>'
+const SESSION_EDITOR_HISTORY_MARKER = '__peardropSessionEditor'
+const IS_MAC = process.platform === 'darwin'
+const SESSION_SWIPE_TRIGGER_PX = 180
+const SESSION_SWIPE_IDLE_MS = 220
 
 const statusEls = [
   document.getElementById('upload-status'),
@@ -149,6 +154,7 @@ const state = {
   sessionEditorRefs: [],
   sessionEditorSelected: new Set(),
   sessionEditorApplying: false,
+  sessionEditorHistoryActive: false,
   quitPromptOpen: false
 }
 const dedupedInitialSources = dedupeSourceRows(state.sources)
@@ -164,6 +170,8 @@ let activeCopyFeedbackKey = ''
 let activeHostsPollTimer = null
 let workerReadySeen = false
 let workerReadyWaiters = []
+let sessionSwipeAccumulator = 0
+let sessionSwipeTimer = null
 
 if (!bridge || typeof bridge.startWorker !== 'function') {
   setStatus('Desktop bridge failed to load. Check preload configuration.')
@@ -176,6 +184,38 @@ setStartupLoading(true)
 void boot()
 
 function wireGlobalEvents() {
+  window.addEventListener('popstate', () => {
+    if (!state.sessionEditorOpen) {
+      state.sessionEditorHistoryActive = false
+      resetSessionSwipeState()
+      return
+    }
+    closeSessionEditor({ fromHistory: true })
+  })
+
+  window.addEventListener(
+    'wheel',
+    (event) => {
+      if (!IS_MAC || !state.sessionEditorOpen) return
+      if (event.defaultPrevented) return
+      if (event.ctrlKey || event.metaKey || event.altKey) return
+      const absX = Math.abs(Number(event.deltaX || 0))
+      const absY = Math.abs(Number(event.deltaY || 0))
+      if (absX < 6) return
+      if (absX < absY * 1.2) return
+
+      sessionSwipeAccumulator += Number(event.deltaX || 0)
+      if (sessionSwipeTimer) clearTimeout(sessionSwipeTimer)
+      sessionSwipeTimer = setTimeout(() => resetSessionSwipeState(), SESSION_SWIPE_IDLE_MS)
+
+      if (Math.abs(sessionSwipeAccumulator) < SESSION_SWIPE_TRIGGER_PX) return
+      event.preventDefault()
+      closeSessionEditor()
+      resetSessionSwipeState()
+    },
+    { passive: false }
+  )
+
   bridge.onWorkerStdout?.(workerSpecifier, (data) => {
     const text = decoder.decode(data).trim()
     if (!text) return
@@ -995,6 +1035,7 @@ function openSessionEditorForActiveHost(invite) {
   state.sessionEditorRefs = refs.map(toSessionEditorRef)
   state.sessionEditorSelected.clear()
   state.sessionEditorApplying = false
+  ensureSessionEditorHistoryEntry()
   state.sessionEditorOpen = true
   renderSessionEditor()
   renderActionButtons()
@@ -1014,13 +1055,18 @@ function openSessionEditorForHistory(item) {
   state.sessionEditorRefs = refs.map(toSessionEditorRef)
   state.sessionEditorSelected.clear()
   state.sessionEditorApplying = false
+  ensureSessionEditorHistoryEntry()
   state.sessionEditorOpen = true
   renderSessionEditor()
   renderActionButtons()
 }
 
-function closeSessionEditor() {
+function closeSessionEditor(options = {}) {
+  const fromHistory = Boolean(options.fromHistory)
+  if (!fromHistory && maybePopSessionEditorHistoryEntry()) return
   state.sessionEditorOpen = false
+  resetSessionSwipeState()
+  state.sessionEditorHistoryActive = false
   state.sessionEditorMode = ''
   state.sessionEditorHistoryId = ''
   state.sessionEditorInvite = ''
@@ -1030,6 +1076,39 @@ function closeSessionEditor() {
   state.sessionEditorApplying = false
   renderSessionEditor()
   renderActionButtons()
+}
+
+function ensureSessionEditorHistoryEntry() {
+  if (state.sessionEditorHistoryActive) return
+  try {
+    const nextState = {
+      ...(window.history.state && typeof window.history.state === 'object' ? window.history.state : {}),
+      [SESSION_EDITOR_HISTORY_MARKER]: true
+    }
+    window.history.pushState(nextState, '')
+    state.sessionEditorHistoryActive = true
+  } catch {
+    state.sessionEditorHistoryActive = false
+  }
+}
+
+function maybePopSessionEditorHistoryEntry() {
+  if (!state.sessionEditorHistoryActive) return false
+  const currentState = window.history.state
+  if (currentState && typeof currentState === 'object' && currentState[SESSION_EDITOR_HISTORY_MARKER]) {
+    window.history.back()
+    return true
+  }
+  state.sessionEditorHistoryActive = false
+  return false
+}
+
+function resetSessionSwipeState() {
+  sessionSwipeAccumulator = 0
+  if (sessionSwipeTimer) {
+    clearTimeout(sessionSwipeTimer)
+    sessionSwipeTimer = null
+  }
 }
 
 function addSessionEditorRefs(entries) {
@@ -1210,7 +1289,7 @@ function renderHosts() {
     const sessionDateTime = formatSessionDateTime(host.createdAt, parsedLabel.embeddedDateTime)
 
     const row = document.createElement('div')
-    row.className = 'row-item'
+    row.className = 'row-item host-row'
     if (selected) row.classList.add('selected')
     if (state.highlightedHostInvite && state.highlightedHostInvite === invite) {
       row.classList.add('row-item-highlight')
@@ -1313,7 +1392,7 @@ function renderHistory() {
     const sessionDateTime = formatSessionDateTime(item.createdAt, parsedLabel.embeddedDateTime)
 
     const row = document.createElement('div')
-    row.className = 'row-item'
+    row.className = 'row-item history-row'
     row.dataset.historyId = String(item.id || '')
     row.innerHTML = `
       <input type="checkbox" ${selected ? 'checked' : ''} />
@@ -1821,27 +1900,28 @@ async function applySessionEditorChanges() {
     if (!files.length) throw new Error('No readable files available from selected sources')
 
     const previousInvite = String(state.sessionEditorInvite || '').trim()
-    if (previousInvite) {
-      try {
-        await state.rpc.request(RpcCommand.STOP_HOST, { invite: previousInvite })
-      } catch {}
-      state.runningHistoryByInvite.delete(previousInvite)
-    }
+    if (!previousInvite) throw new Error('Active host invite missing; cannot apply in-place changes')
 
-    const response = await state.rpc.request(RpcCommand.CREATE_UPLOAD, {
+    const response = await state.rpc.request(RpcCommand.UPDATE_ACTIVE_HOST, {
+      invite: previousInvite,
       files,
       sessionName: String(state.sessionEditorSessionName || 'Host Session').trim() || 'Host Session'
     })
-    const invite = String(response?.nativeInvite || response?.invite || '').trim()
+    const invite = previousInvite
     if (invite) {
+      const totalBytes = Number(files.reduce((sum, row) => sum + Number(row.byteLength || 0), 0))
       state.runningHistoryByInvite.set(invite, {
         id: String(state.sessionEditorHistoryId || `hist:${Date.now()}:${Math.random().toString(16).slice(2, 8)}`),
         sourceRefs: validRefs,
         invite,
         sessionName: state.sessionEditorSessionName,
-        createdAt: Date.now(),
+        createdAt: Number(
+          state.runningHistoryByInvite.get(invite)?.createdAt ||
+            state.activeHosts.find((row) => String(row?.invite || '').trim() === invite)?.createdAt ||
+            Date.now()
+        ),
         fileCount: Array.isArray(response?.manifest) ? response.manifest.length : files.length,
-        totalBytes: Number(files.reduce((sum, row) => sum + Number(row.byteLength || 0), 0))
+        totalBytes
       })
     }
 
@@ -1857,7 +1937,7 @@ async function applySessionEditorChanges() {
     await refreshActiveHosts()
     closeSessionEditor()
     renderAll()
-    setStatus('Session changes applied and host restarted.')
+    setStatus('Session changes applied to active host.')
   } catch (error) {
     clearWorkerActivityBar('session-apply')
     setStatus(`Apply failed: ${error.message || String(error)}`)
@@ -1974,6 +2054,7 @@ function addLocalSources(entries) {
 async function handleWindowDrop(event) {
   const droppedPaths = extractDroppedPaths(event)
   if (!droppedPaths.length) return
+  const dropIntoSessionEditor = shouldDropIntoSessionEditor(event)
 
   const entries = []
   for (const droppedPath of droppedPaths) {
@@ -1993,7 +2074,18 @@ async function handleWindowDrop(event) {
     setStatus('No readable dropped files or folders were found.')
     return
   }
+  if (dropIntoSessionEditor) {
+    addSessionEditorRefs(entries)
+    return
+  }
   addLocalSources(entries)
+}
+
+function shouldDropIntoSessionEditor(event) {
+  if (!state.sessionEditorOpen || !sessionEditorEl) return false
+  const target = event?.target
+  if (!(target instanceof Element)) return false
+  return sessionEditorEl.contains(target)
 }
 
 function extractDroppedPaths(event) {

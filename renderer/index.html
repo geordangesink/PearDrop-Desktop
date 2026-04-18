@@ -113,8 +113,8 @@
           opacity 220ms ease;
       }
       #upload-page.editor-open #upload-main-content {
-        transform: translateX(-24%);
-        opacity: 0.22;
+        transform: translateX(-100%);
+        opacity: 1;
         pointer-events: none;
       }
       .session-editor {
@@ -410,6 +410,32 @@
         grid-template-columns: auto 1fr auto;
         align-items: center;
         gap: 8px;
+      }
+      .host-row,
+      .history-row {
+        cursor: pointer;
+      }
+      .host-row:hover,
+      .history-row:hover {
+        border-color: color-mix(in srgb, var(--brand) 45%, var(--line) 55%);
+      }
+      .host-row .controls .btn.icon,
+      .history-row .controls .btn.icon {
+        transition:
+          border-color 150ms ease,
+          box-shadow 150ms ease;
+      }
+      .host-row .controls .btn.icon:not(:disabled):hover,
+      .history-row .controls .btn.icon:not(:disabled):hover {
+        border-color: color-mix(in srgb, var(--brand) 70%, var(--line) 30%);
+        box-shadow: 0 0 0 1px color-mix(in srgb, var(--brand) 45%, transparent 55%);
+      }
+      .host-row .controls .btn.warn.icon:not(:disabled):hover,
+      .history-row .controls .btn.warn.icon:not(:disabled):hover,
+      .host-row .controls .btn.icon.icon-danger:not(:disabled):hover,
+      .history-row .controls .btn.icon.icon-danger:not(:disabled):hover {
+        border-color: color-mix(in srgb, #e85f5f 72%, #6a2727 28%);
+        box-shadow: 0 0 0 1px color-mix(in srgb, #e85f5f 45%, transparent 55%);
       }
       .row-item.selected {
         outline: 2px solid var(--brand);
