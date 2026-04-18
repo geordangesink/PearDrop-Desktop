@@ -8,6 +8,7 @@ const { pathToFileURL, fileURLToPath } = require('url')
 const os = require('os')
 const { execFile } = require('child_process')
 const { promisify } = require('util')
+const { webUtils } = require('electron')
 const execFileAsync = promisify(execFile)
 
 const RpcCommand = {
@@ -278,7 +279,7 @@ function wireUiEvents() {
 
   filePicker.addEventListener('change', () => {
     const files = Array.from(filePicker.files || [])
-    const paths = files.map((file) => String(file?.path || '')).filter(Boolean)
+    const paths = files.map((file) => resolveNativePathFromFile(file)).filter(Boolean)
     if (paths.length) addLocalSources(paths.map((srcPath) => ({ type: 'file', path: srcPath })))
     filePicker.value = ''
   })
@@ -1963,14 +1964,14 @@ function extractDroppedPaths(event) {
   const rawPaths = []
 
   for (const file of Array.from(transfer.files || [])) {
-    const value = String(file?.path || '').trim()
+    const value = resolveNativePathFromFile(file)
     if (value) rawPaths.push(value)
   }
 
   for (const item of Array.from(transfer.items || [])) {
     if (item?.kind !== 'file') continue
     const file = item.getAsFile?.()
-    const value = String(file?.path || '').trim()
+    const value = resolveNativePathFromFile(file)
     if (value) rawPaths.push(value)
   }
 
@@ -1981,6 +1982,17 @@ function extractDroppedPaths(event) {
   if (plainText) rawPaths.push(...extractFileUrisFromText(plainText))
 
   return normalizePathList(rawPaths)
+}
+
+function resolveNativePathFromFile(file) {
+  if (!file) return ''
+  try {
+    if (webUtils && typeof webUtils.getPathForFile === 'function') {
+      const nativePath = String(webUtils.getPathForFile(file) || '').trim()
+      if (nativePath) return nativePath
+    }
+  } catch {}
+  return String(file?.path || '').trim()
 }
 
 function extractFileUrisFromText(text) {
