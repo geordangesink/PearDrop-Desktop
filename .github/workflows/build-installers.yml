@@ -349,13 +349,39 @@ jobs:
               fi
             fi
             echo "Uploading $src -> $dst"
-            curl --fail --silent --show-error \
-              --retry 5 \
-              --retry-delay 2 \
-              --retry-all-errors \
-              -X PUT "${DOWNLOADS_UPLOAD_URL}/upload?path=${dst}" \
-              -H "x-upload-token: ${DOWNLOADS_UPLOAD_TOKEN}" \
-              --data-binary @"$src"
+            max_attempts=8
+            attempt=1
+            while [ "$attempt" -le "$max_attempts" ]; do
+              http_code="$(curl --silent --show-error \
+                --connect-timeout 20 \
+                --max-time 600 \
+                --output /tmp/peardrop-upload-response.txt \
+                --write-out "%{http_code}" \
+                -X PUT "${DOWNLOADS_UPLOAD_URL}/upload?path=${dst}" \
+                -H "x-upload-token: ${DOWNLOADS_UPLOAD_TOKEN}" \
+                --data-binary @"$src")" || http_code="000"
+
+              if [ "$http_code" -ge 200 ] && [ "$http_code" -lt 300 ]; then
+                break
+              fi
+
+              if [ "$http_code" = "500" ] || [ "$http_code" = "502" ] || [ "$http_code" = "503" ] || [ "$http_code" = "504" ] || [ "$http_code" = "429" ] || [ "$http_code" = "000" ]; then
+                if [ "$attempt" -lt "$max_attempts" ]; then
+                  sleep_seconds=$((attempt * 5))
+                  echo "Upload attempt $attempt/$max_attempts failed with HTTP $http_code; retrying in ${sleep_seconds}s..."
+                  sleep "$sleep_seconds"
+                  attempt=$((attempt + 1))
+                  continue
+                fi
+              fi
+
+              echo "Upload failed for $src -> $dst (HTTP $http_code)."
+              if [ -s /tmp/peardrop-upload-response.txt ]; then
+                echo "Response body:"
+                cat /tmp/peardrop-upload-response.txt
+              fi
+              exit 1
+            done
             echo "Uploaded $src -> $dst"
           }
 
@@ -363,11 +389,40 @@ jobs:
             src="$1"
             dst="$2"
             echo "Promoting $src -> $dst"
-            curl --fail --silent --show-error \
-              -X POST "${DOWNLOADS_UPLOAD_URL}/promote-latest" \
-              -H "content-type: application/json" \
-              -H "x-upload-token: ${DOWNLOADS_UPLOAD_TOKEN}" \
-              --data "{\"source\":\"${src}\",\"target\":\"${dst}\"}"
+            max_attempts=6
+            attempt=1
+            while [ "$attempt" -le "$max_attempts" ]; do
+              http_code="$(curl --silent --show-error \
+                --connect-timeout 20 \
+                --max-time 120 \
+                --output /tmp/peardrop-promote-response.txt \
+                --write-out "%{http_code}" \
+                -X POST "${DOWNLOADS_UPLOAD_URL}/promote-latest" \
+                -H "content-type: application/json" \
+                -H "x-upload-token: ${DOWNLOADS_UPLOAD_TOKEN}" \
+                --data "{\"source\":\"${src}\",\"target\":\"${dst}\"}")" || http_code="000"
+
+              if [ "$http_code" -ge 200 ] && [ "$http_code" -lt 300 ]; then
+                break
+              fi
+
+              if [ "$http_code" = "500" ] || [ "$http_code" = "502" ] || [ "$http_code" = "503" ] || [ "$http_code" = "504" ] || [ "$http_code" = "429" ] || [ "$http_code" = "000" ]; then
+                if [ "$attempt" -lt "$max_attempts" ]; then
+                  sleep_seconds=$((attempt * 4))
+                  echo "Promote attempt $attempt/$max_attempts failed with HTTP $http_code; retrying in ${sleep_seconds}s..."
+                  sleep "$sleep_seconds"
+                  attempt=$((attempt + 1))
+                  continue
+                fi
+              fi
+
+              echo "Promote failed for $src -> $dst (HTTP $http_code)."
+              if [ -s /tmp/peardrop-promote-response.txt ]; then
+                echo "Response body:"
+                cat /tmp/peardrop-promote-response.txt
+              fi
+              exit 1
+            done
             echo "Promoted $src -> $dst"
           }
 
