@@ -12,11 +12,16 @@
   "scripts": {
     "lint": "prettier --check . && lunte",
     "format": "prettier --write . && lunte --fix",
+    "icons:sync": "./scripts/sync-icons.sh",
     "start": "electron-forge start -- --no-updates",
     "start:prod-relay": "PEARDROPS_RELAY_URL=wss://pear-drops.up.railway.app electron-forge start -- --no-updates",
+    "prepackage": "npm run icons:sync",
     "package": "electron-forge package",
+    "premake:darwin": "npm run icons:sync",
     "make:darwin": "electron-forge make --platform=darwin",
+    "premake:darwin:builder": "npm run icons:sync",
     "make:darwin:builder": "electron-builder --mac dmg --arm64 --publish never",
+    "premake:mas": "npm run icons:sync",
     "make:mas": "test -n \"$MAS_PROVISIONING_PROFILE\" || { echo \"MAS_PROVISIONING_PROFILE is required\"; exit 1; }; test -n \"$MAC_CODESIGN_IDENTITY\" || { echo \"MAC_CODESIGN_IDENTITY is required\"; exit 1; }; test -n \"$MAC_INSTALLER_IDENTITY\" || { echo \"MAC_INSTALLER_IDENTITY is required\"; exit 1; }; APP_IDENTITY=\"$MAC_CODESIGN_IDENTITY\"; APP_IDENTITY=\"${APP_IDENTITY#3rd Party Mac Developer Application: }\"; INSTALLER_IDENTITY=\"$MAC_INSTALLER_IDENTITY\"; INSTALLER_IDENTITY=\"${INSTALLER_IDENTITY#3rd Party Mac Developer Installer: }\"; CSC_IDENTITY_AUTO_DISCOVERY=false SKIP_MANUAL_MAC_SIGN=1 electron-builder --mac mas --arm64 --publish never -c.mac.identity=\"$APP_IDENTITY\" -c.mas.identity=\"$APP_IDENTITY\" -c.pkg.identity=\"$INSTALLER_IDENTITY\" -c.mas.provisioningProfile=\"$MAS_PROVISIONING_PROFILE\"",
     "make:win32": "electron-forge make --platform=win32",
     "make:win32:squirrel": "electron-forge make --platform=win32 --targets @electron-forge/maker-squirrel",
@@ -75,6 +80,7 @@
     "afterSign": "scripts/mac-sign-after-pack.cjs",
     "mac": {
       "category": "public.app-category.productivity",
+      "icon": "build/icon.icns",
       "target": [
         "dmg"
       ],
@@ -86,6 +92,7 @@
     },
     "mas": {
       "category": "public.app-category.productivity",
+      "icon": "build/icon.icns",
       "identity": "${env.MAC_CODESIGN_IDENTITY}",
       "hardenedRuntime": false,
       "entitlements": "build/entitlements.mas.plist",
