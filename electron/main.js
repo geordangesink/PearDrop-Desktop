@@ -547,8 +547,14 @@ ipcMain.on('pkg', (evt) => {
 
 ipcMain.handle('pear:startWorker', async (evt, filename) => {
   const specifier = filename.startsWith('/') ? filename : `/${filename}`
-  getWorker(specifier)
-  return true
+  const alreadyRunning = workers.has(specifier)
+  const worker = getWorker(specifier)
+  return {
+    ok: true,
+    specifier,
+    alreadyRunning,
+    pid: Number(worker?.pid || 0)
+  }
 })
 
 ipcMain.handle('pear:worker:writeIPC', async (evt, filename, data) => {

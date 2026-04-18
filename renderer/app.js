@@ -672,9 +672,14 @@ async function boot() {
   try {
     setWorkerLogMessage('starting worker')
     workerReadySeen = false
-    await bridge.startWorker(workerSpecifier)
-
-    await waitForWorkerReadySignal(WORKER_READY_TIMEOUT_MS)
+    const start = await bridge.startWorker(workerSpecifier)
+    if (start && typeof start === 'object' && start.alreadyRunning) {
+      // On renderer refresh, the existing worker won't emit a fresh READY token.
+      markWorkerReady()
+      setWorkerLogMessage('reconnecting to existing worker')
+    } else {
+      await waitForWorkerReadySignal(WORKER_READY_TIMEOUT_MS)
+    }
     state.rpc = createRpcClient()
     setWorkerLogMessage('initializing worker RPC')
     await state.rpc.request(RpcCommand.INIT, {}, { timeoutMs: WORKER_INIT_TIMEOUT_MS })
