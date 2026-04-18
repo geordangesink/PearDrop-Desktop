@@ -1,4 +1,13 @@
-const { app, BrowserWindow, ipcMain, dialog, Menu } = require('electron')
+const {
+  app,
+  BrowserWindow,
+  ipcMain,
+  dialog,
+  Menu,
+  Tray,
+  nativeImage,
+  powerSaveBlocker
+} = require('electron')
 const { execFileSync } = require('child_process')
 const fs = require('fs')
 const os = require('os')
@@ -19,8 +28,11 @@ const workers = new Map()
 const exitedWorkers = new WeakSet()
 const pendingDeepLinks = []
 let isQuitting = false
+let forceQuit = false
 let workersShuttingDown = null
 let themeMode = 'system'
+let tray = null
+let sleepBlockerId = null
 
 const cmd = command(
   appName,
@@ -292,6 +304,96 @@ function createAppMenu() {
   Menu.setApplicationMenu(menu)
 }
 
+function revealMainWindow() {
+  const existing = BrowserWindow.getAllWindows()[0]
+  if (!existing || existing.isDestroyed()) return
+  if (!existing.isVisible()) existing.show()
+  if (existing.isMinimized()) existing.restore()
+  existing.focus()
+}
+
+function resolveTrayIconPath() {
+  const candidates = [
+    path.join(__dirname, '..', 'build', 'installer-drive.png'),
+    path.join(__dirname, '..', 'build', 'icon.png'),
+    path.join(__dirname, '..', 'build', 'icon.ico')
+  ]
+  for (const candidate of candidates) {
+    try {
+      if (fs.existsSync(candidate)) return candidate
+    } catch {}
+  }
+  return ''
+}
+
+function createTray() {
+  if (tray) return
+  const iconPath = resolveTrayIconPath()
+  if (!iconPath) return
+  const icon = nativeImage.createFromPath(iconPath)
+  tray = new Tray(icon)
+  tray.setToolTip(appName)
+  tray.setContextMenu(
+    Menu.buildFromTemplate([
+      {
+        label: 'Show PearDrop',
+        click: () => revealMainWindow()
+      },
+      {
+        type: 'separator'
+      },
+      {
+        label: 'Quit PearDrop',
+        click: () => {
+          forceQuit = true
+          app.quit()
+        }
+      }
+    ])
+  )
+  tray.on('click', () => revealMainWindow())
+}
+
+function hideAllWindows() {
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (!win.isDestroyed()) win.hide()
+  }
+}
+
+function shouldConfirmQuit() {
+  return !forceQuit
+}
+
+function setHostingActive(shouldPreventSleep) {
+  const active = Boolean(shouldPreventSleep)
+  if (active) {
+    if (sleepBlockerId && powerSaveBlocker.isStarted(sleepBlockerId)) return
+    sleepBlockerId = powerSaveBlocker.start('prevent-app-suspension')
+    return
+  }
+  if (sleepBlockerId && powerSaveBlocker.isStarted(sleepBlockerId)) {
+    powerSaveBlocker.stop(sleepBlockerId)
+  }
+  sleepBlockerId = null
+}
+
+function confirmQuitWithHostWarning() {
+  if (!shouldConfirmQuit()) return 'quit'
+  const focused = BrowserWindow.getFocusedWindow() || BrowserWindow.getAllWindows()[0] || null
+  const choice = dialog.showMessageBoxSync(focused, {
+    type: 'warning',
+    buttons: ['Close Window', 'Quit PearDrop', 'Cancel'],
+    defaultId: 0,
+    cancelId: 2,
+    message: 'Quit PearDrop?',
+    detail:
+      'Quitting PearDrop stops all active hosts. Choose "Close Window" to keep hosting in the background via the tray.'
+  })
+  if (choice === 1) return 'quit'
+  if (choice === 0) return 'close-window'
+  return 'cancel'
+}
+
 function getWorker(specifier) {
   if (workers.has(specifier)) return workers.get(specifier)
 
@@ -401,6 +503,12 @@ async function createWindow() {
     }
   })
 
+  win.on('close', (event) => {
+    if (isQuitting || forceQuit) return
+    event.preventDefault()
+    win.hide()
+  })
+
   const devServerUrl = process.env.PEAR_DEV_SERVER_URL
   if (devServerUrl) {
     await win.loadURL(devServerUrl)
@@ -472,6 +580,11 @@ ipcMain.handle('app:getThemeMode', async () => {
   return themeMode
 })
 
+ipcMain.handle('app:setHostingActive', async (evt, active) => {
+  setHostingActive(Boolean(active))
+  return true
+})
+
 app.setAsDefaultProtocolClient(protocol)
 
 app.on('open-url', (evt, url) => {
@@ -490,14 +603,36 @@ if (!lock) {
 
   app.whenReady().then(() => {
     createAppMenu()
+    createTray()
     createWindow().catch((error) => {
       console.error('Failed creating window', error)
       app.quit()
     })
   })
 
+  app.on('activate', () => {
+    const windows = BrowserWindow.getAllWindows().filter((win) => !win.isDestroyed())
+    if (!windows.length) {
+      createWindow().catch((error) => {
+        console.error('Failed creating window on activate', error)
+      })
+      return
+    }
+    revealMainWindow()
+  })
+
   app.on('before-quit', (evt) => {
     if (isQuitting) return
+    const action = confirmQuitWithHostWarning()
+    if (action === 'cancel') {
+      evt.preventDefault()
+      return
+    }
+    if (action === 'close-window') {
+      evt.preventDefault()
+      hideAllWindows()
+      return
+    }
     evt.preventDefault()
     isQuitting = true
     sendToAll('app:quitting', { message: 'Shutting down PearDrop...' })
@@ -506,11 +641,12 @@ if (!lock) {
         console.error('Failed while shutting down workers', error)
       })
       .finally(() => {
+        setHostingActive(false)
         app.exit(0)
       })
   })
 
   app.on('window-all-closed', () => {
-    if (process.platform !== 'darwin') app.quit()
+    // Keep app alive in tray/background when all windows are hidden.
   })
 }

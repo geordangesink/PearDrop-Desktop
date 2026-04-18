@@ -47,6 +47,9 @@ const api = {
   getThemeMode() {
     return ipcRenderer.invoke('app:getThemeMode')
   },
+  setHostingActive(active) {
+    return ipcRenderer.invoke('app:setHostingActive', Boolean(active))
+  },
   onThemeMode(listener) {
     const wrap = (evt, payload) => listener(payload || {})
     ipcRenderer.on('app:theme-mode', wrap)

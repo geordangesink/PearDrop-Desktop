@@ -27,6 +27,7 @@ const RpcCommand = {
 const SOURCES_KEY = 'peardrops.desktop.sources.v1'
 const HISTORY_KEY = 'peardrops.desktop.host-history.v1'
 const STARRED_HOSTS_KEY = 'peardrops.desktop.starred-hosts.v1'
+const HOST_PACKAGING_KEY = 'peardrops.desktop.host-packaging.v1'
 const PUBLIC_SITE_ORIGIN = 'https://peardrop.online'
 const FALLBACK_RELAY_URL = 'wss://pear-drops.up.railway.app'
 const workerSpecifier = '/workers/main.js'
@@ -118,7 +119,10 @@ const state = {
   inviteSource: '',
   themeMode: 'system',
   sourceMenuOpen: false,
-  currentTab: 'upload'
+  currentTab: 'upload',
+  hostPackagingMode: loadHostPackagingMode(),
+  highlightedHostInvite: '',
+  highlightedHostTimer: null
 }
 let startupLoading = true
 let pendingHostNameResolve = null
@@ -751,8 +755,11 @@ function promptForHostOptions(defaultValue = 'Host Session') {
   return new Promise((resolve) => {
     pendingHostNameResolve = resolve
     if (hostNameInputEl) hostNameInputEl.value = String(defaultValue || 'Host Session')
-    const rawRadio = document.querySelector('input[name="host-packaging"][value="raw"]')
-    if (rawRadio && typeof rawRadio === 'object' && 'checked' in rawRadio) rawRadio.checked = true
+    const mode = state.hostPackagingMode === 'zip' ? 'zip' : 'raw'
+    const modeRadio = document.querySelector(`input[name="host-packaging"][value="${mode}"]`)
+    if (modeRadio && typeof modeRadio === 'object' && 'checked' in modeRadio) {
+      modeRadio.checked = true
+    }
     hostNameModalEl?.classList.remove('hidden')
     setTimeout(() => hostNameInputEl?.focus(), 0)
   })
@@ -768,8 +775,17 @@ function resolveHostNamePrompt(value) {
 
 function readHostPackagingMode() {
   const selected = document.querySelector('input[name="host-packaging"]:checked')
-  if (!selected || typeof selected !== 'object' || !('value' in selected)) return 'raw'
-  return selected.value === 'zip' ? 'zip' : 'raw'
+  const nextMode =
+    !selected || typeof selected !== 'object' || !('value' in selected)
+      ? 'raw'
+      : selected.value === 'zip'
+        ? 'zip'
+        : 'raw'
+  if (state.hostPackagingMode !== nextMode) {
+    state.hostPackagingMode = nextMode
+    persistHostPackagingMode(nextMode)
+  }
+  return nextMode
 }
 
 function setTab(nextTab) {
@@ -894,6 +910,10 @@ function renderHosts() {
 
     const row = document.createElement('div')
     row.className = 'row-item'
+    if (selected) row.classList.add('selected')
+    if (state.highlightedHostInvite && state.highlightedHostInvite === invite) {
+      row.classList.add('row-item-highlight')
+    }
     row.dataset.invite = invite
     row.innerHTML = `
       <input type="checkbox" ${selected ? 'checked' : ''} />
@@ -1229,8 +1249,12 @@ async function hostSelectedSources(sessionNameInput = 'Host Session', packaging 
       })
     }
 
+    const selectedSet = new Set(ids.map((id) => String(id || '')))
+    state.sources = state.sources.filter((item) => !selectedSet.has(String(item?.id || '')))
     state.selectedSources.clear()
+    persistSources()
     await refreshActiveHosts()
+    if (invite) highlightHostRow(invite)
     renderAll()
     setStatus('Hosting started.')
   } catch (error) {
@@ -1321,6 +1345,7 @@ async function refreshActiveHosts() {
     const hosts = Array.isArray(response?.hosts) ? response.hosts : []
     finalizeEndedRunningSessions(hosts)
     state.activeHosts = hosts
+    void bridge.setHostingActive?.(hosts.length > 0).catch?.(() => {})
 
     const validInvites = new Set(
       hosts.map((host) => String(host.invite || '').trim()).filter(Boolean)
@@ -1333,6 +1358,7 @@ async function refreshActiveHosts() {
   } catch {
     state.activeHosts = []
     state.selectedHosts.clear()
+    void bridge.setHostingActive?.(false).catch?.(() => {})
     renderHosts()
   }
 }
@@ -1516,6 +1542,7 @@ function addLocalSources(entries) {
     }
     next.unshift(row)
     added.push(row)
+    state.selectedSources.add(row.id)
   }
 
   state.sources = next.slice(0, 300)
@@ -1589,6 +1616,44 @@ function rememberHistory(entry) {
 
 function persistSources() {
   localStorage.setItem(SOURCES_KEY, JSON.stringify(state.sources))
+}
+
+function loadHostPackagingMode() {
+  const raw = String(localStorage.getItem(HOST_PACKAGING_KEY) || '').trim().toLowerCase()
+  return raw === 'zip' ? 'zip' : 'raw'
+}
+
+function persistHostPackagingMode(mode) {
+  const nextMode = mode === 'zip' ? 'zip' : 'raw'
+  localStorage.setItem(HOST_PACKAGING_KEY, nextMode)
+}
+
+function highlightHostRow(invite) {
+  const value = String(invite || '').trim()
+  if (!value) return
+  state.highlightedHostInvite = value
+  if (state.highlightedHostTimer) {
+    clearTimeout(state.highlightedHostTimer)
+    state.highlightedHostTimer = null
+  }
+  state.highlightedHostTimer = setTimeout(() => {
+    state.highlightedHostInvite = ''
+    state.highlightedHostTimer = null
+    renderHosts()
+  }, 2800)
+  renderHosts()
+  requestAnimationFrame(() => {
+    const escapedInvite = escapeCssSelector(value)
+    const row = hostsRowsEl?.querySelector(`[data-invite="${escapedInvite}"]`)
+    if (row && typeof row.scrollIntoView === 'function') {
+      row.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' })
+    }
+  })
+}
+
+function escapeCssSelector(value) {
+  if (typeof CSS !== 'undefined' && CSS && typeof CSS.escape === 'function') return CSS.escape(value)
+  return String(value || '').replace(/["\\]/g, '\\$&')
 }
 
 async function pruneMissingSources(reason = 'refresh') {
