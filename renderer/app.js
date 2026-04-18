@@ -4,7 +4,7 @@ const RPC = require('bare-rpc')
 const fs = require('fs/promises')
 const nodeFs = require('fs')
 const nodePath = require('path')
-const { pathToFileURL } = require('url')
+const { pathToFileURL, fileURLToPath } = require('url')
 const os = require('os')
 const { execFile } = require('child_process')
 const { promisify } = require('util')
@@ -233,15 +233,18 @@ function wireGlobalEvents() {
     }
   })
 
-  window.addEventListener('dragover', (event) => {
+  const onGlobalDragOver = (event) => {
     event.preventDefault()
     if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy'
-  })
-
-  window.addEventListener('drop', (event) => {
+  }
+  const onGlobalDrop = (event) => {
     event.preventDefault()
     void handleWindowDrop(event)
-  })
+  }
+  window.addEventListener('dragover', onGlobalDragOver)
+  document.addEventListener('dragover', onGlobalDragOver, true)
+  window.addEventListener('drop', onGlobalDrop)
+  document.addEventListener('drop', onGlobalDrop, true)
 }
 
 function wireUiEvents() {
@@ -1925,8 +1928,7 @@ function addLocalSources(entries) {
 }
 
 async function handleWindowDrop(event) {
-  const files = Array.from(event?.dataTransfer?.files || [])
-  const droppedPaths = normalizePathList(files.map((file) => String(file?.path || '')))
+  const droppedPaths = extractDroppedPaths(event)
   if (!droppedPaths.length) return
 
   const entries = []
@@ -1948,6 +1950,46 @@ async function handleWindowDrop(event) {
     return
   }
   addLocalSources(entries)
+}
+
+function extractDroppedPaths(event) {
+  const transfer = event?.dataTransfer
+  if (!transfer) return []
+  const rawPaths = []
+
+  for (const file of Array.from(transfer.files || [])) {
+    const value = String(file?.path || '').trim()
+    if (value) rawPaths.push(value)
+  }
+
+  for (const item of Array.from(transfer.items || [])) {
+    if (item?.kind !== 'file') continue
+    const file = item.getAsFile?.()
+    const value = String(file?.path || '').trim()
+    if (value) rawPaths.push(value)
+  }
+
+  const uriList = String(transfer.getData?.('text/uri-list') || '').trim()
+  if (uriList) rawPaths.push(...extractFileUrisFromText(uriList))
+
+  const plainText = String(transfer.getData?.('text/plain') || '').trim()
+  if (plainText) rawPaths.push(...extractFileUrisFromText(plainText))
+
+  return normalizePathList(rawPaths)
+}
+
+function extractFileUrisFromText(text) {
+  const output = []
+  for (const rawLine of String(text || '').split(/\r?\n/)) {
+    const line = rawLine.trim()
+    if (!line || line.startsWith('#')) continue
+    if (line.startsWith('file://')) {
+      try {
+        output.push(nodePath.normalize(fileURLToPath(line)))
+      } catch {}
+    }
+  }
+  return output
 }
 
 function finalizeStoppedSession(invite, activeHost = null) {
