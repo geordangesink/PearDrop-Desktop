@@ -80,13 +80,13 @@ if (process.env.MAC_CODESIGN_IDENTITY) {
 }
 
 const makers = [
-  {
+      {
     name: '@electron-forge/maker-dmg',
     platforms: ['darwin'],
     config: {
       name: appName,
       title: `${appName} Installer`,
-      icon: path.join(__dirname, 'build', 'installer-drive.png'),
+      icon: path.join(__dirname, 'build', 'installer-drive.icns'),
       overwrite: true,
       format: 'ULFO',
       additionalDMGOptions: {

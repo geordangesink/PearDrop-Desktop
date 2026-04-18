@@ -5,7 +5,8 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 APP_SRC="$ROOT/../images/appling.png"
 INSTALLER_SRC="$ROOT/../images/transparent.png"
 BUILD_DIR="$ROOT/build"
-ICONSET_DIR="$BUILD_DIR/icon.iconset"
+APP_ICONSET_DIR="$BUILD_DIR/icon.iconset"
+INSTALLER_ICONSET_DIR="$BUILD_DIR/installer-drive.iconset"
 
 if [ ! -f "$APP_SRC" ]; then
   echo "App icon source not found: $APP_SRC" >&2
@@ -25,21 +26,19 @@ if [ "$(uname -s)" != "Darwin" ]; then
   exit 0
 fi
 
-rm -rf "$ICONSET_DIR"
-mkdir -p "$ICONSET_DIR"
+rm -rf "$APP_ICONSET_DIR" "$INSTALLER_ICONSET_DIR"
+mkdir -p "$APP_ICONSET_DIR" "$INSTALLER_ICONSET_DIR"
 
-sips -z 16 16 "$APP_SRC" --out "$ICONSET_DIR/icon_16x16.png" >/dev/null
-sips -z 32 32 "$APP_SRC" --out "$ICONSET_DIR/icon_16x16@2x.png" >/dev/null
-sips -z 32 32 "$APP_SRC" --out "$ICONSET_DIR/icon_32x32.png" >/dev/null
-sips -z 64 64 "$APP_SRC" --out "$ICONSET_DIR/icon_32x32@2x.png" >/dev/null
-sips -z 128 128 "$APP_SRC" --out "$ICONSET_DIR/icon_128x128.png" >/dev/null
-sips -z 256 256 "$APP_SRC" --out "$ICONSET_DIR/icon_128x128@2x.png" >/dev/null
-sips -z 256 256 "$APP_SRC" --out "$ICONSET_DIR/icon_256x256.png" >/dev/null
-sips -z 512 512 "$APP_SRC" --out "$ICONSET_DIR/icon_256x256@2x.png" >/dev/null
-sips -z 512 512 "$APP_SRC" --out "$ICONSET_DIR/icon_512x512.png" >/dev/null
-cp "$APP_SRC" "$ICONSET_DIR/icon_512x512@2x.png"
+for SIZE in 16 32 128 256 512; do
+  NEXT=$((SIZE * 2))
+  sips -z "$SIZE" "$SIZE" "$APP_SRC" --out "$APP_ICONSET_DIR/icon_${SIZE}x${SIZE}.png" >/dev/null
+  sips -z "$NEXT" "$NEXT" "$APP_SRC" --out "$APP_ICONSET_DIR/icon_${SIZE}x${SIZE}@2x.png" >/dev/null
+  sips -z "$SIZE" "$SIZE" "$INSTALLER_SRC" --out "$INSTALLER_ICONSET_DIR/icon_${SIZE}x${SIZE}.png" >/dev/null
+  sips -z "$NEXT" "$NEXT" "$INSTALLER_SRC" --out "$INSTALLER_ICONSET_DIR/icon_${SIZE}x${SIZE}@2x.png" >/dev/null
+done
 
-iconutil -c icns "$ICONSET_DIR" -o "$BUILD_DIR/icon.icns"
-rm -rf "$ICONSET_DIR"
+iconutil -c icns "$APP_ICONSET_DIR" -o "$BUILD_DIR/icon.icns"
+iconutil -c icns "$INSTALLER_ICONSET_DIR" -o "$BUILD_DIR/installer-drive.icns"
+rm -rf "$APP_ICONSET_DIR" "$INSTALLER_ICONSET_DIR"
 
 echo "Synced app icon from $APP_SRC and installer icon from $INSTALLER_SRC"
