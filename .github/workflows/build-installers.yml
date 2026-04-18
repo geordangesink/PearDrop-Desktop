@@ -171,15 +171,27 @@ jobs:
           security set-keychain-settings -lut 21600 "$keychain_path"
           security unlock-keychain -p "$keychain_password" "$keychain_path"
           security import "$cert_path" -P "$MAC_CODESIGN_CERT_PASSWORD" -A -t cert -f pkcs12 -k "$keychain_path"
-          security set-key-partition-list -S apple-tool:,apple: -s -k "$keychain_password" "$keychain_path"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$keychain_password" "$keychain_path"
 
           security list-keychains -d user -s "$keychain_path" $(security list-keychains -d user | tr -d '"')
           security default-keychain -d user -s "$keychain_path"
-          security find-identity -v -p codesigning "$keychain_path"
+
+          identity_dump="$(security find-identity -v -p codesigning "$keychain_path" || true)"
+          echo "$identity_dump"
+
+          dev_id_identity="$(awk -F'"' '/Developer ID Application:/{print $2; exit}' <<<"$identity_dump")"
+          if [ -z "$dev_id_identity" ]; then
+            echo "No 'Developer ID Application' identity found in imported keychain."
+            exit 1
+          fi
+
+          echo "Using Developer ID identity: $dev_id_identity"
+          echo "MAC_CODESIGN_IDENTITY=$dev_id_identity" >> "$GITHUB_ENV"
+          echo "CSC_NAME=$dev_id_identity" >> "$GITHUB_ENV"
+          echo "CSC_KEYCHAIN=$keychain_path" >> "$GITHUB_ENV"
 
       - name: Build macOS artifacts
         env:
-          MAC_CODESIGN_IDENTITY: ${{ secrets.MAC_CODESIGN_IDENTITY }}
           MAC_NOTARIZE_ON_PACKAGE: '0'
           DEBUG: electron-osx-sign*,electron-notarize*,@electron/osx-sign*,@electron/notarize*
         run: npm run make:darwin
