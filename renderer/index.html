@@ -102,6 +102,43 @@
       .tab-page {
         margin-top: 12px;
       }
+      #upload-page {
+        position: relative;
+        overflow: hidden;
+        min-height: 420px;
+      }
+      #upload-main-content {
+        transition:
+          transform 220ms ease,
+          opacity 220ms ease;
+      }
+      #upload-page.editor-open #upload-main-content {
+        transform: translateX(-24%);
+        opacity: 0.22;
+        pointer-events: none;
+      }
+      .session-editor {
+        position: absolute;
+        inset: 0;
+        padding: 6px 0;
+        transform: translateX(100%);
+        opacity: 0;
+        pointer-events: none;
+        transition:
+          transform 260ms ease,
+          opacity 220ms ease;
+      }
+      #upload-page.editor-open .session-editor {
+        transform: translateX(0);
+        opacity: 1;
+        pointer-events: auto;
+      }
+      .session-editor-head {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 4px;
+      }
       h1 {
         margin: 0;
         font-size: 30px;
@@ -697,14 +734,15 @@
       </div>
 
       <section id="upload-page" class="tab-page">
-        <section class="hero">
+        <div id="upload-main-content">
+          <section class="hero">
           <p id="upload-status" class="status">Starting worker...</p>
           <p id="upload-worker-log" class="worker-log">Worker logs: waiting for events.</p>
           <div id="upload-worker-activity-bars" class="activity-bars hidden"></div>
-        </section>
+          </section>
 
-        <section class="layout">
-          <article class="panel">
+          <section class="layout">
+            <article class="panel">
             <div class="panel-head">
               <h2 class="panel-title">Local Sources</h2>
               <div class="controls">
@@ -720,11 +758,11 @@
                 <button id="host-selected" class="btn">Host Selected</button>
               </div>
             </div>
-            <div id="sources-grid" class="source-grid"></div>
-          </article>
+              <div id="sources-grid" class="source-grid"></div>
+            </article>
 
-          <div class="right-col">
-            <article class="panel">
+            <div class="right-col">
+              <article class="panel">
               <div class="panel-head">
                 <h2 class="panel-title">Active Hosts</h2>
                 <div class="controls">
@@ -739,20 +777,20 @@
                   </button>
                 </div>
               </div>
-              <div id="hosts-rows" class="rows"></div>
-            </article>
+                <div id="hosts-rows" class="rows"></div>
+              </article>
 
-            <article class="panel">
+              <article class="panel">
               <div class="panel-head">
                 <h2 class="panel-title">Starred Hosts</h2>
               </div>
               <div id="starred-rows" class="rows"></div>
-            </article>
-          </div>
-        </section>
+              </article>
+            </div>
+          </section>
 
-        <section class="panel" style="margin-top: 12px">
-          <div class="panel-head">
+          <section class="panel" style="margin-top: 12px">
+            <div class="panel-head">
             <h2 class="panel-title">Host History</h2>
             <div class="controls">
               <button id="history-select-toggle" class="btn alt">Select All</button>
@@ -778,8 +816,33 @@
                 ></span>
               </button>
             </div>
+            </div>
+            <div id="history-rows" class="rows"></div>
+          </section>
+        </div>
+
+        <section id="host-session-editor" class="session-editor hidden">
+          <div class="session-editor-head">
+            <button id="session-editor-back" class="btn alt">← Back</button>
+            <h2 id="session-editor-title" class="panel-title">Host Session</h2>
           </div>
-          <div id="history-rows" class="rows"></div>
+          <p id="session-editor-sub" class="status">Edit files and folders in this host session.</p>
+          <div class="panel">
+            <div class="panel-head">
+              <h3 class="panel-title">Session Sources</h3>
+              <div class="controls">
+                <button id="session-editor-add-file" class="btn alt">Add File(s)</button>
+                <button id="session-editor-add-folder" class="btn alt">Add Folder</button>
+                <button id="session-editor-select-toggle" class="btn alt">Select All</button>
+                <button id="session-editor-remove-selected" class="btn alt">Remove Selected</button>
+              </div>
+            </div>
+            <div id="session-editor-rows" class="rows"></div>
+            <div class="modal-actions" style="margin-top: 12px">
+              <button id="session-editor-cancel" class="btn alt">Cancel</button>
+              <button id="session-editor-apply" class="btn">Apply Changes</button>
+            </div>
+          </div>
         </section>
       </section>
 

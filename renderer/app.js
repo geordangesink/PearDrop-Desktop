@@ -95,6 +95,17 @@ const hostNameCancelBtn = document.getElementById('host-name-cancel')
 const hostNameSubmitBtn = document.getElementById('host-name-submit')
 const shutdownOverlayEl = document.getElementById('shutdown-overlay')
 const shutdownMessageEl = document.getElementById('shutdown-message')
+const sessionEditorEl = document.getElementById('host-session-editor')
+const sessionEditorTitleEl = document.getElementById('session-editor-title')
+const sessionEditorSubEl = document.getElementById('session-editor-sub')
+const sessionEditorRowsEl = document.getElementById('session-editor-rows')
+const sessionEditorBackBtn = document.getElementById('session-editor-back')
+const sessionEditorCancelBtn = document.getElementById('session-editor-cancel')
+const sessionEditorAddFileBtn = document.getElementById('session-editor-add-file')
+const sessionEditorAddFolderBtn = document.getElementById('session-editor-add-folder')
+const sessionEditorSelectToggleBtn = document.getElementById('session-editor-select-toggle')
+const sessionEditorRemoveSelectedBtn = document.getElementById('session-editor-remove-selected')
+const sessionEditorApplyBtn = document.getElementById('session-editor-apply')
 
 const state = {
   rpc: null,
@@ -122,7 +133,15 @@ const state = {
   currentTab: 'upload',
   hostPackagingMode: loadHostPackagingMode(),
   highlightedHostInvite: '',
-  highlightedHostTimer: null
+  highlightedHostTimer: null,
+  sessionEditorOpen: false,
+  sessionEditorMode: '',
+  sessionEditorHistoryId: '',
+  sessionEditorInvite: '',
+  sessionEditorSessionName: 'Host Session',
+  sessionEditorRefs: [],
+  sessionEditorSelected: new Set(),
+  sessionEditorApplying: false
 }
 let startupLoading = true
 let pendingHostNameResolve = null
@@ -309,6 +328,62 @@ function wireUiEvents() {
       event.preventDefault()
       resolveHostNamePrompt(null)
     }
+  })
+
+  sessionEditorBackBtn?.addEventListener('click', () => closeSessionEditor())
+  sessionEditorCancelBtn?.addEventListener('click', () => closeSessionEditor())
+  sessionEditorAddFileBtn?.addEventListener('click', async () => {
+    if (state.sessionEditorApplying) return
+    const picked = normalizePathList(await bridge.pickFiles?.())
+    if (!picked.length) return
+    addSessionEditorRefs(picked.map((srcPath) => ({ type: 'file', path: srcPath })))
+  })
+  sessionEditorAddFolderBtn?.addEventListener('click', async () => {
+    if (state.sessionEditorApplying) return
+    const dir = String((await bridge.pickDirectory?.()) || '').trim()
+    if (!dir) return
+    addSessionEditorRefs([{ type: 'folder', path: dir }])
+  })
+  sessionEditorSelectToggleBtn?.addEventListener('click', () => {
+    if (!state.sessionEditorRefs.length) return
+    const allSelected = state.sessionEditorSelected.size === state.sessionEditorRefs.length
+    state.sessionEditorSelected.clear()
+    if (!allSelected) {
+      for (const ref of state.sessionEditorRefs) state.sessionEditorSelected.add(ref.id)
+    }
+    renderSessionEditor()
+  })
+  sessionEditorRemoveSelectedBtn?.addEventListener('click', () => {
+    if (!state.sessionEditorSelected.size) return
+    state.sessionEditorRefs = state.sessionEditorRefs.filter(
+      (ref) => !state.sessionEditorSelected.has(ref.id)
+    )
+    state.sessionEditorSelected.clear()
+    renderSessionEditor()
+  })
+  sessionEditorApplyBtn?.addEventListener('click', () => {
+    if (state.sessionEditorApplying) return
+    void applySessionEditorChanges()
+  })
+
+  sessionEditorRowsEl?.addEventListener('click', (event) => {
+    const target = event.target
+    if (!(target instanceof HTMLElement)) return
+    const row = target.closest('[data-session-ref-id]')
+    if (!(row instanceof HTMLElement)) return
+    const id = String(row.dataset.sessionRefId || '').trim()
+    if (!id) return
+    const actionNode = target.closest('[data-action]')
+    const action = String(actionNode?.getAttribute('data-action') || '')
+    if (action === 'remove') {
+      state.sessionEditorRefs = state.sessionEditorRefs.filter((ref) => ref.id !== id)
+      state.sessionEditorSelected.delete(id)
+      renderSessionEditor()
+      return
+    }
+    if (state.sessionEditorSelected.has(id)) state.sessionEditorSelected.delete(id)
+    else state.sessionEditorSelected.add(id)
+    renderSessionEditor()
   })
 
   viewDriveBtn.addEventListener('click', () => {
@@ -498,10 +573,13 @@ function wireUiEvents() {
       void stopHost(invite)
       return
     }
-
-    if (state.selectedHosts.has(invite)) state.selectedHosts.delete(invite)
-    else state.selectedHosts.add(invite)
-    renderHosts()
+    if (target.closest('input[type="checkbox"]')) {
+      if (state.selectedHosts.has(invite)) state.selectedHosts.delete(invite)
+      else state.selectedHosts.add(invite)
+      renderHosts()
+      return
+    }
+    void openSessionEditorForActiveHost(invite)
   })
 
   historyRowsEl.addEventListener('click', (event) => {
@@ -529,10 +607,14 @@ function wireUiEvents() {
       void rehostHistoryItem(item)
       return
     }
-
-    if (state.selectedHistory.has(id)) state.selectedHistory.delete(id)
-    else state.selectedHistory.add(id)
-    renderHistory()
+    if (target.closest('input[type="checkbox"]')) {
+      if (state.selectedHistory.has(id)) state.selectedHistory.delete(id)
+      else state.selectedHistory.add(id)
+      renderHistory()
+      return
+    }
+    const item = state.hostHistory.find((entry) => String(entry.id || '') === id)
+    if (item) openSessionEditorForHistory(item)
   })
 
   starredRowsEl.addEventListener('click', (event) => {
@@ -722,6 +804,7 @@ function renderAll() {
   renderHosts()
   renderHistory()
   renderDriveRows()
+  renderSessionEditor()
   renderActionButtons()
 }
 
@@ -759,6 +842,160 @@ function renderActionButtons() {
       ? '<span class="mini-spinner"></span>'
       : '▶'
   }
+  if (sessionEditorAddFileBtn) sessionEditorAddFileBtn.disabled = state.sessionEditorApplying
+  if (sessionEditorAddFolderBtn) sessionEditorAddFolderBtn.disabled = state.sessionEditorApplying
+  if (sessionEditorSelectToggleBtn) {
+    sessionEditorSelectToggleBtn.disabled =
+      state.sessionEditorApplying || state.sessionEditorRefs.length === 0
+  }
+  if (sessionEditorRemoveSelectedBtn) {
+    sessionEditorRemoveSelectedBtn.disabled =
+      state.sessionEditorApplying || state.sessionEditorSelected.size === 0
+  }
+  if (sessionEditorApplyBtn) {
+    sessionEditorApplyBtn.disabled = state.sessionEditorApplying || !state.sessionEditorRefs.length
+    sessionEditorApplyBtn.innerHTML = state.sessionEditorApplying
+      ? '<span class="mini-spinner"></span> Applying...'
+      : 'Apply Changes'
+  }
+}
+
+function renderSessionEditor() {
+  const open = Boolean(state.sessionEditorOpen)
+  sessionEditorEl?.classList.toggle('hidden', !open)
+  uploadPageEl?.classList.toggle('editor-open', open)
+  if (!open) return
+
+  if (sessionEditorTitleEl) {
+    sessionEditorTitleEl.textContent = String(state.sessionEditorSessionName || 'Host Session')
+  }
+  if (sessionEditorSubEl) {
+    const modeLabel = state.sessionEditorMode === 'active' ? 'active host session' : 'saved history session'
+    sessionEditorSubEl.textContent = `Edit sources for this ${modeLabel}.`
+  }
+  if (!sessionEditorRowsEl) return
+  sessionEditorRowsEl.textContent = ''
+
+  const allSelected =
+    state.sessionEditorRefs.length > 0 &&
+    state.sessionEditorSelected.size === state.sessionEditorRefs.length
+  if (sessionEditorSelectToggleBtn) {
+    sessionEditorSelectToggleBtn.textContent = allSelected ? 'Deselect All' : 'Select All'
+  }
+
+  if (!state.sessionEditorRefs.length) {
+    sessionEditorRowsEl.innerHTML = '<div class="muted-empty">No sources in this session.</div>'
+    return
+  }
+
+  for (const ref of state.sessionEditorRefs) {
+    const selected = state.sessionEditorSelected.has(ref.id)
+    const row = document.createElement('div')
+    row.className = `row-item${selected ? ' selected' : ''}`
+    row.dataset.sessionRefId = String(ref.id || '')
+    row.innerHTML = `
+      <input type="checkbox" ${selected ? 'checked' : ''} />
+      <div>
+        <div class="row-title">${escapeHtml(String(ref.name || ref.path || 'Source'))}</div>
+        <div class="row-sub">${escapeHtml(String(ref.type || 'file').toUpperCase())} · ${escapeHtml(String(ref.path || ''))}</div>
+      </div>
+      <div class="controls">
+        <button class="btn alt icon icon-danger" data-action="remove" aria-label="Remove" title="Remove">${BIN_ICON}</button>
+      </div>
+    `
+    sessionEditorRowsEl.appendChild(row)
+  }
+}
+
+function toSessionEditorRef(ref) {
+  const srcPath = String(ref?.path || '').trim()
+  const srcType = ref?.type === 'folder' ? 'folder' : 'file'
+  return {
+    id: `sess:${Date.now()}:${Math.random().toString(16).slice(2, 8)}`,
+    type: srcType,
+    path: srcPath,
+    name: String(ref?.name || nodePath.basename(srcPath) || srcPath)
+  }
+}
+
+function openSessionEditorForActiveHost(invite) {
+  const value = String(invite || '').trim()
+  if (!value) return
+  const activeHost = state.activeHosts.find((row) => String(row?.invite || '').trim() === value)
+  const running = state.runningHistoryByInvite.get(value)
+  const fallback = state.hostHistory.find((row) => String(row?.invite || '').trim() === value)
+  const refs = Array.isArray(running?.sourceRefs)
+    ? running.sourceRefs
+    : Array.isArray(fallback?.sourceRefs)
+      ? fallback.sourceRefs
+      : []
+  if (!refs.length) {
+    setStatus('No editable source list was found for this host session.')
+    return
+  }
+  state.sessionEditorMode = 'active'
+  state.sessionEditorHistoryId = String(fallback?.id || '')
+  state.sessionEditorInvite = value
+  state.sessionEditorSessionName = String(
+    activeHost?.sessionLabel || activeHost?.sessionName || running?.sessionName || fallback?.sessionName || 'Host Session'
+  )
+  state.sessionEditorRefs = refs.map(toSessionEditorRef)
+  state.sessionEditorSelected.clear()
+  state.sessionEditorApplying = false
+  state.sessionEditorOpen = true
+  renderSessionEditor()
+  renderActionButtons()
+}
+
+function openSessionEditorForHistory(item) {
+  if (!item) return
+  const refs = Array.isArray(item.sourceRefs) ? item.sourceRefs : []
+  if (!refs.length) {
+    setStatus('No editable source list was found for this history session.')
+    return
+  }
+  state.sessionEditorMode = 'history'
+  state.sessionEditorHistoryId = String(item.id || '')
+  state.sessionEditorInvite = String(item.invite || '')
+  state.sessionEditorSessionName = String(item.sessionName || item.sessionLabel || 'Host Session')
+  state.sessionEditorRefs = refs.map(toSessionEditorRef)
+  state.sessionEditorSelected.clear()
+  state.sessionEditorApplying = false
+  state.sessionEditorOpen = true
+  renderSessionEditor()
+  renderActionButtons()
+}
+
+function closeSessionEditor() {
+  state.sessionEditorOpen = false
+  state.sessionEditorMode = ''
+  state.sessionEditorHistoryId = ''
+  state.sessionEditorInvite = ''
+  state.sessionEditorSessionName = 'Host Session'
+  state.sessionEditorRefs = []
+  state.sessionEditorSelected.clear()
+  state.sessionEditorApplying = false
+  renderSessionEditor()
+  renderActionButtons()
+}
+
+function addSessionEditorRefs(entries) {
+  const existing = new Set(
+    state.sessionEditorRefs.map((ref) => `${String(ref.type || 'file')}::${String(ref.path || '')}`)
+  )
+  let added = 0
+  for (const entry of entries) {
+    const ref = toSessionEditorRef(entry)
+    if (!ref.path) continue
+    const key = `${ref.type}::${ref.path}`
+    if (existing.has(key)) continue
+    existing.add(key)
+    state.sessionEditorRefs.push(ref)
+    added++
+  }
+  if (added > 0) setStatus(`Added ${added} source${added === 1 ? '' : 's'} to session.`)
+  renderSessionEditor()
+  renderActionButtons()
 }
 
 function promptForHostOptions(defaultValue = 'Host Session') {
@@ -800,6 +1037,7 @@ function readHostPackagingMode() {
 
 function setTab(nextTab) {
   state.currentTab = nextTab === 'download' ? 'download' : 'upload'
+  if (state.currentTab !== 'upload' && state.sessionEditorOpen) closeSessionEditor()
   renderTabs()
 }
 
@@ -1464,6 +1702,119 @@ async function rehostSelectedHistory() {
   }
 }
 
+async function resolveExistingSourceRefsWithPrompt(refs, actionLabel = 'Host') {
+  const existing = []
+  const missing = []
+  for (const ref of refs) {
+    const srcPath = String(ref?.path || '').trim()
+    if (!srcPath) continue
+    // eslint-disable-next-line no-await-in-loop
+    const exists = await pathExists(srcPath)
+    if (exists) existing.push(ref)
+    else missing.push(srcPath)
+  }
+  if (!missing.length) return existing
+
+  const preview = missing.slice(0, 5).join('\n')
+  const tail = missing.length > 5 ? `\n…and ${missing.length - 5} more.` : ''
+  const proceed = window.confirm(
+    `${actionLabel} found missing sources:\n\n${preview}${tail}\n\nContinue anyway and remove missing sources?`
+  )
+  if (!proceed) throw new Error(`${actionLabel} cancelled because some sources were missing`)
+  if (!existing.length) throw new Error('No remaining sources are available to host')
+  return existing
+}
+
+async function applySessionEditorChanges() {
+  if (!state.rpc) return setStatus('Worker is still starting.')
+  if (!state.sessionEditorOpen || state.sessionEditorApplying) return
+  if (!state.sessionEditorRefs.length) return setStatus('Add at least one source first.')
+
+  try {
+    state.sessionEditorApplying = true
+    renderActionButtons()
+
+    const rawRefs = state.sessionEditorRefs.map((ref) => ({
+      type: ref.type === 'folder' ? 'folder' : 'file',
+      path: ref.path,
+      name: ref.name
+    }))
+    const validRefs = await resolveExistingSourceRefsWithPrompt(rawRefs, 'Apply changes')
+
+    if (state.sessionEditorMode === 'history') {
+      state.hostHistory = state.hostHistory.map((row) =>
+        String(row?.id || '') === String(state.sessionEditorHistoryId || '')
+          ? { ...row, sourceRefs: validRefs, sessionName: state.sessionEditorSessionName }
+          : row
+      )
+      localStorage.setItem(HISTORY_KEY, JSON.stringify(state.hostHistory))
+      closeSessionEditor()
+      renderHistory()
+      setStatus('Session source list updated.')
+      return
+    }
+
+    const files = []
+    upsertWorkerActivityBar('session-apply', 'Applying session source changes', 0, validRefs.length)
+    for (let i = 0; i < validRefs.length; i++) {
+      const ref = validRefs[i]
+      // eslint-disable-next-line no-await-in-loop
+      const expanded = await expandSourceToFiles(ref)
+      files.push(...expanded)
+      upsertWorkerActivityBar('session-apply', 'Applying session source changes', i + 1, validRefs.length)
+    }
+    clearWorkerActivityBar('session-apply')
+    if (!files.length) throw new Error('No readable files available from selected sources')
+
+    const previousInvite = String(state.sessionEditorInvite || '').trim()
+    if (previousInvite) {
+      try {
+        await state.rpc.request(RpcCommand.STOP_HOST, { invite: previousInvite })
+      } catch {}
+      state.runningHistoryByInvite.delete(previousInvite)
+    }
+
+    const response = await state.rpc.request(RpcCommand.CREATE_UPLOAD, {
+      files,
+      sessionName: String(state.sessionEditorSessionName || 'Host Session').trim() || 'Host Session'
+    })
+    const invite = String(response?.nativeInvite || response?.invite || '').trim()
+    if (invite) {
+      state.runningHistoryByInvite.set(invite, {
+        id: String(state.sessionEditorHistoryId || `hist:${Date.now()}:${Math.random().toString(16).slice(2, 8)}`),
+        sourceRefs: validRefs,
+        invite,
+        sessionName: state.sessionEditorSessionName,
+        createdAt: Date.now(),
+        fileCount: Array.isArray(response?.manifest) ? response.manifest.length : files.length,
+        totalBytes: Number(files.reduce((sum, row) => sum + Number(row.byteLength || 0), 0))
+      })
+    }
+
+    if (state.sessionEditorHistoryId) {
+      state.hostHistory = state.hostHistory.map((row) =>
+        String(row?.id || '') === String(state.sessionEditorHistoryId || '')
+          ? { ...row, sourceRefs: validRefs, sessionName: state.sessionEditorSessionName }
+          : row
+      )
+      localStorage.setItem(HISTORY_KEY, JSON.stringify(state.hostHistory))
+    }
+
+    await refreshActiveHosts()
+    closeSessionEditor()
+    renderAll()
+    setStatus('Session changes applied and host restarted.')
+  } catch (error) {
+    clearWorkerActivityBar('session-apply')
+    setStatus(`Apply failed: ${error.message || String(error)}`)
+  } finally {
+    state.sessionEditorApplying = false
+    clearWorkerActivityBar('session-apply')
+    renderActionButtons()
+    renderSessionEditor()
+  }
+}
+
 async function rehostHistoryItem(historyItem) {
   if (!state.rpc) return setStatus('Worker is still starting.')
   const rowId = String(historyItem?.id || '').trim()
@@ -1480,16 +1831,13 @@ async function rehostHistoryItem(historyItem) {
 
     upsertWorkerActivityBar('rehost-expand', 'Validating history paths', 0, refs.length)
 
-    for (let i = 0; i < refs.length; i++) {
-      const ref = refs[i]
-      // eslint-disable-next-line no-await-in-loop
-      const exists = await pathExists(ref.path)
-      if (!exists) throw new Error(`Cannot re-host: source no longer exists (${ref.path})`)
-      upsertWorkerActivityBar('rehost-expand', 'Validating history paths', i + 1, refs.length)
+    const validRefs = await resolveExistingSourceRefsWithPrompt(refs, 'Re-host')
+    for (let i = 0; i < validRefs.length; i++) {
+      upsertWorkerActivityBar('rehost-expand', 'Validating history paths', i + 1, validRefs.length)
     }
 
     const files = []
-    for (const ref of refs) {
+    for (const ref of validRefs) {
       // eslint-disable-next-line no-await-in-loop
       const expanded = await expandSourceToFiles(ref)
       files.push(...expanded)
@@ -1508,6 +1856,7 @@ async function rehostHistoryItem(historyItem) {
     if (invite) {
       state.runningHistoryByInvite.set(invite, {
         ...historyItem,
+        sourceRefs: validRefs,
         invite,
         createdAt: Number(historyItem.createdAt || Date.now()),
         fileCount: Array.isArray(response?.manifest) ? response.manifest.length : files.length,
