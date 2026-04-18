@@ -318,6 +318,7 @@ async function revealMainWindow() {
 
 function resolveTrayIconPath() {
   const candidates = [
+    path.join(__dirname, '..', 'build', 'tray.png'),
     path.join(__dirname, '..', 'build', 'installer-drive.png'),
     path.join(__dirname, '..', 'build', 'icon.png'),
     path.join(__dirname, '..', 'build', 'icon.ico')
@@ -330,12 +331,42 @@ function resolveTrayIconPath() {
   return ''
 }
 
+function invertImageForLinux(image) {
+  if (!image || image.isEmpty()) return image
+  const size = image.getSize()
+  const width = Number(size?.width || 0)
+  const height = Number(size?.height || 0)
+  if (!width || !height) return image
+
+  const src = image.toBitmap()
+  const out = Buffer.from(src)
+  for (let i = 0; i < out.length; i += 4) {
+    const alpha = out[i + 3]
+    if (!alpha) continue
+    // Native bitmap is BGRA.
+    out[i] = 255 - out[i]
+    out[i + 1] = 255 - out[i + 1]
+    out[i + 2] = 255 - out[i + 2]
+  }
+  return nativeImage.createFromBitmap(out, { width, height })
+}
+
+function buildTrayImage(iconPath) {
+  let image = nativeImage.createFromPath(iconPath)
+  if (!image || image.isEmpty()) return image
+  const targetSize = isMac ? 18 : 22
+  image = image.resize({ width: targetSize, height: targetSize, quality: 'best' })
+  if (isLinux) image = invertImageForLinux(image)
+  return image
+}
+
 function createTray() {
   if (!isMac && !isLinux) return
   if (tray) return
   const iconPath = resolveTrayIconPath()
   if (!iconPath) return
-  const icon = nativeImage.createFromPath(iconPath)
+  const icon = buildTrayImage(iconPath)
+  if (!icon || icon.isEmpty()) return
   tray = new Tray(icon)
   tray.setToolTip(appName)
   tray.setContextMenu(
@@ -387,7 +418,7 @@ function presentQuitPrompt() {
   sendToAll('app:quit-prompt', {
     open: true,
     detail:
-      'Quitting PearDrop stops all active hosts. Choose "Close Window" to keep hosting in the background via the tray.'
+      'Quitting PearDrop stops all active hosts. Choose "Close Window" to keep hosting sessions open in the background.'
   })
 }
 
