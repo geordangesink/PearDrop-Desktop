@@ -1113,7 +1113,7 @@ function renderSources() {
   sourceSelectToggleBtn.textContent = allSelected ? 'Deselect All' : 'Select All'
 
   if (!state.sources.length) {
-    sourcesGridEl.innerHTML = '<div class="muted-empty">No local sources added yet.</div>'
+    sourcesGridEl.innerHTML = '<div class="muted-empty">Assets to prepare your Hosting session will show up here.</div>'
     renderActionButtons()
     return
   }
