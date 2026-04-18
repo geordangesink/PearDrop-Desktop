@@ -12,6 +12,7 @@ const { isDeepLink, findDeepLink } = require('./lib/deep-link')
 
 const appName = pkg.productName || pkg.name
 const protocol = 'peardrops'
+const TRANSFER_WORKER_SPECIFIER = '/workers/main.js'
 const DEFAULT_DEV_RELAY = 'wss://pear-drops.up.railway.app'
 const DEFAULT_PROD_RELAY = 'wss://pear-drops.up.railway.app'
 const workers = new Map()
@@ -382,6 +383,13 @@ function resolveRelayUrl() {
 }
 
 async function createWindow() {
+  // Start the transfer worker before renderer boot so cold startup can initialize in parallel.
+  try {
+    getWorker(TRANSFER_WORKER_SPECIFIER)
+  } catch (error) {
+    console.error('Failed prewarming transfer worker', error)
+  }
+
   const win = new BrowserWindow({
     width: 1120,
     height: 720,

@@ -97,7 +97,14 @@
       "identity": "${env.MAC_INSTALLER_IDENTITY}"
     },
     "dmg": {
-      "sign": false
+      "sign": false,
+      "icon": "build/icon.icns",
+      "title": "PearDrop Installer",
+      "iconSize": 112,
+      "window": {
+        "width": 658,
+        "height": 498
+      }
     }
   }
 }

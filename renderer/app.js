@@ -30,6 +30,9 @@ const STARRED_HOSTS_KEY = 'peardrops.desktop.starred-hosts.v1'
 const PUBLIC_SITE_ORIGIN = 'https://peardrop.online'
 const FALLBACK_RELAY_URL = 'wss://pear-drops.up.railway.app'
 const workerSpecifier = '/workers/main.js'
+const WORKER_INIT_ATTEMPT_TIMEOUT_MS = 15000
+const WORKER_INIT_TOTAL_TIMEOUT_MS = 90000
+const WORKER_INIT_RETRY_DELAY_MS = 750
 const bridge = window.bridge
 const decoder = new TextDecoder('utf8')
 const workerActivityBars = new Map()
@@ -117,6 +120,7 @@ const state = {
   sourceMenuOpen: false,
   currentTab: 'upload'
 }
+let startupLoading = true
 let pendingHostNameResolve = null
 let copyFeedbackTimer = null
 let activeCopyFeedbackKey = ''
@@ -129,6 +133,7 @@ if (!bridge || typeof bridge.startWorker !== 'function') {
 
 wireGlobalEvents()
 wireUiEvents()
+setStartupLoading(true)
 void boot()
 
 function wireGlobalEvents() {
@@ -558,8 +563,7 @@ async function boot() {
     await bridge.startWorker(workerSpecifier)
     state.rpc = createRpcClient()
 
-    setWorkerLogMessage('initializing worker RPC')
-    await state.rpc.request(RpcCommand.INIT, {}, { timeoutMs: 15000 })
+    await waitForWorkerInit()
 
     const mode = await bridge.getThemeMode?.()
     applyThemeMode(mode)
@@ -568,12 +572,87 @@ async function boot() {
     await pruneMissingSources('launch')
     startActiveHostsPolling()
     renderAll()
+    setStartupLoading(false)
     setStatus('Ready.')
     setWorkerLogMessage('ready')
   } catch (error) {
+    setStartupLoading(false)
+    renderAll()
     setStatus(`Worker start failed: ${error.message || String(error)}`)
     setWorkerLogMessage(`start failed: ${error.message || String(error)}`)
   }
+}
+
+function setStartupLoading(isLoading) {
+  startupLoading = !!isLoading
+  if (document?.body) document.body.dataset.startupLoading = startupLoading ? '1' : '0'
+  if (startupLoading) renderStartupSkeletons()
+}
+
+function renderStartupSkeletons() {
+  if (!startupLoading) return
+  if (sourcesGridEl) sourcesGridEl.innerHTML = buildSkeletonCardsHtml(4)
+  if (hostsRowsEl) hostsRowsEl.innerHTML = buildSkeletonCardsHtml(3)
+  if (starredRowsEl) starredRowsEl.innerHTML = buildSkeletonCardsHtml(2)
+  if (historyRowsEl) historyRowsEl.innerHTML = buildSkeletonCardsHtml(3)
+  if (driveRowsEl) driveRowsEl.innerHTML = buildSkeletonTableRowsHtml(6, 4)
+}
+
+function buildSkeletonCardsHtml(count) {
+  return Array.from({ length: Math.max(1, Number(count || 1)) })
+    .map(
+      () => `
+      <div class="skeleton-card skeleton-pulse" aria-hidden="true">
+        <div class="skeleton-row">
+          <div class="skeleton-thumb"></div>
+          <div class="skeleton-lines">
+            <div class="skeleton-line w-90"></div>
+            <div class="skeleton-line w-55"></div>
+          </div>
+        </div>
+      </div>`
+    )
+    .join('')
+}
+
+function buildSkeletonTableRowsHtml(rows, cols) {
+  const rowCount = Math.max(1, Number(rows || 1))
+  const colCount = Math.max(1, Number(cols || 1))
+  return Array.from({ length: rowCount })
+    .map(() => {
+      const cells = Array.from({ length: colCount })
+        .map(() => '<td><div class="skeleton-line w-70 skeleton-pulse"></div></td>')
+        .join('')
+      return `<tr class="skeleton-table-row" aria-hidden="true">${cells}</tr>`
+    })
+    .join('')
+}
+
+async function waitForWorkerInit() {
+  const startedAt = Date.now()
+  let attempt = 0
+  let lastError = null
+
+  while (Date.now() - startedAt < WORKER_INIT_TOTAL_TIMEOUT_MS) {
+    attempt += 1
+    const elapsedMs = Date.now() - startedAt
+    const elapsedSecs = (elapsedMs / 1000).toFixed(1)
+    setWorkerLogMessage(`initializing worker RPC (attempt ${attempt}, ${elapsedSecs}s)`)
+
+    try {
+      await bridge.startWorker(workerSpecifier)
+      await state.rpc.request(RpcCommand.INIT, {}, { timeoutMs: WORKER_INIT_ATTEMPT_TIMEOUT_MS })
+      return
+    } catch (error) {
+      lastError = error
+      const message = String(error?.message || error || '')
+      if (message) setWorkerLogMessage(`worker init attempt ${attempt} failed: ${message}`)
+      await delay(WORKER_INIT_RETRY_DELAY_MS)
+    }
+  }
+
+  const message = String(lastError?.message || lastError || 'Worker initialization timed out')
+  throw new Error(message)
 }
 
 function startActiveHostsPolling() {
@@ -634,6 +713,10 @@ function withTimeout(promise, timeoutMs) {
         reject(error)
       })
   })
+}
+
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
 function renderAll() {

@@ -6,6 +6,8 @@ const windowsSlug = String(appName).replace(/\s+/g, '')
 const { isWindows } = require('which-runtime')
 const buildMsix = process.env.BUILD_MSIX === '1'
 const desktopBuildNumber = resolveDesktopBuildNumber()
+const dmgBackgroundPath = path.join(__dirname, 'build', 'dmg-background.png')
+const hasDmgBackground = fs.existsSync(dmgBackgroundPath)
 const windowsAuthors =
   typeof pkg.author === 'string' && pkg.author.trim().length > 0 ? pkg.author.trim() : appName
 
@@ -81,7 +83,27 @@ const makers = [
   {
     name: '@electron-forge/maker-dmg',
     platforms: ['darwin'],
-    config: {}
+    config: {
+      name: appName,
+      title: `${appName} Installer`,
+      icon: path.join(__dirname, 'build', 'icon.icns'),
+      overwrite: true,
+      format: 'ULFO',
+      additionalDMGOptions: {
+        'icon-size': 112,
+        window: {
+          size: {
+            width: 658,
+            height: 498
+          }
+        }
+      },
+      ...(hasDmgBackground
+        ? {
+            background: dmgBackgroundPath
+          }
+        : {})
+    }
   },
   {
     name: '@electron-forge/maker-squirrel',
