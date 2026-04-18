@@ -2,8 +2,8 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-APP_SRC="$ROOT/../images/appling.png"
-INSTALLER_SRC="$ROOT/../images/transparent.png"
+APP_SRC="$ROOT/assets/icons/appling.png"
+INSTALLER_SRC="$ROOT/assets/icons/transparent.png"
 BUILD_DIR="$ROOT/build"
 APP_ICONSET_DIR="$BUILD_DIR/icon.iconset"
 INSTALLER_ICONSET_DIR="$BUILD_DIR/installer-drive.iconset"
