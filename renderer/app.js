@@ -2111,7 +2111,7 @@ function persistSources() {
 
 function loadHostPackagingMode() {
   const raw = String(localStorage.getItem(HOST_PACKAGING_KEY) || '').trim().toLowerCase()
-  return raw === 'zip' ? 'zip' : 'raw'
+  return raw === 'raw' ? 'raw' : 'zip'
 }
 
 function persistHostPackagingMode(mode) {
