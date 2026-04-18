@@ -762,86 +762,86 @@
       <section id="upload-page" class="tab-page">
         <div id="upload-main-content">
           <section class="hero">
-          <p id="upload-status" class="status">Starting worker...</p>
-          <p id="upload-worker-log" class="worker-log">Worker logs: waiting for events.</p>
-          <div id="upload-worker-activity-bars" class="activity-bars hidden"></div>
+            <p id="upload-status" class="status">Starting worker...</p>
+            <p id="upload-worker-log" class="worker-log">Worker logs: waiting for events.</p>
+            <div id="upload-worker-activity-bars" class="activity-bars hidden"></div>
           </section>
 
           <section class="layout">
             <article class="panel">
-            <div class="panel-head">
-              <h2 class="panel-title">Local Sources</h2>
-              <div class="controls">
-                <span class="menu-wrap">
-                  <button id="source-add" class="btn">＋</button>
-                  <div id="source-add-menu" class="menu hidden">
-                    <button id="add-file-action">Add File(s)</button>
-                    <button id="add-folder-action">Add Folder</button>
-                  </div>
-                </span>
-                <button id="source-select-toggle" class="btn alt">Select All</button>
-                <button id="source-remove-all" class="btn alt">Clear Selected</button>
-                <button id="host-selected" class="btn">Host Selected</button>
+              <div class="panel-head">
+                <h2 class="panel-title">Local Sources</h2>
+                <div class="controls">
+                  <span class="menu-wrap">
+                    <button id="source-add" class="btn">＋</button>
+                    <div id="source-add-menu" class="menu hidden">
+                      <button id="add-file-action">Add File(s)</button>
+                      <button id="add-folder-action">Add Folder</button>
+                    </div>
+                  </span>
+                  <button id="source-select-toggle" class="btn alt">Select All</button>
+                  <button id="source-remove-all" class="btn alt">Clear Selected</button>
+                  <button id="host-selected" class="btn">Host Selected</button>
+                </div>
               </div>
-            </div>
               <div id="sources-grid" class="source-grid"></div>
             </article>
 
             <div class="right-col">
               <article class="panel">
-              <div class="panel-head">
-                <h2 class="panel-title">Active Hosts</h2>
-                <div class="controls">
-                  <button id="hosts-select-toggle" class="btn alt">Select All</button>
-                  <button
-                    id="hosts-stop-selected"
-                    class="btn warn icon"
-                    title="Stop Selected"
-                    aria-label="Stop Selected"
-                  >
-                    ⏹
-                  </button>
+                <div class="panel-head">
+                  <h2 class="panel-title">Active Hosts</h2>
+                  <div class="controls">
+                    <button id="hosts-select-toggle" class="btn alt">Select All</button>
+                    <button
+                      id="hosts-stop-selected"
+                      class="btn warn icon"
+                      title="Stop Selected"
+                      aria-label="Stop Selected"
+                    >
+                      ⏹
+                    </button>
+                  </div>
                 </div>
-              </div>
                 <div id="hosts-rows" class="rows"></div>
               </article>
 
               <article class="panel">
-              <div class="panel-head">
-                <h2 class="panel-title">Starred Hosts</h2>
-              </div>
-              <div id="starred-rows" class="rows"></div>
+                <div class="panel-head">
+                  <h2 class="panel-title">Starred Hosts</h2>
+                </div>
+                <div id="starred-rows" class="rows"></div>
               </article>
             </div>
           </section>
 
           <section class="panel" style="margin-top: 12px">
             <div class="panel-head">
-            <h2 class="panel-title">Host History</h2>
-            <div class="controls">
-              <button id="history-select-toggle" class="btn alt">Select All</button>
-              <button
-                id="history-rehost-selected"
-                class="btn icon"
-                title="Re-host Selected"
-                aria-label="Re-host Selected"
-              >
-                ▶
-              </button>
-              <button
-                id="history-remove-selected"
-                class="btn alt icon icon-danger"
-                title="Remove Selected"
-                aria-label="Remove Selected"
-              >
-                <span class="mini-trash" aria-hidden="true"
-                  ><span class="mini-trash-lid"></span
-                  ><span class="mini-trash-body"
-                    ><span class="mini-trash-line"></span
-                    ><span class="mini-trash-line"></span></span
-                ></span>
-              </button>
-            </div>
+              <h2 class="panel-title">Host History</h2>
+              <div class="controls">
+                <button id="history-select-toggle" class="btn alt">Select All</button>
+                <button
+                  id="history-rehost-selected"
+                  class="btn icon"
+                  title="Re-host Selected"
+                  aria-label="Re-host Selected"
+                >
+                  ▶
+                </button>
+                <button
+                  id="history-remove-selected"
+                  class="btn alt icon icon-danger"
+                  title="Remove Selected"
+                  aria-label="Remove Selected"
+                >
+                  <span class="mini-trash" aria-hidden="true"
+                    ><span class="mini-trash-lid"></span
+                    ><span class="mini-trash-body"
+                      ><span class="mini-trash-line"></span
+                      ><span class="mini-trash-line"></span></span
+                  ></span>
+                </button>
+              </div>
             </div>
             <div id="history-rows" class="rows"></div>
           </section>

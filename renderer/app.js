@@ -789,15 +789,22 @@ function setStartupLoading(isLoading) {
 
 function renderStartupSkeletons() {
   if (!startupLoading) return
-  if (sourcesGridEl) sourcesGridEl.innerHTML = '<div class="skeleton-container source" aria-hidden="true"></div>'
-  if (hostsRowsEl) hostsRowsEl.innerHTML = '<div class="skeleton-container hosts" aria-hidden="true"></div>'
-  if (starredRowsEl)
+  if (sourcesGridEl) {
+    sourcesGridEl.innerHTML = '<div class="skeleton-container source" aria-hidden="true"></div>'
+  }
+  if (hostsRowsEl) {
+    hostsRowsEl.innerHTML = '<div class="skeleton-container hosts" aria-hidden="true"></div>'
+  }
+  if (starredRowsEl) {
     starredRowsEl.innerHTML = '<div class="skeleton-container starred" aria-hidden="true"></div>'
-  if (historyRowsEl)
+  }
+  if (historyRowsEl) {
     historyRowsEl.innerHTML = '<div class="skeleton-container history" aria-hidden="true"></div>'
-  if (driveRowsEl)
+  }
+  if (driveRowsEl) {
     driveRowsEl.innerHTML =
       '<tr class="skeleton-table-row" aria-hidden="true"><td colspan="4"><div class="skeleton-container drive"></div></td></tr>'
+  }
 }
 
 function waitForWorkerReadySignal(timeoutMs) {
@@ -963,7 +970,8 @@ function renderSessionEditor() {
     sessionEditorTitleEl.textContent = String(state.sessionEditorSessionName || 'Host Session')
   }
   if (sessionEditorSubEl) {
-    const modeLabel = state.sessionEditorMode === 'active' ? 'active host session' : 'saved history session'
+    const modeLabel =
+      state.sessionEditorMode === 'active' ? 'active host session' : 'saved history session'
     sessionEditorSubEl.textContent = `Edit sources for this ${modeLabel}.`
   }
   if (!sessionEditorRowsEl) return
@@ -1030,7 +1038,11 @@ function openSessionEditorForActiveHost(invite) {
   state.sessionEditorHistoryId = String(fallback?.id || '')
   state.sessionEditorInvite = value
   state.sessionEditorSessionName = String(
-    activeHost?.sessionLabel || activeHost?.sessionName || running?.sessionName || fallback?.sessionName || 'Host Session'
+    activeHost?.sessionLabel ||
+      activeHost?.sessionName ||
+      running?.sessionName ||
+      fallback?.sessionName ||
+      'Host Session'
   )
   state.sessionEditorRefs = refs.map(toSessionEditorRef)
   state.sessionEditorSelected.clear()
@@ -1082,7 +1094,9 @@ function ensureSessionEditorHistoryEntry() {
   if (state.sessionEditorHistoryActive) return
   try {
     const nextState = {
-      ...(window.history.state && typeof window.history.state === 'object' ? window.history.state : {}),
+      ...(window.history.state && typeof window.history.state === 'object'
+        ? window.history.state
+        : {}),
       [SESSION_EDITOR_HISTORY_MARKER]: true
     }
     window.history.pushState(nextState, '')
@@ -1095,7 +1109,11 @@ function ensureSessionEditorHistoryEntry() {
 function maybePopSessionEditorHistoryEntry() {
   if (!state.sessionEditorHistoryActive) return false
   const currentState = window.history.state
-  if (currentState && typeof currentState === 'object' && currentState[SESSION_EDITOR_HISTORY_MARKER]) {
+  if (
+    currentState &&
+    typeof currentState === 'object' &&
+    currentState[SESSION_EDITOR_HISTORY_MARKER]
+  ) {
     window.history.back()
     return true
   }
@@ -1192,7 +1210,8 @@ function renderSources() {
   sourceSelectToggleBtn.textContent = allSelected ? 'Deselect All' : 'Select All'
 
   if (!state.sources.length) {
-    sourcesGridEl.innerHTML = '<div class="muted-empty">Assets to prepare your Hosting session will show up here.</div>'
+    sourcesGridEl.innerHTML =
+      '<div class="muted-empty">Assets to prepare your Hosting session will show up here.</div>'
     renderActionButtons()
     return
   }
@@ -1894,13 +1913,20 @@ async function applySessionEditorChanges() {
       // eslint-disable-next-line no-await-in-loop
       const expanded = await expandSourceToFiles(ref)
       files.push(...expanded)
-      upsertWorkerActivityBar('session-apply', 'Applying session source changes', i + 1, validRefs.length)
+      upsertWorkerActivityBar(
+        'session-apply',
+        'Applying session source changes',
+        i + 1,
+        validRefs.length
+      )
     }
     clearWorkerActivityBar('session-apply')
     if (!files.length) throw new Error('No readable files available from selected sources')
 
     const previousInvite = String(state.sessionEditorInvite || '').trim()
-    if (!previousInvite) throw new Error('Active host invite missing; cannot apply in-place changes')
+    if (!previousInvite) {
+      throw new Error('Active host invite missing; cannot apply in-place changes')
+    }
 
     const response = await state.rpc.request(RpcCommand.UPDATE_ACTIVE_HOST, {
       invite: previousInvite,
@@ -1911,13 +1937,17 @@ async function applySessionEditorChanges() {
     if (invite) {
       const totalBytes = Number(files.reduce((sum, row) => sum + Number(row.byteLength || 0), 0))
       state.runningHistoryByInvite.set(invite, {
-        id: String(state.sessionEditorHistoryId || `hist:${Date.now()}:${Math.random().toString(16).slice(2, 8)}`),
+        id: String(
+          state.sessionEditorHistoryId ||
+            `hist:${Date.now()}:${Math.random().toString(16).slice(2, 8)}`
+        ),
         sourceRefs: validRefs,
         invite,
         sessionName: state.sessionEditorSessionName,
         createdAt: Number(
           state.runningHistoryByInvite.get(invite)?.createdAt ||
-            state.activeHosts.find((row) => String(row?.invite || '').trim() === invite)?.createdAt ||
+            state.activeHosts.find((row) => String(row?.invite || '').trim() === invite)
+              ?.createdAt ||
             Date.now()
         ),
         fileCount: Array.isArray(response?.manifest) ? response.manifest.length : files.length,
@@ -2084,7 +2114,8 @@ async function handleWindowDrop(event) {
 function shouldDropIntoSessionEditor(event) {
   if (!state.sessionEditorOpen || !sessionEditorEl) return false
   const target = event?.target
-  if (!(target instanceof Element)) return false
+  const DomElement = globalThis?.Element
+  if (!DomElement || !(target instanceof DomElement)) return false
   return sessionEditorEl.contains(target)
 }
 
@@ -2202,7 +2233,9 @@ function persistSources() {
 }
 
 function loadHostPackagingMode() {
-  const raw = String(localStorage.getItem(HOST_PACKAGING_KEY) || '').trim().toLowerCase()
+  const raw = String(localStorage.getItem(HOST_PACKAGING_KEY) || '')
+    .trim()
+    .toLowerCase()
   return raw === 'raw' ? 'raw' : 'zip'
 }
 
@@ -2235,7 +2268,10 @@ function highlightHostRow(invite) {
 }
 
 function escapeCssSelector(value) {
-  if (typeof CSS !== 'undefined' && CSS && typeof CSS.escape === 'function') return CSS.escape(value)
+  const cssApi = globalThis?.CSS
+  if (cssApi && typeof cssApi.escape === 'function') {
+    return cssApi.escape(value)
+  }
   return String(value || '').replace(/["\\]/g, '\\$&')
 }
 

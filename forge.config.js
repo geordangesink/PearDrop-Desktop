@@ -80,7 +80,7 @@ if (process.env.MAC_CODESIGN_IDENTITY) {
 }
 
 const makers = [
-      {
+  {
     name: '@electron-forge/maker-dmg',
     platforms: ['darwin'],
     config: {

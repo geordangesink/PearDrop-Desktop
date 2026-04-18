@@ -650,7 +650,9 @@ ipcMain.handle('app:setHostingActive', async (evt, active) => {
 })
 
 ipcMain.handle('app:quitPromptAction', async (evt, actionRaw) => {
-  const action = String(actionRaw || '').trim().toLowerCase()
+  const action = String(actionRaw || '')
+    .trim()
+    .toLowerCase()
   if (action === 'close-window') {
     hideQuitPrompt()
     hideAllWindows()
