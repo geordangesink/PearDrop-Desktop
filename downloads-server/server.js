@@ -2,6 +2,8 @@ const express = require('express')
 const fs = require('fs')
 const fsp = require('fs/promises')
 const path = require('path')
+const crypto = require('crypto')
+const { pipeline } = require('stream/promises')
 
 const app = express()
 const port = Number(process.env.PORT || 3000)
@@ -48,21 +50,19 @@ app.put('/upload', async (req, res) => {
 
     const absolute = path.join(activeDownloadRoot, relative)
     await fsp.mkdir(path.dirname(absolute), { recursive: true })
+    const tempName = `.${path.basename(absolute)}.${process.pid}.${Date.now()}.${crypto.randomUUID()}.part`
+    const tempPath = path.join(path.dirname(absolute), tempName)
 
-    const stream = fs.createWriteStream(absolute)
-    req.pipe(stream)
-    stream.on('finish', () => res.status(201).send('ok'))
-    stream.on('error', (error) => {
-      console.error('[upload] stream error', {
-        code: error?.code,
-        message: error?.message,
-        absolute
-      })
-      res.status(500).send(error?.code || 'write error')
+    await pipeline(req, fs.createWriteStream(tempPath))
+    await fsp.rename(tempPath, absolute)
+    return res.status(201).send('ok')
+  } catch (error) {
+    console.error('[upload] request error', {
+      code: error?.code,
+      message: error?.message
     })
-  } catch {
-    console.error('[upload] request error')
-    res.status(500).send('error')
+    if (error?.code === 'ENOSPC') return res.status(507).send('ENOSPC')
+    return res.status(500).send(error?.code || 'error')
   }
 })
 
@@ -131,6 +131,9 @@ async function start() {
     console.log(`pear-drop downloads server listening on ${port}`)
     console.log(`serving ${activeDownloadRoot} at /downloads`)
   })
+  // Installer binaries are large; disable per-request timeout to avoid aborted uploads.
+  server.requestTimeout = 0
+  server.headersTimeout = 0
 
   server.on('error', (error) => {
     console.error('[server] listen error', {

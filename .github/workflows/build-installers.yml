@@ -311,6 +311,7 @@ jobs:
         run: ls -la release-assets
 
       - name: Upload installers to Railway downloads
+        if: vars.ENABLE_DOWNLOADS_UPLOAD == '1'
         env:
           DOWNLOADS_UPLOAD_URL: ${{ secrets.DOWNLOADS_UPLOAD_URL }}
           DOWNLOADS_UPLOAD_TOKEN: ${{ secrets.DOWNLOADS_UPLOAD_TOKEN }}
@@ -369,6 +370,11 @@ jobs:
                 if [ "$attempt" -lt "$max_attempts" ]; then
                   sleep_seconds=$((attempt * 5))
                   echo "Upload attempt $attempt/$max_attempts failed with HTTP $http_code; retrying in ${sleep_seconds}s..."
+                  if [ -s /tmp/peardrop-upload-response.txt ]; then
+                    echo "Upload response body (attempt $attempt):"
+                    head -c 400 /tmp/peardrop-upload-response.txt || true
+                    echo
+                  fi
                   sleep "$sleep_seconds"
                   attempt=$((attempt + 1))
                   continue
@@ -429,6 +435,10 @@ jobs:
           # Windows EXE only (required)
           upload "release-assets/PearDrop-Setup-${version}.exe" "win32/v${version}/PearDrop-Setup-${version}.exe"
           promote_latest "win32/v${version}/PearDrop-Setup-${version}.exe" "win32/latest/PearDrop-Setup.exe"
+
+      - name: Railway upload suspended
+        if: vars.ENABLE_DOWNLOADS_UPLOAD != '1'
+        run: echo "Skipping Railway downloads upload (set repo variable ENABLE_DOWNLOADS_UPLOAD=1 to re-enable)."
 
       - name: Move main-latest tag to current commit
         if: github.ref == 'refs/heads/main'
