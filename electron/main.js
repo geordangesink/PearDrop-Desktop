@@ -311,6 +311,15 @@ async function revealMainWindow() {
     await createWindow()
     return
   }
+  focusMainWindow(existing)
+}
+
+function focusMainWindow(existingWindow = null) {
+  const existing =
+    existingWindow && !existingWindow.isDestroyed()
+      ? existingWindow
+      : BrowserWindow.getAllWindows()[0]
+  if (!existing || existing.isDestroyed()) return
   if (!existing.isVisible()) existing.show()
   if (existing.isMinimized()) existing.restore()
   existing.focus()
@@ -390,7 +399,7 @@ function createTray() {
     ])
   )
   tray.on('click', () => {
-    void revealMainWindow()
+    focusMainWindow()
   })
 }
 
