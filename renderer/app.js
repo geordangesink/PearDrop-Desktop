@@ -143,6 +143,12 @@ const state = {
   sessionEditorSelected: new Set(),
   sessionEditorApplying: false
 }
+const dedupedInitialSources = dedupeSourceRows(state.sources)
+if (dedupedInitialSources.length !== state.sources.length) {
+  state.sources = dedupedInitialSources
+  persistSources()
+}
+
 let startupLoading = true
 let pendingHostNameResolve = null
 let copyFeedbackTimer = null
@@ -1442,7 +1448,7 @@ async function hostSelectedSources(sessionNameInput = 'Host Session', packaging 
   const ids = Array.from(state.selectedSources)
   if (!ids.length) return setStatus('Select at least one local source first.')
 
-  const picked = state.sources.filter((item) => ids.includes(item.id))
+  const picked = dedupeSourceRows(state.sources.filter((item) => ids.includes(item.id)))
   if (!picked.length) return setStatus('Selected sources are no longer available.')
 
   try {
@@ -1703,9 +1709,10 @@ async function rehostSelectedHistory() {
 }
 
 async function resolveExistingSourceRefsWithPrompt(refs, actionLabel = 'Host') {
+  const uniqueRefs = dedupeSourceRows(refs)
   const existing = []
   const missing = []
-  for (const ref of refs) {
+  for (const ref of uniqueRefs) {
     const srcPath = String(ref?.path || '').trim()
     if (!srcPath) continue
     // eslint-disable-next-line no-await-in-loop
@@ -1884,14 +1891,15 @@ async function rehostHistoryItem(historyItem) {
 function addLocalSources(entries) {
   const now = Date.now()
   const next = state.sources.slice()
+  const existingKeys = new Set(next.map((row) => sourceIdentityKey(row)).filter(Boolean))
   const added = []
 
   for (const entry of entries) {
     const srcPath = String(entry.path || '').trim()
     if (!srcPath) continue
     const type = entry.type === 'folder' ? 'folder' : 'file'
-    const exists = next.find((row) => row.path === srcPath && row.type === type)
-    if (exists) continue
+    const key = sourceIdentityKey({ type, path: srcPath })
+    if (key && existingKeys.has(key)) continue
     const row = {
       id: `src:${now}:${Math.random().toString(16).slice(2, 8)}`,
       type,
@@ -1899,6 +1907,7 @@ function addLocalSources(entries) {
       name: nodePath.basename(srcPath) || srcPath,
       addedAt: Date.now()
     }
+    if (key) existingKeys.add(key)
     next.unshift(row)
     added.push(row)
     state.selectedSources.add(row.id)
@@ -2216,6 +2225,26 @@ function sanitizeRelativePath(value) {
 function normalizePathList(value) {
   if (!Array.isArray(value)) return []
   return value.map((entry) => String(entry || '').trim()).filter(Boolean)
+}
+
+function sourceIdentityKey(entry) {
+  const type = entry?.type === 'folder' ? 'folder' : 'file'
+  const srcPath = nodePath.normalize(String(entry?.path || '').trim())
+  if (!srcPath) return ''
+  return `${type}::${srcPath}`
+}
+
+function dedupeSourceRows(rows) {
+  if (!Array.isArray(rows)) return []
+  const seen = new Set()
+  const next = []
+  for (const row of rows) {
+    const key = sourceIdentityKey(row)
+    if (!key || seen.has(key)) continue
+    seen.add(key)
+    next.push(row)
+  }
+  return next
 }
 
 function normalizeInvite(raw) {
