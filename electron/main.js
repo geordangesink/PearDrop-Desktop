@@ -398,9 +398,8 @@ function createTray() {
       }
     ])
   )
-  tray.on('click', () => {
-    focusMainWindow()
-  })
+  // Keep tray icon clicks inert; actions are explicit via context menu items.
+  tray.on('click', () => {})
 }
 
 function hideAllWindows() {
