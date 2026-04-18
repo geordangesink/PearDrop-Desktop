@@ -35,6 +35,12 @@ Build distributable:
 npm run make:darwin
 ```
 
+Forge-based local maker (unsigned/debug packaging path):
+
+```bash
+npm run make:darwin:forge
+```
+
 Build Mac App Store package (`.pkg`) locally:
 
 ```bash
