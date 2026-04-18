@@ -22,6 +22,7 @@ const { isDeepLink, findDeepLink } = require('./lib/deep-link')
 const appName = pkg.productName || pkg.name
 const protocol = 'peardrops'
 const TRANSFER_WORKER_SPECIFIER = '/workers/main.js'
+const UPDATE_APPLIED_TOKEN = '__PEARDROP_UPDATE_APPLIED__'
 const DEFAULT_DEV_RELAY = 'wss://pear-drops.up.railway.app'
 const DEFAULT_PROD_RELAY = 'wss://pear-drops.up.railway.app'
 const workers = new Map()
@@ -38,7 +39,8 @@ let quitPromptOpen = false
 const cmd = command(
   appName,
   flag('--storage', 'custom app data path'),
-  flag('--relay', 'browser relay websocket endpoint')
+  flag('--relay', 'browser relay websocket endpoint'),
+  flag('--updates', 'enable OTA updates')
 )
 
 const launchArgs = app.isPackaged ? process.argv.slice(1) : process.argv.slice(2)
@@ -238,8 +240,24 @@ function getAppPath() {
 }
 
 function runtimeName() {
-  const extension = isLinux ? '.AppImage' : isMac ? '.app' : '.msix'
-  return `${appName}${extension}`
+  if (isLinux) return `${appName}.AppImage`
+  if (isMac) return `${appName}.app`
+  if (isSquirrelInstall()) return 'squirrel'
+  return `${appName}.msix`
+}
+
+function resolveUpdatesEnabled() {
+  if (Object.hasOwn(cmd.indices.flags, 'updates')) return Boolean(cmd.flags.updates)
+  return app.isPackaged
+}
+
+function isSquirrelInstall() {
+  if (!isWindows || !app.isPackaged) return false
+  return fs.existsSync(getSquirrelUpdateExe())
+}
+
+function getSquirrelUpdateExe() {
+  return path.resolve(path.dirname(process.execPath), '..', 'Update.exe')
 }
 
 function sendToAll(channel, payload) {
@@ -451,6 +469,12 @@ function beginGracefulQuit() {
     })
 }
 
+function relaunchAfterUpdate() {
+  if (isQuitting) return
+  app.relaunch()
+  beginGracefulQuit()
+}
+
 function getWorker(specifier) {
   if (workers.has(specifier)) return workers.get(specifier)
 
@@ -462,9 +486,15 @@ function getWorker(specifier) {
     app: getAppPath(),
     name: runtimeName(),
     dev: !app.isPackaged,
-    updates: false,
+    updates: resolveUpdatesEnabled(),
     version: pkg.version,
     upgrade: pkg.upgrade,
+    squirrel: isSquirrelInstall()
+      ? {
+          enabled: true,
+          updateExe: getSquirrelUpdateExe()
+        }
+      : false,
     relayUrl,
     storage: path.join(appDir, 'app-storage'),
     launchId: `${Date.now()}-${process.pid}`
@@ -483,7 +513,13 @@ function getWorker(specifier) {
     }
   )
 
-  const onStdout = (data) => sendToAll(`pear:worker:stdout:${specifier}`, data)
+  const onStdout = (data) => {
+    if (String(data || '').includes(UPDATE_APPLIED_TOKEN)) {
+      relaunchAfterUpdate()
+      return
+    }
+    sendToAll(`pear:worker:stdout:${specifier}`, data)
+  }
   const onStderr = (data) => sendToAll(`pear:worker:stderr:${specifier}`, data)
   const onIPC = (data) => sendToAll(`pear:worker:ipc:${specifier}`, data)
 
