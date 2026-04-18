@@ -207,6 +207,16 @@ function wireGlobalEvents() {
       renderSourceMenu()
     }
   })
+
+  window.addEventListener('dragover', (event) => {
+    event.preventDefault()
+    if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy'
+  })
+
+  window.addEventListener('drop', (event) => {
+    event.preventDefault()
+    void handleWindowDrop(event)
+  })
 }
 
 function wireUiEvents() {
@@ -1554,6 +1564,32 @@ function addLocalSources(entries) {
     if (!isMp3Path(source?.path)) continue
     void hydrateSourceCoverArt(source)
   }
+}
+
+async function handleWindowDrop(event) {
+  const files = Array.from(event?.dataTransfer?.files || [])
+  const droppedPaths = normalizePathList(files.map((file) => String(file?.path || '')))
+  if (!droppedPaths.length) return
+
+  const entries = []
+  for (const droppedPath of droppedPaths) {
+    try {
+      // eslint-disable-next-line no-await-in-loop
+      const stat = await fs.stat(droppedPath)
+      entries.push({
+        type: stat.isDirectory() ? 'folder' : 'file',
+        path: droppedPath
+      })
+    } catch {
+      // Ignore entries that no longer exist by the time drop is processed.
+    }
+  }
+
+  if (!entries.length) {
+    setStatus('No readable dropped files or folders were found.')
+    return
+  }
+  addLocalSources(entries)
 }
 
 function finalizeStoppedSession(invite, activeHost = null) {
