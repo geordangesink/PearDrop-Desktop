@@ -33,6 +33,7 @@ let workersShuttingDown = null
 let themeMode = 'system'
 let tray = null
 let sleepBlockerId = null
+let quitPromptArmedUntil = 0
 
 const cmd = command(
   appName,
@@ -304,9 +305,12 @@ function createAppMenu() {
   Menu.setApplicationMenu(menu)
 }
 
-function revealMainWindow() {
+async function revealMainWindow() {
   const existing = BrowserWindow.getAllWindows()[0]
-  if (!existing || existing.isDestroyed()) return
+  if (!existing || existing.isDestroyed()) {
+    await createWindow()
+    return
+  }
   if (!existing.isVisible()) existing.show()
   if (existing.isMinimized()) existing.restore()
   existing.focus()
@@ -337,7 +341,9 @@ function createTray() {
     Menu.buildFromTemplate([
       {
         label: 'Show PearDrop',
-        click: () => revealMainWindow()
+        click: () => {
+          void revealMainWindow()
+        }
       },
       {
         type: 'separator'
@@ -351,7 +357,9 @@ function createTray() {
       }
     ])
   )
-  tray.on('click', () => revealMainWindow())
+  tray.on('click', () => {
+    void revealMainWindow()
+  })
 }
 
 function hideAllWindows() {
@@ -361,7 +369,8 @@ function hideAllWindows() {
 }
 
 function shouldConfirmQuit() {
-  return !forceQuit
+  if (forceQuit) return false
+  return Date.now() > quitPromptArmedUntil
 }
 
 function setHostingActive(shouldPreventSleep) {
@@ -389,6 +398,8 @@ function confirmQuitWithHostWarning() {
     detail:
       'Quitting PearDrop stops all active hosts. Choose "Close Window" to keep hosting in the background via the tray.'
   })
+  // Allow a quick second Cmd+Q to quit without showing this prompt again.
+  quitPromptArmedUntil = Date.now() + 15000
   if (choice === 1) return 'quit'
   if (choice === 0) return 'close-window'
   return 'cancel'
@@ -521,6 +532,7 @@ async function createWindow() {
     sendToAll('app:deep-link', pendingDeepLinks.shift())
   }
   sendToAll('app:theme-mode', { mode: themeMode })
+  return win
 }
 
 function onDeepLink(url) {
@@ -618,7 +630,7 @@ if (!lock) {
       })
       return
     }
-    revealMainWindow()
+    void revealMainWindow()
   })
 
   app.on('before-quit', (evt) => {
