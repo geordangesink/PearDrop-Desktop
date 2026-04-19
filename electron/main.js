@@ -30,6 +30,7 @@ const pendingDeepLinks = []
 let isQuitting = false
 let forceQuit = false
 let workersShuttingDown = null
+let staleWorkersCleared = false
 let themeMode = 'system'
 let tray = null
 let sleepBlockerId = null
@@ -205,12 +206,7 @@ async function shutdownWorkers() {
     for (const [specifier, worker] of workers) {
       pending.push(
         new Promise((resolve) => {
-          let settled = false
-          const done = () => {
-            if (settled) return
-            settled = true
-            resolve()
-          }
+          const done = () => resolve()
           worker.once('exit', done)
           setTimeout(done, 5000)
           try {
@@ -470,8 +466,9 @@ function getWorker(specifier) {
     launchId: `${Date.now()}-${process.pid}`
   }
 
-  if (app.isPackaged) {
+  if (app.isPackaged && !staleWorkersCleared) {
     killStaleWorkers(updaterConfig.storage)
+    staleWorkersCleared = true
   }
 
   const runtimeStorage = path.join(appDir, 'runtime-storage')
@@ -718,6 +715,10 @@ if (!lock) {
       return
     }
     presentQuitPrompt()
+  })
+
+  app.on('will-quit', () => {
+    setHostingActive(false)
   })
 
   app.on('window-all-closed', () => {

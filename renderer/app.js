@@ -1694,7 +1694,7 @@ async function buildZipUploadPayload(sources, sessionNameInput) {
   await fs.unlink(zipPath).catch(() => {})
 
   try {
-    await execFileAsync('zip', ['-r', '-y', zipPath, ...relTargets], { cwd: workspaceDir })
+    await zipSources(workspaceDir, zipPath, relTargets)
   } catch (error) {
     const details = String(error?.stderr || error?.message || '').trim()
     throw new Error(
@@ -1712,6 +1712,45 @@ async function buildZipUploadPayload(sources, sessionNameInput) {
     byteLength: Number(stat.size || 0),
     mimeType: 'application/zip'
   }
+}
+
+async function zipSources(workspaceDir, zipPath, relTargets) {
+  if (process.platform === 'win32') {
+    await zipSourcesWithPowerShell(workspaceDir, zipPath, relTargets)
+    return
+  }
+  await execFileAsync('zip', ['-r', '-y', zipPath, ...relTargets], { cwd: workspaceDir })
+}
+
+async function zipSourcesWithPowerShell(workspaceDir, zipPath, relTargets) {
+  const escapedZipPath = toPowerShellSingleQuoted(zipPath)
+  const escapedTargets = relTargets.map((target) => `'${toPowerShellSingleQuoted(target)}'`).join(', ')
+  const script = [
+    '$ErrorActionPreference = "Stop"',
+    `$destination = '${escapedZipPath}'`,
+    'if (Test-Path -LiteralPath $destination) { Remove-Item -LiteralPath $destination -Force }',
+    `$items = @(${escapedTargets})`,
+    'Compress-Archive -LiteralPath $items -DestinationPath $destination -CompressionLevel Optimal -Force'
+  ].join('; ')
+
+  const candidates = ['pwsh.exe', 'powershell.exe']
+  let lastError = null
+  for (const executable of candidates) {
+    try {
+      await execFileAsync(executable, ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', script], {
+        cwd: workspaceDir
+      })
+      return
+    } catch (error) {
+      lastError = error
+      if (String(error?.code || '').toUpperCase() !== 'ENOENT') break
+    }
+  }
+  throw lastError || new Error('PowerShell is not available for zip packaging.')
+}
+
+function toPowerShellSingleQuoted(value) {
+  return String(value || '').replace(/'/g, "''")
 }
 
 function commonParentDir(paths) {
