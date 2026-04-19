@@ -206,9 +206,22 @@ async function shutdownWorkers() {
     for (const [specifier, worker] of workers) {
       pending.push(
         new Promise((resolve) => {
-          const done = () => resolve()
-          worker.once('exit', done)
-          setTimeout(done, 5000)
+          let settled = false
+          const done = () => {
+            if (settled) return
+            settled = true
+            clearTimeout(forceKillTimer)
+            worker.removeListener('exit', onExit)
+            resolve()
+          }
+          const onExit = () => done()
+          worker.once('exit', onExit)
+          const forceKillTimer = setTimeout(() => {
+            try {
+              if (Number.isFinite(worker.pid) && worker.pid > 0) process.kill(worker.pid, 'SIGKILL')
+            } catch {}
+            done()
+          }, 5000)
           try {
             worker.destroy()
           } catch {
@@ -442,6 +455,10 @@ function beginGracefulQuit() {
       console.error('Failed while shutting down workers', error)
     })
     .finally(() => {
+      if (app.isPackaged) {
+        const appDir = resolveBaseDir()
+        killStaleWorkers(path.join(appDir, 'app-storage'))
+      }
       setHostingActive(false)
       app.exit(0)
     })
