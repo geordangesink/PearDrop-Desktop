@@ -9,6 +9,7 @@ const os = require('os')
 const { execFile } = require('child_process')
 const { promisify } = require('util')
 const { webUtils } = require('electron')
+const { createWebRtcHost } = require('./lib/webrtc-host')
 const execFileAsync = promisify(execFile)
 
 const RpcCommand = {
@@ -180,6 +181,8 @@ let workerReadySeen = false
 let workerReadyWaiters = []
 let sessionSwipeAccumulator = 0
 let sessionSwipeTimer = null
+const webRtcShareHosts = new Map()
+const webRtcShareHostPromises = new Map()
 
 if (!bridge || typeof bridge.startWorker !== 'function') {
   setStatus('Desktop bridge failed to load. Check preload configuration.')
@@ -251,6 +254,7 @@ function wireGlobalEvents() {
   bridge.onAppQuitting?.((payload) => {
     stopActiveHostsPolling()
     finalizeSessionsFromActiveHosts(state.activeHosts)
+    closeWebRtcShareHosts()
     const message = String(payload?.message || '').trim()
     if (shutdownMessageEl && message) shutdownMessageEl.textContent = message
     shutdownOverlayEl?.classList.remove('hidden')
@@ -281,6 +285,7 @@ function wireGlobalEvents() {
 
   window.addEventListener('beforeunload', () => {
     stopActiveHostsPolling()
+    closeWebRtcShareHosts()
   })
 
   window.addEventListener('focus', () => {
@@ -667,13 +672,13 @@ function wireUiEvents() {
     if (!(row instanceof HTMLElement)) return
     const invite = String(row.dataset.invite || '').trim()
     if (!invite) return
+    const shareInvite = String(row.dataset.shareInvite || invite).trim() || invite
 
     const actionNode = target.closest('[data-action]')
     const action = String(actionNode?.getAttribute('data-action') || '')
 
     if (action === 'copy') {
-      void copyToClipboard(toShareableInvite(invite) || invite)
-      flashCopyFeedback(`host:${invite}`)
+      void copyShareInviteForHost({ invite, shareInvite, feedbackKey: `host:${invite}` })
       return
     }
     if (action === 'star') {
@@ -738,13 +743,17 @@ function wireUiEvents() {
     if (!(row instanceof HTMLElement)) return
     const invite = String(row.dataset.starredInvite || '').trim()
     if (!invite) return
+    const shareInvite = String(row.dataset.shareInvite || invite).trim() || invite
 
     const actionNode = target.closest('[data-action]')
     const action = String(actionNode?.getAttribute('data-action') || '')
 
     if (action === 'copy') {
-      void copyToClipboard(toShareableInvite(invite) || invite)
-      flashCopyFeedback(`starred:${invite}`)
+      void copyShareInviteForHost({
+        invite,
+        shareInvite,
+        feedbackKey: `starred:${invite}`
+      })
       return
     }
     if (action === 'unstar') {
@@ -1370,6 +1379,7 @@ function renderHosts() {
 
   for (const host of hosts) {
     const invite = String(host.invite || '').trim()
+    const shareInvite = resolveHostShareInvite(host, invite)
     const selected = state.selectedHosts.has(invite)
     const starred = state.starredHosts.has(invite)
     const isStopping = state.stoppingInvites.has(invite)
@@ -1383,6 +1393,7 @@ function renderHosts() {
       row.classList.add('row-item-highlight')
     }
     row.dataset.invite = invite
+    row.dataset.shareInvite = shareInvite
     row.innerHTML = `
       <input type="checkbox" ${selected ? 'checked' : ''} />
       <div>
@@ -1423,6 +1434,7 @@ function renderStarredHosts() {
 
   for (const invite of starredInvites) {
     const host = activeByInvite.get(invite)
+    const shareInvite = resolveHostShareInvite(host, invite)
     const historyItem = historyByInvite.get(invite)
     const label = String(host?.sessionLabel || historyItem?.sessionName || 'Starred Host')
     const size = host ? formatBytes(Number(host.totalBytes || 0)) : 'Not active'
@@ -1442,6 +1454,7 @@ function renderStarredHosts() {
     const row = document.createElement('div')
     row.className = 'row-item'
     row.dataset.starredInvite = invite
+    row.dataset.shareInvite = shareInvite
     row.innerHTML = `
       <div class="star">★</div>
       <div>
@@ -1919,6 +1932,7 @@ async function refreshActiveHosts() {
     )
 
     renderHosts()
+    void prewarmWebRtcShareHosts(hosts)
   } catch {
     state.activeHosts = []
     state.selectedHosts.clear()
@@ -2178,7 +2192,8 @@ async function rehostHistoryItem(historyItem) {
 
     const response = await state.rpc.request(RpcCommand.CREATE_UPLOAD, {
       files,
-      sessionName: String(historyItem.sessionName || 'Host Session').trim() || 'Host Session'
+      sessionName: String(historyItem.sessionName || 'Host Session').trim() || 'Host Session',
+      nativeInvite: normalizeInvite(historyItem.invite || '')
     })
 
     const invite = String(response?.nativeInvite || response?.invite || '').trim()
@@ -2338,6 +2353,12 @@ function extractFileUrisFromText(text) {
 function finalizeStoppedSession(invite, activeHost = null) {
   const key = String(invite || '').trim()
   if (!key) return
+  webRtcShareHostPromises.delete(key)
+  const webRtcShareHost = webRtcShareHosts.get(key)
+  if (webRtcShareHost) {
+    webRtcShareHosts.delete(key)
+    void webRtcShareHost?.close?.().catch?.(() => {})
+  }
   const running = state.runningHistoryByInvite.get(key)
   if (running) {
     state.runningHistoryByInvite.delete(key)
@@ -2656,7 +2677,7 @@ function normalizeInvite(raw) {
   try {
     const parsed = new URL(text)
     const nested = parsed.searchParams.get('invite')
-    if (nested && nested.startsWith('peardrops://invite')) return ensureInviteRelay(nested)
+    if (nested) return normalizeInvite(nested)
   } catch {}
   return ''
 }
@@ -2719,9 +2740,106 @@ function buildInviteManifestVariants(invite) {
 }
 
 function toShareableInvite(rawInvite) {
+  const raw = String(rawInvite || '').trim()
+  if (raw.startsWith('peardrops-web://join')) {
+    return `${PUBLIC_SITE_ORIGIN}/open/?invite=${encodeURIComponent(raw)}`
+  }
   const nativeInvite = normalizeInvite(rawInvite)
   if (!nativeInvite) return ''
   return `${PUBLIC_SITE_ORIGIN}/open/?invite=${encodeURIComponent(nativeInvite)}`
+}
+
+function resolveHostShareInvite(host, fallbackInvite = '') {
+  const fallback = String(fallbackInvite || '').trim()
+  const hostInvite = String(host?.invite || fallback).trim() || fallback
+  const active = webRtcShareHosts.get(hostInvite)
+  if (active?.webLink && hasWebRtcSignal(active.webLink)) return active.webLink
+  const direct = String(host?.webSwarmLink || '').trim()
+  if (hasWebRtcSignal(direct)) return direct
+  return fallback
+}
+
+async function copyShareInviteForHost({ invite, shareInvite, feedbackKey = '' }) {
+  try {
+    const nativeInvite = normalizeInvite(invite)
+    const candidate = String(shareInvite || '').trim()
+    const resolvedInvite = hasWebRtcSignal(candidate)
+      ? candidate
+      : await ensureWebRtcShareInvite(nativeInvite)
+    if (!hasWebRtcSignal(resolvedInvite)) {
+      throw new Error('Could not produce a WebRTC share invite.')
+    }
+    await copyToClipboard(toShareableInvite(resolvedInvite) || resolvedInvite)
+    if (feedbackKey) flashCopyFeedback(feedbackKey)
+  } catch (error) {
+    const message = String(error?.message || error || '').trim()
+    setStatus(message ? `Copy link failed: ${message}` : 'Copy link failed.')
+  }
+}
+
+function hasWebRtcSignal(invite) {
+  const text = String(invite || '').trim()
+  if (!text.startsWith('peardrops-web://join')) return false
+  try {
+    const parsed = new URL(text)
+    return Boolean(String(parsed.searchParams.get('signal') || '').trim())
+  } catch {
+    return false
+  }
+}
+
+async function ensureWebRtcShareInvite(nativeInvite) {
+  const key = String(nativeInvite || '').trim()
+  if (!key) return ''
+
+  const cached = webRtcShareHosts.get(key)
+  if (cached?.webLink && hasWebRtcSignal(cached.webLink)) return cached.webLink
+  const pending = webRtcShareHostPromises.get(key)
+  if (pending) return pending
+
+  if (!state.rpc) throw new Error('Worker is still starting.')
+  const creating = createWebRtcHost({
+    invite: key,
+    rpc: {
+      request: (command, payload) => state.rpc.request(command, payload)
+    }
+  })
+    .then((host) => {
+      webRtcShareHosts.set(key, host)
+      return String(host?.webLink || '').trim()
+    })
+    .finally(() => {
+      webRtcShareHostPromises.delete(key)
+    })
+
+  webRtcShareHostPromises.set(key, creating)
+  return creating
+}
+
+async function prewarmWebRtcShareHosts(hosts) {
+  const list = Array.isArray(hosts) ? hosts : []
+  await Promise.all(
+    list.map(async (host) => {
+      const invite = normalizeInvite(host?.invite || '')
+      if (!invite) return
+      try {
+        const resolved = await ensureWebRtcShareInvite(invite)
+        if (!hasWebRtcSignal(resolved)) throw new Error('Missing WebRTC signal key in share invite')
+      } catch (error) {
+        setWorkerLogMessage(
+          `share link prewarm failed for ${invite.slice(0, 16)}...: ${String(error?.message || error)}`
+        )
+      }
+    })
+  )
+}
+
+function closeWebRtcShareHosts() {
+  webRtcShareHostPromises.clear()
+  for (const host of webRtcShareHosts.values()) {
+    void host?.close?.().catch?.(() => {})
+  }
+  webRtcShareHosts.clear()
 }
 
 function parseSessionLabel(label) {

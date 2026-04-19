@@ -1,6 +1,7 @@
 /* global RTCPeerConnection */
 
 const b4a = require('b4a')
+const crypto = require('crypto')
 const DHT = require('@hyperswarm/dht-relay')
 const RelayStream = require('@hyperswarm/dht-relay/ws')
 
@@ -12,7 +13,9 @@ async function createWebRtcHost({ invite, rpc }) {
   await onceWebSocketOpen(relaySocket)
 
   const dht = new DHT(new RelayStream(true, relaySocket))
-  const keyPair = DHT.keyPair ? DHT.keyPair() : dht.defaultKeyPair
+  const keyPair = DHT.keyPair
+    ? DHT.keyPair(deriveStableSignalSeed(invite))
+    : dht.defaultKeyPair
   const server = dht.createServer()
 
   server.on('connection', (signalSocket) => {
@@ -41,6 +44,15 @@ async function createWebRtcHost({ invite, rpc }) {
       } catch {}
     }
   }
+}
+
+function deriveStableSignalSeed(invite) {
+  const value = String(invite || '').trim()
+  return crypto
+    .createHash('sha256')
+    .update('peardrop-webrtc-share-v1\0')
+    .update(value)
+    .digest()
 }
 
 function buildWebLink({ signalKey, relayUrl, invite }) {
@@ -116,6 +128,22 @@ function bindDataChannel(channel, { invite, rpc }) {
       if (request.type === 'file') {
         const entry = await rpc.request(6, { invite, drivePath: request.path })
         reply({ ok: true, dataBase64: entry.dataBase64 })
+        return
+      }
+
+      if (request.type === 'file-chunk') {
+        const entry = await rpc.request(10, {
+          invite,
+          drivePath: request.path,
+          offset: Number(request.offset || 0),
+          length: Number(request.length || 0)
+        })
+        reply({
+          ok: true,
+          offset: Number(entry?.offset || 0),
+          byteLength: Number(entry?.byteLength || 0),
+          dataBase64: entry?.dataBase64 || ''
+        })
         return
       }
 
