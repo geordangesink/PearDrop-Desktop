@@ -22,6 +22,7 @@ const { isDeepLink, findDeepLink } = require('./lib/deep-link')
 const appName = pkg.productName || pkg.name
 const protocol = 'peardrops'
 const TRANSFER_WORKER_SPECIFIER = '/workers/main.js'
+const UPDATE_APPLIED_TOKEN = '__PEARDROP_UPDATE_APPLIED__'
 const DEFAULT_DEV_RELAY = 'wss://pear-drops.up.railway.app'
 const DEFAULT_PROD_RELAY = 'wss://pear-drops.up.railway.app'
 const workers = new Map()
@@ -35,11 +36,13 @@ let themeMode = 'system'
 let tray = null
 let sleepBlockerId = null
 let quitPromptOpen = false
+let updateReadyInfo = null
 
 const cmd = command(
   appName,
   flag('--storage', 'custom app data path'),
-  flag('--relay', 'browser relay websocket endpoint')
+  flag('--relay', 'browser relay websocket endpoint'),
+  flag('--updates', 'enable OTA updates')
 )
 
 const launchArgs = app.isPackaged ? process.argv.slice(1) : process.argv.slice(2)
@@ -247,8 +250,24 @@ function getAppPath() {
 }
 
 function runtimeName() {
-  const extension = isLinux ? '.AppImage' : isMac ? '.app' : '.msix'
-  return `${appName}${extension}`
+  if (isLinux) return `${appName}.AppImage`
+  if (isMac) return `${appName}.app`
+  if (isSquirrelInstall()) return `${appName}.exe`
+  return `${appName}.msix`
+}
+
+function resolveUpdatesEnabled() {
+  if (Object.hasOwn(cmd.indices.flags, 'updates')) return Boolean(cmd.flags.updates)
+  return app.isPackaged
+}
+
+function isSquirrelInstall() {
+  if (!isWindows || !app.isPackaged) return false
+  return fs.existsSync(getSquirrelUpdateExe())
+}
+
+function getSquirrelUpdateExe() {
+  return path.resolve(path.dirname(process.execPath), '..', 'Update.exe')
 }
 
 function sendToAll(channel, payload) {
@@ -331,6 +350,7 @@ function focusMainWindow(existingWindow = null) {
   if (!existing || existing.isDestroyed()) return
   if (!existing.isVisible()) existing.show()
   if (existing.isMinimized()) existing.restore()
+  if (isWindows && typeof existing.moveTop === 'function') existing.moveTop()
   existing.focus()
 }
 
@@ -449,7 +469,11 @@ function beginGracefulQuit() {
   if (isQuitting) return
   isQuitting = true
   hideQuitPrompt()
-  sendToAll('app:quitting', { message: 'Shutting down PearDrop...' })
+  const message =
+    updateReadyInfo?.ready && updateReadyInfo?.applied
+      ? 'Shutting down to apply update...'
+      : 'Shutting down PearDrop...'
+  sendToAll('app:quitting', { message })
   shutdownWorkers()
     .catch((error) => {
       console.error('Failed while shutting down workers', error)
@@ -464,6 +488,17 @@ function beginGracefulQuit() {
     })
 }
 
+function markUpdateReady() {
+  if (updateReadyInfo?.ready) return
+  updateReadyInfo = {
+    ready: true,
+    applied: true,
+    requiresShutdown: true,
+    platform: isWindows ? 'windows' : isMac ? 'macos' : isLinux ? 'linux' : process.platform
+  }
+  sendToAll('app:update-ready', updateReadyInfo)
+}
+
 function getWorker(specifier) {
   if (workers.has(specifier)) return workers.get(specifier)
 
@@ -475,9 +510,15 @@ function getWorker(specifier) {
     app: getAppPath(),
     name: runtimeName(),
     dev: !app.isPackaged,
-    updates: false,
+    updates: resolveUpdatesEnabled(),
     version: pkg.version,
     upgrade: pkg.upgrade,
+    squirrel: isSquirrelInstall()
+      ? {
+          enabled: true,
+          updateExe: getSquirrelUpdateExe()
+        }
+      : false,
     relayUrl,
     storage: path.join(appDir, 'app-storage'),
     launchId: `${Date.now()}-${process.pid}`
@@ -497,7 +538,13 @@ function getWorker(specifier) {
     }
   )
 
-  const onStdout = (data) => sendToAll(`pear:worker:stdout:${specifier}`, data)
+  const onStdout = (data) => {
+    if (String(data || '').includes(UPDATE_APPLIED_TOKEN)) {
+      markUpdateReady()
+      return
+    }
+    sendToAll(`pear:worker:stdout:${specifier}`, data)
+  }
   const onStderr = (data) => sendToAll(`pear:worker:stderr:${specifier}`, data)
   const onIPC = (data) => sendToAll(`pear:worker:ipc:${specifier}`, data)
 
@@ -663,6 +710,21 @@ ipcMain.handle('app:setHostingActive', async (evt, active) => {
   return true
 })
 
+ipcMain.handle('app:getUpdateStatus', async () => {
+  return updateReadyInfo || { ready: false }
+})
+
+ipcMain.handle('app:updateAction', async (evt, actionRaw) => {
+  const action = String(actionRaw || '')
+    .trim()
+    .toLowerCase()
+  if (action === 'shutdown') {
+    beginGracefulQuit()
+    return { ok: true }
+  }
+  return { ok: false }
+})
+
 ipcMain.handle('app:quitPromptAction', async (evt, actionRaw) => {
   const action = String(actionRaw || '')
     .trim()
@@ -697,6 +759,7 @@ if (!lock) {
   app.on('second-instance', (evt, args) => {
     const link = findDeepLink(args, protocol)
     if (link) onDeepLink(link)
+    void revealMainWindow()
   })
 
   app.whenReady().then(() => {
