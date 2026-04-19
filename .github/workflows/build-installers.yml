@@ -84,8 +84,16 @@ jobs:
           if-no-files-found: error
 
   linux-installers:
-    name: Linux Installer (.AppImage)
-    runs-on: ubuntu-latest
+    name: Linux Installer (.AppImage, ${{ matrix.arch }})
+    runs-on: ${{ matrix.runs_on }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runs_on: ubuntu-latest
+            arch: x64
+          - runs_on: ubuntu-24.04-arm
+            arch: arm64
     steps:
       - uses: actions/checkout@v4
 
@@ -109,6 +117,7 @@ jobs:
       - name: Normalize publish filenames
         run: |
           version=$(node -p "require('./package.json').version")
+          arch="${{ matrix.arch }}"
           publish_dir="out/publish"
           mkdir -p "$publish_dir"
 
@@ -119,9 +128,10 @@ jobs:
           fi
 
           chmod +x "$appimage"
-          cp "$appimage" "$publish_dir/PearDrop-$version.AppImage"
-          cp "$appimage" "$publish_dir/PearDrop.AppImage"
-          chmod +x "$publish_dir/PearDrop-$version.AppImage" "$publish_dir/PearDrop.AppImage"
+          cp "$appimage" "$publish_dir/PearDrop-$version-linux-$arch.AppImage"
+          cp "$appimage" "$publish_dir/PearDrop-linux-$arch.AppImage"
+          chmod +x "$publish_dir/PearDrop-$version-linux-$arch.AppImage"
+          chmod +x "$publish_dir/PearDrop-linux-$arch.AppImage"
 
           echo "Published artifacts:"
           ls -la "$publish_dir"
@@ -129,13 +139,21 @@ jobs:
       - name: Upload workflow artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: linux-installers
+          name: linux-installers-${{ matrix.arch }}
           path: out/publish/*
           if-no-files-found: error
 
   macos-installers:
-    name: macOS Installer (.dmg)
-    runs-on: macos-latest
+    name: macOS Installer (.dmg, ${{ matrix.arch }})
+    runs-on: ${{ matrix.runs_on }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runs_on: macos-14
+            arch: arm64
+          - runs_on: macos-13
+            arch: x64
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
@@ -202,6 +220,7 @@ jobs:
       - name: Normalize publish filenames
         run: |
           version=$(node -p "require('./package.json').version")
+          arch="${{ matrix.arch }}"
           publish_dir="out/publish"
           mkdir -p "$publish_dir"
 
@@ -211,8 +230,8 @@ jobs:
             exit 1
           fi
 
-          cp "$dmg" "$publish_dir/PearDrop-$version.dmg"
-          cp "$dmg" "$publish_dir/PearDrop.dmg"
+          cp "$dmg" "$publish_dir/PearDrop-$version-macos-$arch.dmg"
+          cp "$dmg" "$publish_dir/PearDrop-macos-$arch.dmg"
 
           echo "Published artifacts:"
           ls -la "$publish_dir"
@@ -225,8 +244,8 @@ jobs:
         run: |
           set -euo pipefail
           version=$(node -p "require('./package.json').version")
-          dmg="out/publish/PearDrop-$version.dmg"
-          latest_dmg="out/publish/PearDrop.dmg"
+          arch="${{ matrix.arch }}"
+          dmg="out/publish/PearDrop-$version-macos-$arch.dmg"
 
           if [ ! -f "$dmg" ]; then
             echo "Missing DMG for notarization: $dmg"
@@ -260,9 +279,6 @@ jobs:
             if [ "$status" = "Accepted" ]; then
               echo "Notarization accepted."
               xcrun stapler staple "$dmg"
-              if [ -f "$latest_dmg" ]; then
-                xcrun stapler staple "$latest_dmg" || true
-              fi
               break
             fi
 
@@ -291,7 +307,7 @@ jobs:
       - name: Upload workflow artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: macos-installers
+          name: macos-installers-${{ matrix.arch }}
           path: out/publish/*
           if-no-files-found: error
 
@@ -306,7 +322,7 @@ jobs:
       - name: Download all installer artifacts
         uses: actions/download-artifact@v4
         with:
-          pattern: '*-installers'
+          pattern: '*installers*'
           path: release-assets
           merge-multiple: true
 
