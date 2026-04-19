@@ -242,7 +242,7 @@ function getAppPath() {
 function runtimeName() {
   if (isLinux) return `${appName}.AppImage`
   if (isMac) return `${appName}.app`
-  if (isSquirrelInstall()) return 'squirrel'
+  if (isSquirrelInstall()) return `${appName}.exe`
   return `${appName}.msix`
 }
 
@@ -471,7 +471,14 @@ function beginGracefulQuit() {
 
 function relaunchAfterUpdate() {
   if (isQuitting) return
-  app.relaunch()
+  if (isSquirrelInstall()) {
+    app.relaunch({
+      execPath: getSquirrelUpdateExe(),
+      args: ['--processStart', path.basename(process.execPath)]
+    })
+  } else {
+    app.relaunch()
+  }
   beginGracefulQuit()
 }
 
