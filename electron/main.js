@@ -35,6 +35,7 @@ let themeMode = 'system'
 let tray = null
 let sleepBlockerId = null
 let quitPromptOpen = false
+let updateReadyInfo = null
 
 const cmd = command(
   appName,
@@ -459,7 +460,11 @@ function beginGracefulQuit() {
   if (isQuitting) return
   isQuitting = true
   hideQuitPrompt()
-  sendToAll('app:quitting', { message: 'Shutting down PearDrop...' })
+  const message =
+    updateReadyInfo?.ready && updateReadyInfo?.applied
+      ? 'Shutting down to apply update...'
+      : 'Shutting down PearDrop...'
+  sendToAll('app:quitting', { message })
   shutdownWorkers()
     .catch((error) => {
       console.error('Failed while shutting down workers', error)
@@ -470,17 +475,15 @@ function beginGracefulQuit() {
     })
 }
 
-function relaunchAfterUpdate() {
-  if (isQuitting) return
-  if (isSquirrelInstall()) {
-    app.relaunch({
-      execPath: getSquirrelUpdateExe(),
-      args: ['--processStart', path.basename(process.execPath)]
-    })
-  } else {
-    app.relaunch()
+function markUpdateReady() {
+  if (updateReadyInfo?.ready) return
+  updateReadyInfo = {
+    ready: true,
+    applied: true,
+    requiresShutdown: true,
+    platform: isWindows ? 'windows' : isMac ? 'macos' : isLinux ? 'linux' : process.platform
   }
-  beginGracefulQuit()
+  sendToAll('app:update-ready', updateReadyInfo)
 }
 
 function getWorker(specifier) {
@@ -523,7 +526,7 @@ function getWorker(specifier) {
 
   const onStdout = (data) => {
     if (String(data || '').includes(UPDATE_APPLIED_TOKEN)) {
-      relaunchAfterUpdate()
+      markUpdateReady()
       return
     }
     sendToAll(`pear:worker:stdout:${specifier}`, data)
@@ -691,6 +694,21 @@ ipcMain.handle('app:getThemeMode', async () => {
 ipcMain.handle('app:setHostingActive', async (evt, active) => {
   setHostingActive(Boolean(active))
   return true
+})
+
+ipcMain.handle('app:getUpdateStatus', async () => {
+  return updateReadyInfo || { ready: false }
+})
+
+ipcMain.handle('app:updateAction', async (evt, actionRaw) => {
+  const action = String(actionRaw || '')
+    .trim()
+    .toLowerCase()
+  if (action === 'shutdown') {
+    beginGracefulQuit()
+    return { ok: true }
+  }
+  return { ok: false }
 })
 
 ipcMain.handle('app:quitPromptAction', async (evt, actionRaw) => {

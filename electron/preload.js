@@ -35,6 +35,11 @@ const api = {
     ipcRenderer.on('app:quitting', wrap)
     return () => ipcRenderer.removeListener('app:quitting', wrap)
   },
+  onUpdateReady(listener) {
+    const wrap = (evt, payload) => listener(payload || {})
+    ipcRenderer.on('app:update-ready', wrap)
+    return () => ipcRenderer.removeListener('app:update-ready', wrap)
+  },
   onQuitPrompt(listener) {
     const wrap = (evt, payload) => listener(payload || {})
     ipcRenderer.on('app:quit-prompt', wrap)
@@ -54,6 +59,12 @@ const api = {
   },
   getThemeMode() {
     return ipcRenderer.invoke('app:getThemeMode')
+  },
+  getUpdateStatus() {
+    return ipcRenderer.invoke('app:getUpdateStatus')
+  },
+  updateAction(action) {
+    return ipcRenderer.invoke('app:updateAction', String(action || ''))
   },
   setHostingActive(active) {
     return ipcRenderer.invoke('app:setHostingActive', Boolean(active))

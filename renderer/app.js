@@ -105,6 +105,9 @@ const appQuitSubEl = document.getElementById('app-quit-sub')
 const appQuitCloseWindowBtn = document.getElementById('app-quit-close-window')
 const appQuitConfirmBtn = document.getElementById('app-quit-confirm')
 const appQuitCancelBtn = document.getElementById('app-quit-cancel')
+const updateBannerEl = document.getElementById('update-banner')
+const updateBannerSubEl = document.getElementById('update-banner-sub')
+const updateShutdownBtn = document.getElementById('update-shutdown-btn')
 const shutdownOverlayEl = document.getElementById('shutdown-overlay')
 const shutdownMessageEl = document.getElementById('shutdown-message')
 const sessionEditorEl = document.getElementById('host-session-editor')
@@ -155,7 +158,9 @@ const state = {
   sessionEditorSelected: new Set(),
   sessionEditorApplying: false,
   sessionEditorHistoryActive: false,
-  quitPromptOpen: false
+  quitPromptOpen: false,
+  updateReady: false,
+  updatePlatform: ''
 }
 const dedupedInitialSources = dedupeSourceRows(state.sources)
 if (dedupedInitialSources.length !== state.sources.length) {
@@ -246,6 +251,10 @@ function wireGlobalEvents() {
     const message = String(payload?.message || '').trim()
     if (shutdownMessageEl && message) shutdownMessageEl.textContent = message
     shutdownOverlayEl?.classList.remove('hidden')
+  })
+
+  bridge.onUpdateReady?.((payload) => {
+    applyUpdateStatus(payload)
   })
 
   bridge.onQuitPrompt?.((payload) => {
@@ -409,6 +418,9 @@ function wireUiEvents() {
   })
   appQuitConfirmBtn?.addEventListener('click', () => {
     void bridge.quitPromptAction?.('quit')
+  })
+  updateShutdownBtn?.addEventListener('click', () => {
+    void bridge.updateAction?.('shutdown')
   })
   window.addEventListener('keydown', (event) => {
     if (!state.quitPromptOpen) return
@@ -765,6 +777,8 @@ async function boot() {
 
     const mode = await bridge.getThemeMode?.()
     applyThemeMode(mode)
+    const updateStatus = await bridge.getUpdateStatus?.()
+    applyUpdateStatus(updateStatus)
 
     await refreshActiveHosts()
     await pruneMissingSources('launch')
@@ -898,6 +912,7 @@ function withTimeout(promise, timeoutMs) {
 }
 
 function renderAll() {
+  renderUpdateBanner()
   renderTabs()
   renderSourceMenu()
   renderSources()
@@ -906,6 +921,34 @@ function renderAll() {
   renderDriveRows()
   renderSessionEditor()
   renderActionButtons()
+}
+
+function applyUpdateStatus(payload) {
+  const ready = Boolean(payload?.ready)
+  state.updateReady = ready
+  state.updatePlatform = ready
+    ? String(payload?.platform || '')
+        .trim()
+        .toLowerCase()
+    : ''
+  renderUpdateBanner()
+}
+
+function renderUpdateBanner() {
+  if (!updateBannerEl) return
+  updateBannerEl.classList.toggle('hidden', !state.updateReady)
+  if (!state.updateReady || !updateBannerSubEl) return
+  if (state.updatePlatform === 'windows') {
+    updateBannerSubEl.textContent =
+      'An update is ready. Shut down PearDrop now to complete the Windows update.'
+    return
+  }
+  if (state.updatePlatform === 'macos' || state.updatePlatform === 'linux') {
+    updateBannerSubEl.textContent =
+      'An update is ready. Shut down PearDrop now; the new version will open next launch.'
+    return
+  }
+  updateBannerSubEl.textContent = 'An update is ready. Shut down PearDrop to finish updating.'
 }
 
 function renderActionButtons() {

@@ -66,6 +66,36 @@
         justify-content: center;
         margin: 4px 0 14px;
       }
+      .update-banner {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin: 0 0 12px;
+        padding: 10px 12px;
+        border-radius: 12px;
+        border: 1px solid #3b6ba7;
+        background: #13263f;
+      }
+      .update-banner-copy {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+      }
+      .update-banner-title {
+        font-size: 14px;
+        font-weight: 700;
+        margin: 0;
+      }
+      .update-banner-sub {
+        font-size: 12px;
+        color: var(--muted);
+        margin: 0;
+      }
+      body[data-theme='light'] .update-banner {
+        border-color: #9ec4f5;
+        background: #edf5ff;
+      }
       .tabs {
         display: flex;
         gap: 8px;
@@ -758,6 +788,15 @@
           <button id="tab-download" class="tab-btn">Download</button>
         </div>
       </div>
+      <section id="update-banner" class="update-banner hidden">
+        <div class="update-banner-copy">
+          <p class="update-banner-title">Update applied and ready</p>
+          <p id="update-banner-sub" class="update-banner-sub">
+            Shut down PearDrop to finish updating.
+          </p>
+        </div>
+        <button id="update-shutdown-btn" class="btn">Shutdown for update</button>
+      </section>
 
       <section id="upload-page" class="tab-page">
         <div id="upload-main-content">
