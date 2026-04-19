@@ -40,6 +40,9 @@ const bridge = window.bridge
 const decoder = new TextDecoder('utf8')
 const workerActivityBars = new Map()
 const sourceCoverLoadsInFlight = new Set()
+const drivePreviewCache = new Map()
+const drivePreviewLoading = new Set()
+const drivePreviewObjectUrls = new Set()
 const CLOSE_ICON = '<span aria-hidden="true">✕</span>'
 const BIN_ICON =
   '<span class="mini-trash" aria-hidden="true"><span class="mini-trash-lid"></span><span class="mini-trash-body"><span class="mini-trash-line"></span><span class="mini-trash-line"></span></span></span>'
@@ -817,7 +820,7 @@ function renderStartupSkeletons() {
   }
   if (driveRowsEl) {
     driveRowsEl.innerHTML =
-      '<tr class="skeleton-table-row" aria-hidden="true"><td colspan="4"><div class="skeleton-container drive"></div></td></tr>'
+      '<tr class="skeleton-table-row" aria-hidden="true"><td colspan="5"><div class="skeleton-container drive"></div></td></tr>'
   }
 }
 
@@ -1482,7 +1485,7 @@ function renderDriveRows() {
 
   if (!state.inviteEntries.length) {
     const tr = document.createElement('tr')
-    tr.innerHTML = '<td colspan="4" class="small">No drive loaded.</td>'
+    tr.innerHTML = '<td colspan="5" class="small">No drive loaded.</td>'
     driveRowsEl.appendChild(tr)
     checkAllDriveEl.checked = false
     checkAllDriveEl.indeterminate = false
@@ -1501,6 +1504,7 @@ function renderDriveRows() {
       const tr = document.createElement('tr')
       tr.innerHTML = `
         <td><input type="checkbox" data-action="toggle-file" data-key="${escapeHtmlAttr(key)}" ${checked ? 'checked' : ''}></td>
+        <td>${renderDrivePreviewCell(row)}</td>
         <td>${'&nbsp;'.repeat(row.depth * 4)}${escapeHtml(row.name)}</td>
         <td class="small">${escapeHtml(row.drivePath)}</td>
         <td class="small">${formatBytes(Number(row.byteLength || 0))}</td>
@@ -1517,6 +1521,7 @@ function renderDriveRows() {
     const tr = document.createElement('tr')
     tr.innerHTML = `
       <td><input type="checkbox" data-action="toggle-folder" data-folder="${escapeHtmlAttr(row.folderPath)}" ${folderChecked ? 'checked' : ''}></td>
+      <td></td>
       <td>${'&nbsp;'.repeat(row.depth * 4)}<button class="btn alt" data-action="toggle-expand" data-folder="${escapeHtmlAttr(row.folderPath)}" style="padding:2px 6px; min-width: 26px;">${expanded ? '▾' : '▸'}</button> <strong>${escapeHtml(row.name)}</strong></td>
       <td class="small">${escapeHtml(`/files/${row.folderPath}`)}</td>
       <td class="small">${row.fileKeys.length} files</td>
@@ -1530,6 +1535,7 @@ function renderDriveRows() {
 
   checkAllDriveEl.checked = selectedCount === state.inviteEntries.length
   checkAllDriveEl.indeterminate = selectedCount > 0 && selectedCount < state.inviteEntries.length
+  queueDrivePreviewLoads(rows)
   renderActionButtons()
 }
 
@@ -1542,6 +1548,7 @@ async function openInviteFiles() {
 
   try {
     state.loadingInviteManifest = true
+    clearDrivePreviewCache()
     renderActionButtons()
     setWorkerLogMessage('loading invite manifest')
     let manifest = null
@@ -1593,7 +1600,27 @@ async function downloadInviteSelected() {
   try {
     state.downloadingSelected = true
     renderActionButtons()
-    upsertWorkerActivityBar('download-selected', 'Downloading selected files', 0, selected.length)
+    const knownTotalBytes = selected.reduce(
+      (sum, entry) => sum + Math.max(0, Number(entry?.byteLength || 0)),
+      0
+    )
+    const useByteProgress = knownTotalBytes > 0
+    const startedAt = Date.now()
+    let completedBytes = 0
+    upsertWorkerActivityBar(
+      'download-selected',
+      'Downloading selected files',
+      0,
+      useByteProgress ? knownTotalBytes : selected.length,
+      {
+        displayMode: useByteProgress ? 'bytes' : 'count',
+        etaMs: estimateRemainingMs(
+          0,
+          useByteProgress ? knownTotalBytes : selected.length,
+          startedAt
+        )
+      }
+    )
 
     for (let i = 0; i < selected.length; i++) {
       const entry = selected[i]
@@ -1601,18 +1628,45 @@ async function downloadInviteSelected() {
       if (!drivePath) continue
       const outputPath = resolveOutputPath(targetDir, entry)
       await fs.mkdir(nodePath.dirname(outputPath), { recursive: true })
+      const baseCompletedBytes = completedBytes
       await writeEntryToFile(
         state.rpc,
         state.inviteSource,
         drivePath,
         outputPath,
-        Number(entry.byteLength || 0)
+        Number(entry.byteLength || 0),
+        ({ doneBytes }) => {
+          if (!useByteProgress) return
+          completedBytes = baseCompletedBytes + Math.max(0, Number(doneBytes || 0))
+          const totalUnits = knownTotalBytes
+          upsertWorkerActivityBar(
+            'download-selected',
+            'Downloading selected files',
+            completedBytes,
+            totalUnits,
+            {
+              displayMode: 'bytes',
+              subtitle: `Current file: ${String(entry?.name || `file-${i + 1}`)}`,
+              etaMs: estimateRemainingMs(completedBytes, totalUnits, startedAt)
+            }
+          )
+        }
       )
+      completedBytes = baseCompletedBytes + Math.max(0, Number(entry?.byteLength || 0))
       upsertWorkerActivityBar(
         'download-selected',
         'Downloading selected files',
-        i + 1,
-        selected.length
+        useByteProgress ? completedBytes : i + 1,
+        useByteProgress ? knownTotalBytes : selected.length,
+        {
+          displayMode: useByteProgress ? 'bytes' : 'count',
+          subtitle: `Current file: ${String(entry?.name || `file-${i + 1}`)}`,
+          etaMs: estimateRemainingMs(
+            useByteProgress ? completedBytes : i + 1,
+            useByteProgress ? knownTotalBytes : selected.length,
+            startedAt
+          )
+        }
       )
     }
 
@@ -1767,7 +1821,9 @@ async function zipSources(workspaceDir, zipPath, relTargets) {
 
 async function zipSourcesWithPowerShell(workspaceDir, zipPath, relTargets) {
   const escapedZipPath = toPowerShellSingleQuoted(zipPath)
-  const escapedTargets = relTargets.map((target) => `'${toPowerShellSingleQuoted(target)}'`).join(', ')
+  const escapedTargets = relTargets
+    .map((target) => `'${toPowerShellSingleQuoted(target)}'`)
+    .join(', ')
   const script = [
     '$ErrorActionPreference = "Stop"',
     `$destination = '${escapedZipPath}'`,
@@ -1780,9 +1836,13 @@ async function zipSourcesWithPowerShell(workspaceDir, zipPath, relTargets) {
   let lastError = null
   for (const executable of candidates) {
     try {
-      await execFileAsync(executable, ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', script], {
-        cwd: workspaceDir
-      })
+      await execFileAsync(
+        executable,
+        ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', script],
+        {
+          cwd: workspaceDir
+        }
+      )
       return
     } catch (error) {
       lastError = error
@@ -2423,7 +2483,7 @@ async function expandSourceToFiles(source) {
   return files
 }
 
-async function writeEntryToFile(rpc, invite, drivePath, outputPath, byteLength) {
+async function writeEntryToFile(rpc, invite, drivePath, outputPath, byteLength, onProgress = null) {
   const fd = await fs.open(outputPath, 'w')
   const chunkSize = 256 * 1024
 
@@ -2445,6 +2505,7 @@ async function writeEntryToFile(rpc, invite, drivePath, outputPath, byteLength) 
         // eslint-disable-next-line no-await-in-loop
         await fd.write(bytes)
         offset += bytes.byteLength
+        if (typeof onProgress === 'function') onProgress({ doneBytes: offset, totalBytes: 0 })
         if (bytes.byteLength < chunkSize) break
       }
       return
@@ -2464,6 +2525,7 @@ async function writeEntryToFile(rpc, invite, drivePath, outputPath, byteLength) 
       // eslint-disable-next-line no-await-in-loop
       await fd.write(bytes)
       offset += bytes.byteLength
+      if (typeof onProgress === 'function') onProgress({ doneBytes: offset, totalBytes: total })
     }
   } finally {
     await fd.close()
@@ -2728,6 +2790,7 @@ function buildVisibleDriveRows() {
         name: file.name,
         drivePath: file.drivePath,
         byteLength: Number(file.entry?.byteLength || 0),
+        mimeType: String(file.entry?.mimeType || '').toLowerCase(),
         depth
       })
     }
@@ -2746,6 +2809,203 @@ function collectDriveFolderFileKeys(folderPath) {
       return drivePath.startsWith(prefix)
     })
     .map((entry) => entryKey(entry))
+}
+
+function renderDrivePreviewCell(row) {
+  if (!isDriveImageRow(row)) {
+    const ext = nodePath
+      .extname(String(row?.name || ''))
+      .replace('.', '')
+      .trim()
+      .toUpperCase()
+    return `<div class="drive-preview-shell">${escapeHtml(ext || 'FILE')}</div>`
+  }
+  const key = String(row?.key || '').trim()
+  const cached = drivePreviewCache.get(key)
+  if (cached) {
+    return `<div class="drive-preview-shell"><img alt="preview" src="${escapeHtmlAttr(cached)}" loading="lazy" /></div>`
+  }
+  return '<div class="drive-preview-shell"><span class="drive-preview-skeleton"></span></div>'
+}
+
+function isDriveImageRow(row) {
+  const mime = String(row?.mimeType || '').toLowerCase()
+  const ext = nodePath.extname(String(row?.name || '')).toLowerCase()
+  if (mime.startsWith('image/')) return true
+  return ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.heic', '.heif'].includes(ext)
+}
+
+function queueDrivePreviewLoads(rows) {
+  if (!state.rpc || !state.inviteSource || !Array.isArray(rows) || !rows.length) return
+  for (const row of rows) {
+    if (!row || row.type !== 'file' || !isDriveImageRow(row)) continue
+    const key = String(row.key || '').trim()
+    if (!key || drivePreviewCache.has(key) || drivePreviewLoading.has(key)) continue
+    const byteLength = Math.max(0, Number(row.byteLength || 0))
+    if (byteLength > 12 * 1024 * 1024) continue
+    drivePreviewLoading.add(key)
+    void loadDrivePreview(row).finally(() => {
+      drivePreviewLoading.delete(key)
+    })
+  }
+}
+
+async function loadDrivePreview(row) {
+  const invite = String(state.inviteSource || '').trim()
+  const drivePath = String(row?.drivePath || '').trim()
+  const key = String(row?.key || '').trim()
+  const mimeType = String(row?.mimeType || '').trim()
+  const expectedBytes = Math.max(0, Number(row?.byteLength || 0))
+  if (!invite || !drivePath || !key) return
+
+  try {
+    const bytes = await readDriveEntryBytesForPreview(
+      state.rpc,
+      invite,
+      drivePath,
+      expectedBytes,
+      256 * 1024
+    )
+    if (!bytes || !bytes.length) return
+    const blob = new Blob([bytes], {
+      type: mimeType || guessMimeTypeByName(row?.name || '')
+    })
+    const thumbUrl = await makeImageThumbnailUrl(blob, 52)
+    if (!thumbUrl) return
+    drivePreviewObjectUrls.add(thumbUrl)
+    drivePreviewCache.set(key, thumbUrl)
+    renderDriveRows()
+  } catch {
+    // keep skeleton/fallback when thumbnail loading fails
+  }
+}
+
+async function readDriveEntryBytesForPreview(
+  rpc,
+  invite,
+  drivePath,
+  byteLength,
+  chunkSize = 256 * 1024
+) {
+  const total = Math.max(0, Number(byteLength || 0))
+  const chunks = []
+  if (total > 0) {
+    let offset = 0
+    while (offset < total) {
+      const length = Math.min(chunkSize, total - offset)
+      // eslint-disable-next-line no-await-in-loop
+      const chunk = await rpc.request(RpcCommand.READ_ENTRY_CHUNK, {
+        invite,
+        drivePath,
+        offset,
+        length
+      })
+      const bytes = Buffer.from(String(chunk?.dataBase64 || ''), 'base64')
+      if (!bytes.byteLength) break
+      chunks.push(bytes)
+      offset += bytes.byteLength
+    }
+  } else {
+    let offset = 0
+    while (true) {
+      // eslint-disable-next-line no-await-in-loop
+      const chunk = await rpc.request(RpcCommand.READ_ENTRY_CHUNK, {
+        invite,
+        drivePath,
+        offset,
+        length: chunkSize
+      })
+      const bytes = Buffer.from(String(chunk?.dataBase64 || ''), 'base64')
+      if (!bytes.byteLength) break
+      chunks.push(bytes)
+      offset += bytes.byteLength
+      if (bytes.byteLength < chunkSize) break
+    }
+  }
+  if (!chunks.length) return new Uint8Array(0)
+  return new Uint8Array(Buffer.concat(chunks))
+}
+
+async function makeImageThumbnailUrl(blob, maxEdge = 52) {
+  const safeEdge = Math.max(24, Number(maxEdge || 52))
+  const canvas = document.createElement('canvas')
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return ''
+
+  if (typeof globalThis.createImageBitmap === 'function') {
+    const bitmap = await globalThis.createImageBitmap(blob)
+    const sourceWidth = Number(bitmap.width || 0)
+    const sourceHeight = Number(bitmap.height || 0)
+    if (!sourceWidth || !sourceHeight) {
+      bitmap.close?.()
+      return ''
+    }
+    const scale = Math.min(1, safeEdge / Math.max(sourceWidth, sourceHeight))
+    canvas.width = Math.max(1, Math.round(sourceWidth * scale))
+    canvas.height = Math.max(1, Math.round(sourceHeight * scale))
+    ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height)
+    bitmap.close?.()
+    return await canvasToObjectUrl(canvas)
+  }
+
+  const sourceUrl = URL.createObjectURL(blob)
+  try {
+    const image = await loadImageElement(sourceUrl)
+    const sourceWidth = Number(image.naturalWidth || image.width || 0)
+    const sourceHeight = Number(image.naturalHeight || image.height || 0)
+    if (!sourceWidth || !sourceHeight) return ''
+    const scale = Math.min(1, safeEdge / Math.max(sourceWidth, sourceHeight))
+    canvas.width = Math.max(1, Math.round(sourceWidth * scale))
+    canvas.height = Math.max(1, Math.round(sourceHeight * scale))
+    ctx.drawImage(image, 0, 0, canvas.width, canvas.height)
+    return await canvasToObjectUrl(canvas)
+  } finally {
+    URL.revokeObjectURL(sourceUrl)
+  }
+}
+
+function loadImageElement(srcUrl) {
+  return new Promise((resolve, reject) => {
+    const img = new globalThis.Image()
+    img.onload = () => resolve(img)
+    img.onerror = () => reject(new Error('Image decode failed'))
+    img.src = srcUrl
+  })
+}
+
+function canvasToObjectUrl(canvas) {
+  return new Promise((resolve) => {
+    canvas.toBlob(
+      (blob) => {
+        if (!blob) return resolve('')
+        resolve(URL.createObjectURL(blob))
+      },
+      'image/webp',
+      0.75
+    )
+  })
+}
+
+function clearDrivePreviewCache() {
+  drivePreviewCache.clear()
+  drivePreviewLoading.clear()
+  for (const url of drivePreviewObjectUrls) {
+    try {
+      URL.revokeObjectURL(url)
+    } catch {}
+  }
+  drivePreviewObjectUrls.clear()
+}
+
+function guessMimeTypeByName(name) {
+  const ext = nodePath.extname(String(name || '')).toLowerCase()
+  if (ext === '.png') return 'image/png'
+  if (ext === '.jpg' || ext === '.jpeg') return 'image/jpeg'
+  if (ext === '.gif') return 'image/gif'
+  if (ext === '.webp') return 'image/webp'
+  if (ext === '.heic') return 'image/heic'
+  if (ext === '.heif') return 'image/heif'
+  return 'application/octet-stream'
 }
 
 function setWorkerLogMessage(message) {
@@ -2775,7 +3035,8 @@ function upsertWorkerActivityBar(id, label, done, total, options = {}) {
     done: safeDone,
     total: safeTotal,
     subtitle: String(options.subtitle || ''),
-    displayMode: String(options.displayMode || 'count')
+    displayMode: String(options.displayMode || 'count'),
+    etaMs: Number.isFinite(Number(options.etaMs)) ? Math.max(0, Number(options.etaMs)) : null
   })
   renderWorkerActivityBars()
 }
@@ -2801,7 +3062,11 @@ function renderWorkerActivityBars() {
       const subtitleHtml = bar.subtitle
         ? `<div class="activity-label" style="margin-top:3px;">${escapeHtml(bar.subtitle)}</div>`
         : ''
-      return `<div class="activity-bar"><div class="activity-label">${escapeHtml(bar.label)} ${progressText}</div>${subtitleHtml}<div class="activity-track"><div class="activity-fill" style="width:${percent}%"></div></div></div>`
+      const etaHtml =
+        Number.isFinite(Number(bar.etaMs)) && Number(bar.etaMs) > 0
+          ? `<div class="activity-label" style="margin-top:3px;">ETA ${escapeHtml(formatEta(Number(bar.etaMs)))}</div>`
+          : ''
+      return `<div class="activity-bar"><div class="activity-label">${escapeHtml(bar.label)} ${progressText}</div>${subtitleHtml}${etaHtml}<div class="activity-track"><div class="activity-fill" style="width:${percent}%"></div></div></div>`
     })
     .join('')
 
@@ -2977,6 +3242,29 @@ function formatBytes(value = 0) {
   if (n < 1024) return `${n} B`
   if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`
   return `${(n / (1024 * 1024)).toFixed(1)} MB`
+}
+
+function estimateRemainingMs(done, total, startedAtMs) {
+  const safeTotal = Math.max(0, Number(total || 0))
+  const safeDone = Math.max(0, Number(done || 0))
+  const startedAt = Number(startedAtMs || 0)
+  if (!safeTotal || safeDone <= 0 || safeDone >= safeTotal || !startedAt) return null
+  const elapsedMs = Math.max(0, Date.now() - startedAt)
+  if (elapsedMs < 1500) return null
+  const ratePerMs = safeDone / elapsedMs
+  if (!Number.isFinite(ratePerMs) || ratePerMs <= 0) return null
+  return (safeTotal - safeDone) / ratePerMs
+}
+
+function formatEta(ms) {
+  const seconds = Math.max(0, Math.ceil(Number(ms || 0) / 1000))
+  if (seconds < 60) return `${seconds}s`
+  const minutes = Math.floor(seconds / 60)
+  const rem = seconds % 60
+  if (minutes < 60) return `${minutes}m ${rem}s`
+  const hours = Math.floor(minutes / 60)
+  const minRem = minutes % 60
+  return `${hours}h ${minRem}m`
 }
 
 function loadJson(key, fallback) {

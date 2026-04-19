@@ -553,6 +553,53 @@
         color: var(--muted);
         font-size: 12px;
       }
+      .drive-preview-col {
+        width: 72px;
+      }
+      .drive-preview-shell {
+        width: 52px;
+        height: 52px;
+        border-radius: 10px;
+        border: 1px solid var(--line);
+        background: #222;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--muted);
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        overflow: hidden;
+      }
+      body[data-theme='light'] .drive-preview-shell {
+        background: #eef2f8;
+      }
+      .drive-preview-shell img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+      .drive-preview-skeleton {
+        width: 100%;
+        height: 100%;
+        display: block;
+        background: linear-gradient(
+          100deg,
+          color-mix(in srgb, var(--line) 72%, transparent) 20%,
+          color-mix(in srgb, var(--line) 32%, transparent) 45%,
+          color-mix(in srgb, var(--line) 72%, transparent) 70%
+        );
+        background-size: 220% 100%;
+        animation: drivePreviewShimmer 1.15s linear infinite;
+      }
+      @keyframes drivePreviewShimmer {
+        from {
+          background-position: 100% 0;
+        }
+        to {
+          background-position: -100% 0;
+        }
+      }
       .small {
         color: var(--muted);
         font-size: 12px;
@@ -936,6 +983,7 @@
               <thead>
                 <tr>
                   <th><input id="check-all-drive" type="checkbox" /></th>
+                  <th class="drive-preview-col">Preview</th>
                   <th>Name</th>
                   <th>Path</th>
                   <th>Size</th>
