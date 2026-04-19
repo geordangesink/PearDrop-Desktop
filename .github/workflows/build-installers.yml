@@ -152,7 +152,7 @@ jobs:
         include:
           - runs_on: macos-14
             arch: arm64
-          - runs_on: macos-13
+          - runs_on: macos-15-intel
             arch: x64
     timeout-minutes: 90
     steps:
