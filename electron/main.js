@@ -340,6 +340,7 @@ function focusMainWindow(existingWindow = null) {
   if (!existing || existing.isDestroyed()) return
   if (!existing.isVisible()) existing.show()
   if (existing.isMinimized()) existing.restore()
+  if (isWindows && typeof existing.moveTop === 'function') existing.moveTop()
   existing.focus()
 }
 
@@ -726,6 +727,7 @@ if (!lock) {
   app.on('second-instance', (evt, args) => {
     const link = findDeepLink(args, protocol)
     if (link) onDeepLink(link)
+    void revealMainWindow()
   })
 
   app.whenReady().then(() => {
