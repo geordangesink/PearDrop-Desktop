@@ -478,6 +478,11 @@ function wireUiEvents() {
     if (!id) return
     const actionNode = target.closest('[data-action]')
     const action = String(actionNode?.getAttribute('data-action') || '')
+    if (action === 'preview-source') {
+      const previewUrl = String(actionNode?.getAttribute('data-preview-url') || '').trim()
+      if (previewUrl) window.open(previewUrl, '_blank', 'noopener,noreferrer')
+      return
+    }
     if (action === 'remove') {
       state.sessionEditorRefs = state.sessionEditorRefs.filter((ref) => ref.id !== id)
       state.sessionEditorSelected.delete(id)
@@ -522,6 +527,12 @@ function wireUiEvents() {
     const node = target.closest('[data-action]')
     if (!(node instanceof HTMLElement)) return
     const action = String(node.dataset.action || '')
+    if (action === 'preview-drive') {
+      const key = String(node.dataset.key || '').trim()
+      if (!key) return
+      void openDrivePreviewByKey(key)
+      return
+    }
     if (action === 'toggle-file') {
       const key = String(node.dataset.key || '').trim()
       if (!key) return
@@ -1037,14 +1048,20 @@ function renderSessionEditor() {
 
   for (const ref of state.sessionEditorRefs) {
     const selected = state.sessionEditorSelected.has(ref.id)
+    const previewHtml = renderSourcePreview(ref)
     const row = document.createElement('div')
     row.className = `row-item${selected ? ' selected' : ''}`
     row.dataset.sessionRefId = String(ref.id || '')
     row.innerHTML = `
       <input type="checkbox" ${selected ? 'checked' : ''} />
       <div>
-        <div class="row-title">${escapeHtml(String(ref.name || ref.path || 'Source'))}</div>
-        <div class="row-sub">${escapeHtml(String(ref.type || 'file').toUpperCase())} · ${escapeHtml(String(ref.path || ''))}</div>
+        <div style="display:grid; grid-template-columns:84px 1fr; gap:10px; align-items:center;">
+          ${previewHtml}
+          <div>
+            <div class="row-title">${escapeHtml(String(ref.name || ref.path || 'Source'))}</div>
+            <div class="row-sub">${escapeHtml(String(ref.type || 'file').toUpperCase())} · ${escapeHtml(String(ref.path || ''))}</div>
+          </div>
+        </div>
       </div>
       <div class="controls">
         <button class="btn alt icon icon-danger" data-action="remove" aria-label="Remove" title="Remove">${BIN_ICON}</button>
@@ -1290,27 +1307,33 @@ function renderSources() {
 
 function renderSourcePreview(source) {
   const type = source?.type === 'folder' ? 'folder' : 'file'
-  if (type === 'folder') return '<div class="source-preview">DIR</div>'
-
   const srcPath = String(source?.path || '').trim()
+  const src = safeFileUrl(srcPath)
+  const toClickable = (innerHtml) => {
+    if (!src) return innerHtml
+    return `<button class="source-preview-btn" type="button" data-action="preview-source" data-preview-url="${escapeHtmlAttr(src)}">${innerHtml}</button>`
+  }
+  if (type === 'folder') return toClickable('<div class="source-preview">DIR</div>')
+
   const coverArt = String(source?.coverArtDataUrl || '').trim()
   if (coverArt) {
-    return `<div class="source-preview"><img src="${escapeHtmlAttr(coverArt)}" alt="audio cover"></div>`
+    return toClickable(
+      `<div class="source-preview"><img src="${escapeHtmlAttr(coverArt)}" alt="audio cover"></div>`
+    )
   }
   const mime = guessMimeType(srcPath)
   if (mime.startsWith('image/')) {
-    const src = safeFileUrl(srcPath)
     if (src) {
       return `<button class="source-preview-btn" type="button" data-action="preview-source" data-preview-url="${escapeHtmlAttr(src)}"><div class="source-preview"><img src="${escapeHtmlAttr(src)}" alt="preview"></div></button>`
     }
   }
   if (isMp3Path(srcPath) && !sourceCoverLoadsInFlight.has(String(source?.id || ''))) {
     void hydrateSourceCoverArt(source)
-    return '<div class="source-preview">MP3</div>'
+    return toClickable('<div class="source-preview">MP3</div>')
   }
-  if (mime.startsWith('video/')) return '<div class="source-preview">VID</div>'
+  if (mime.startsWith('video/')) return toClickable('<div class="source-preview">VID</div>')
   const ext = nodePath.extname(srcPath).replace('.', '').slice(0, 4).toUpperCase() || 'FILE'
-  return `<div class="source-preview">${escapeHtml(ext)}</div>`
+  return toClickable(`<div class="source-preview">${escapeHtml(ext)}</div>`)
 }
 
 function safeFileUrl(filePath) {
@@ -2812,20 +2835,21 @@ function collectDriveFolderFileKeys(folderPath) {
 }
 
 function renderDrivePreviewCell(row) {
+  const key = String(row?.key || '').trim()
+  const baseAttrs = `class="source-preview-btn" type="button" data-action="preview-drive" data-key="${escapeHtmlAttr(key)}" aria-label="Preview ${escapeHtmlAttr(String(row?.name || 'file'))}" title="Preview"`
   if (!isDriveImageRow(row)) {
     const ext = nodePath
       .extname(String(row?.name || ''))
       .replace('.', '')
       .trim()
       .toUpperCase()
-    return `<div class="drive-preview-shell">${escapeHtml(ext || 'FILE')}</div>`
+    return `<button ${baseAttrs}><div class="drive-preview-shell">${escapeHtml(ext || 'FILE')}</div></button>`
   }
-  const key = String(row?.key || '').trim()
   const cached = drivePreviewCache.get(key)
   if (cached) {
-    return `<div class="drive-preview-shell"><img alt="preview" src="${escapeHtmlAttr(cached)}" loading="lazy" /></div>`
+    return `<button ${baseAttrs}><div class="drive-preview-shell"><img alt="preview" src="${escapeHtmlAttr(cached)}" loading="lazy" /></div></button>`
   }
-  return '<div class="drive-preview-shell"><span class="drive-preview-skeleton"></span></div>'
+  return `<button ${baseAttrs}><div class="drive-preview-shell"><span class="drive-preview-skeleton"></span></div></button>`
 }
 
 function isDriveImageRow(row) {
@@ -2848,6 +2872,43 @@ function queueDrivePreviewLoads(rows) {
       drivePreviewLoading.delete(key)
     })
   }
+}
+
+async function openDrivePreviewByKey(key) {
+  const entry = findInviteEntryByKey(key)
+  if (!entry || !state.rpc || !state.inviteSource) return
+  const drivePath = String(entry.drivePath || '').trim()
+  if (!drivePath) return
+  const expectedBytes = Math.max(0, Number(entry.byteLength || 0))
+  const mimeType = String(entry.mimeType || '').trim() || guessMimeTypeByName(entry.name || '')
+  try {
+    const bytes = await readDriveEntryBytesForPreview(
+      state.rpc,
+      state.inviteSource,
+      drivePath,
+      expectedBytes,
+      256 * 1024
+    )
+    if (!bytes || !bytes.length) {
+      setStatus('Preview unavailable: empty file.')
+      return
+    }
+    const blob = new Blob([bytes], { type: mimeType || 'application/octet-stream' })
+    const url = URL.createObjectURL(blob)
+    drivePreviewObjectUrls.add(url)
+    window.open(url, '_blank', 'noopener,noreferrer')
+  } catch (error) {
+    setStatus(`Preview failed: ${error?.message || String(error)}`)
+  }
+}
+
+function findInviteEntryByKey(key) {
+  const value = String(key || '').trim()
+  if (!value) return null
+  for (const entry of state.inviteEntries) {
+    if (entryKey(entry) === value) return entry
+  }
+  return null
 }
 
 async function loadDrivePreview(row) {
