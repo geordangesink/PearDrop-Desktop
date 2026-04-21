@@ -1,50 +1,40 @@
 # PearDrop Downloads Server
 
-Minimal upload + static download service for hosting installers without redirects.
+Simple Node/Express service for uploading and serving static artifacts in development.
 
-## Environment Variables
+## Local Run
 
-- `PORT` (optional): defaults to `3000`
-- `UPLOAD_TOKEN` (required): bearer token for upload endpoint
-- `DOWNLOAD_ROOT` (optional): defaults to `$RAILWAY_VOLUME_MOUNT_PATH/downloads` on Railway,
-  then `/data/downloads`
+```bash
+npm install
+npm start
+```
 
-## Endpoints
+## Config
 
-- `GET /health` -> health check
-- `PUT /upload?path=<relative/path>` -> upload a file (requires `x-upload-token`)
-- `POST /promote-latest` -> create/update latest alias from a versioned file (requires `x-upload-token`)
-- `GET /downloads/<relative/path>` -> serve uploaded file
+- `PORT` (optional, default: `3000`)
+- `UPLOAD_TOKEN` (required for write endpoints)
+- `DOWNLOAD_ROOT` (optional storage root)
 
-## Railway Setup
+## API
 
-1. Create a Railway service from this repo.
-2. Set the service root directory to `downloads-server`.
-3. Attach a volume mounted to `/data`.
-4. Set env vars:
-   - `UPLOAD_TOKEN=<strong-random-token>`
-   - `DOWNLOAD_ROOT=/data/downloads` if you are not using Railway's automatic volume mount path
+- `GET /health` and `GET /healthz` health checks
+- `PUT /upload?path=<relative/path>` upload file bytes
+- `POST /promote-latest` create/update an alias target
+- `GET /downloads/<relative/path>` serve stored file
 
-## Upload Example
+## Local Examples
+
+Upload:
 
 ```bash
 curl -X PUT \
-  "https://<your-service>.up.railway.app/upload?path=win32/v0.1.0/PearDrop-Setup-0.1.0.exe" \
-  -H "x-upload-token: <UPLOAD_TOKEN>" \
-  --data-binary @PearDrop-Setup-0.1.0.exe
+  "http://127.0.0.1:3000/upload?path=example/test.bin" \
+  -H "x-upload-token: dev-token" \
+  --data-binary @./test.bin
 ```
 
-## Download Example
+Download headers:
 
 ```bash
-curl -I "https://<your-service>.up.railway.app/downloads/win32/v0.1.0/PearDrop-Setup-0.1.0.exe"
-```
-
-## Promote Example
-
-```bash
-curl -X POST "https://<your-service>.up.railway.app/promote-latest" \
-  -H "content-type: application/json" \
-  -H "x-upload-token: <UPLOAD_TOKEN>" \
-  --data '{"source":"win32/v0.1.0/PearDrop-Setup-0.1.0.exe","target":"win32/latest/PearDrop-Setup.exe"}'
+curl -I "http://127.0.0.1:3000/downloads/example/test.bin"
 ```
