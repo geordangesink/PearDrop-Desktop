@@ -13,9 +13,7 @@ async function createWebRtcHost({ invite, rpc }) {
   await onceWebSocketOpen(relaySocket)
 
   const dht = new DHT(new RelayStream(true, relaySocket))
-  const keyPair = DHT.keyPair
-    ? DHT.keyPair(deriveStableSignalSeed(invite))
-    : dht.defaultKeyPair
+  const keyPair = DHT.keyPair ? DHT.keyPair(deriveStableSignalSeed(invite)) : dht.defaultKeyPair
   const server = dht.createServer()
 
   server.on('connection', (signalSocket) => {
@@ -48,11 +46,7 @@ async function createWebRtcHost({ invite, rpc }) {
 
 function deriveStableSignalSeed(invite) {
   const value = String(invite || '').trim()
-  return crypto
-    .createHash('sha256')
-    .update('peardrop-webrtc-share-v1\0')
-    .update(value)
-    .digest()
+  return crypto.createHash('sha256').update('peardrop-webrtc-share-v1\0').update(value).digest()
 }
 
 function buildWebLink({ signalKey, relayUrl, invite }) {
