@@ -2206,6 +2206,9 @@ async function rehostHistoryItem(historyItem) {
         fileCount: Array.isArray(response?.manifest) ? response.manifest.length : files.length,
         totalBytes: Number(response?.transfer?.totalBytes || historyItem.totalBytes || 0)
       })
+
+      // Pre-generate/reuse the WebRTC share invite as part of restart so copy is instant.
+      await ensureWebRtcShareInvite(invite)
     }
     state.hostHistory = state.hostHistory.filter((row) => row.id !== historyItem.id)
     state.selectedHistory.delete(String(historyItem.id || ''))
