@@ -138,7 +138,7 @@ async function primeMacHelpersPath(updater, fsCompat, pathCompat) {
   const helpersPath = getMacHelpersPath(updater, pathCompat)
   if (!helpersPath) return false
   try {
-    await fsCompat.promises.mkdir(helpersPath, { recursive: true })
+    await ensureDirPortable(helpersPath, fsCompat, pathCompat)
     return true
   } catch {
     return false
@@ -156,5 +156,50 @@ function isMissingMacHelpersPathError(error) {
 async function maybeRecoverMissingMacHelpersPath(updater, error, fsCompat, pathCompat) {
   if (platform !== 'darwin') return false
   if (!isMissingMacHelpersPathError(error)) return false
-  return primeMacHelpersPath(updater, fsCompat, pathCompat)
+  const recovered = await primeMacHelpersPath(updater, fsCompat, pathCompat)
+  if (!recovered) return false
+  clearUpdaterStuckState(updater)
+  scheduleUpdaterRetry(updater)
+  return true
+}
+
+async function ensureDirPortable(targetDir, fsCompat, pathCompat) {
+  const normalized = String(targetDir || '').replace(/\\/g, '/')
+  if (!normalized) return
+
+  const absolute = normalized.startsWith('/')
+  const parts = normalized.split('/').filter(Boolean)
+  let current = absolute ? '/' : ''
+
+  for (const part of parts) {
+    current = current ? pathCompat.join(current, part) : part
+    let stat = null
+    try {
+      stat = await fsCompat.promises.stat(current)
+    } catch (error) {
+      if (error?.code !== 'ENOENT') throw error
+    }
+    if (stat?.isDirectory?.()) continue
+    try {
+      await fsCompat.promises.mkdir(current)
+    } catch (error) {
+      if (error?.code === 'EEXIST') continue
+      if (error?.code === 'ENOENT') continue
+      throw error
+    }
+  }
+}
+
+function clearUpdaterStuckState(updater) {
+  if (!updater || typeof updater !== 'object') return
+  if ('updating' in updater) updater.updating = false
+}
+
+function scheduleUpdaterRetry(updater) {
+  if (!updater || typeof updater._updateBackground !== 'function') return
+  setTimeout(() => {
+    try {
+      updater._updateBackground()
+    } catch {}
+  }, 25)
 }
