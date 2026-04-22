@@ -1,7 +1,7 @@
 {
   "name": "pear-drops-desktop",
   "productName": "PearDrop",
-  "version": "0.4.3",
+  "version": "0.4.4",
   "upgrade": "pear://za3e8sw9mpqjah8uricsbpqmnsq5egcfc9jte4kcj38y7hwgdbay",
   "description": "Native-first desktop uploader/downloader for PearDrop",
   "license": "Apache-2.0",
