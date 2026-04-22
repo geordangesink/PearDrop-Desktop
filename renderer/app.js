@@ -35,6 +35,7 @@ const PUBLIC_SITE_ORIGIN = 'https://peardrop.online'
 const FALLBACK_RELAY_URL = 'wss://pear-drops.up.railway.app'
 const workerSpecifier = '/workers/main.js'
 const WORKER_READY_TOKEN = '__PEARDROP_WORKER_RPC_READY__'
+const HOST_UPLOAD_PROGRESS_TOKEN = '__PEARDROP_HOST_UPLOAD_PROGRESS__'
 const WORKER_READY_TIMEOUT_MS = 45000
 const WORKER_INIT_TIMEOUT_MS = 30000
 const bridge = window.bridge
@@ -181,6 +182,10 @@ let workerReadySeen = false
 let workerReadyWaiters = []
 let sessionSwipeAccumulator = 0
 let sessionSwipeTimer = null
+let shutdownForceCloseTimer = null
+let appMainHeartbeatTimer = null
+let appMainHeartbeatFailed = 0
+let hostUploadStartedAt = 0
 const webRtcShareHosts = new Map()
 const webRtcShareHostPromises = new Map()
 
@@ -228,13 +233,24 @@ function wireGlobalEvents() {
   )
 
   bridge.onWorkerStdout?.(workerSpecifier, (data) => {
-    const text = decoder.decode(data).trim()
-    if (!text) return
-    if (text.includes(WORKER_READY_TOKEN)) {
-      markWorkerReady()
-      return
+    const raw = decoder.decode(data)
+    const lines = String(raw || '')
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean)
+    if (!lines.length) return
+
+    for (const text of lines) {
+      if (text.includes(WORKER_READY_TOKEN)) {
+        markWorkerReady()
+        continue
+      }
+      if (text.startsWith(HOST_UPLOAD_PROGRESS_TOKEN)) {
+        applyHostUploadProgress(text.slice(HOST_UPLOAD_PROGRESS_TOKEN.length))
+        continue
+      }
+      setWorkerLogMessage(text)
     }
-    setWorkerLogMessage(text)
   })
 
   bridge.onWorkerStderr?.(workerSpecifier, (data) => {
@@ -258,6 +274,15 @@ function wireGlobalEvents() {
     const message = String(payload?.message || '').trim()
     if (shutdownMessageEl && message) shutdownMessageEl.textContent = message
     shutdownOverlayEl?.classList.remove('hidden')
+
+    // Keep shutdown overlay visible during normal teardown.
+    // Use a delayed fail-safe close only if teardown appears stuck.
+    if (shutdownForceCloseTimer) clearTimeout(shutdownForceCloseTimer)
+    shutdownForceCloseTimer = setTimeout(() => {
+      try {
+        window.close()
+      } catch {}
+    }, 15000)
   })
 
   bridge.onUpdateReady?.((payload) => {
@@ -284,6 +309,14 @@ function wireGlobalEvents() {
   })
 
   window.addEventListener('beforeunload', () => {
+    if (appMainHeartbeatTimer) {
+      clearInterval(appMainHeartbeatTimer)
+      appMainHeartbeatTimer = null
+    }
+    if (shutdownForceCloseTimer) {
+      clearTimeout(shutdownForceCloseTimer)
+      shutdownForceCloseTimer = null
+    }
     stopActiveHostsPolling()
     closeWebRtcShareHosts()
   })
@@ -321,6 +354,57 @@ function wireGlobalEvents() {
   document.addEventListener('dragover', onGlobalDragOver, true)
   window.addEventListener('drop', onGlobalDrop)
   document.addEventListener('drop', onGlobalDrop, true)
+
+  startMainHeartbeatWatchdog()
+}
+
+function startMainHeartbeatWatchdog() {
+  if (!bridge || typeof bridge.ping !== 'function') return
+  if (appMainHeartbeatTimer) clearInterval(appMainHeartbeatTimer)
+  appMainHeartbeatFailed = 0
+
+  const check = async () => {
+    try {
+      await withTimeout(Promise.resolve(bridge.ping()), 3500)
+      appMainHeartbeatFailed = 0
+    } catch {
+      appMainHeartbeatFailed += 1
+      if (appMainHeartbeatFailed < 2) return
+      try {
+        window.close()
+      } catch {}
+    }
+  }
+
+  appMainHeartbeatTimer = setInterval(() => {
+    void check()
+  }, 2500)
+  void check()
+}
+
+function withTimeout(promise, timeoutMs) {
+  return new Promise((resolve, reject) => {
+    let settled = false
+    const timer = setTimeout(() => {
+      if (settled) return
+      settled = true
+      reject(new Error('Timed out'))
+    }, Number(timeoutMs || 0))
+
+    Promise.resolve(promise)
+      .then((value) => {
+        if (settled) return
+        settled = true
+        clearTimeout(timer)
+        resolve(value)
+      })
+      .catch((error) => {
+        if (settled) return
+        settled = true
+        clearTimeout(timer)
+        reject(error)
+      })
+  })
 }
 
 function wireUiEvents() {
@@ -1755,7 +1839,19 @@ async function hostSelectedSources(sessionNameInput = 'Host Session', packaging 
     if (!files.length) return setStatus('No readable files found in selected sources.')
 
     setWorkerLogMessage('creating upload host')
-    upsertWorkerActivityBar('host-upload', 'Creating host upload', 0, 1)
+    const totalUploadBytes = files.reduce((sum, row) => sum + Number(row.byteLength || 0), 0)
+    hostUploadStartedAt = Date.now()
+    upsertWorkerActivityBar(
+      'host-upload',
+      'Creating host upload',
+      0,
+      Math.max(1, totalUploadBytes),
+      {
+        displayMode: 'bytes',
+        subtitle: 'Writing files into hosted drive',
+        etaMs: estimateRemainingMs(0, Math.max(1, totalUploadBytes), hostUploadStartedAt)
+      }
+    )
 
     const sessionName = String(sessionNameInput || '').trim() || 'Host Session'
     const response = await state.rpc.request(RpcCommand.CREATE_UPLOAD, {
@@ -1764,6 +1860,7 @@ async function hostSelectedSources(sessionNameInput = 'Host Session', packaging 
     })
 
     clearWorkerActivityBar('host-upload')
+    hostUploadStartedAt = 0
 
     const invite = String(response?.nativeInvite || response?.invite || '').trim()
     if (invite) {
@@ -1792,11 +1889,40 @@ async function hostSelectedSources(sessionNameInput = 'Host Session', packaging 
   } catch (error) {
     clearWorkerActivityBar('host-expand')
     clearWorkerActivityBar('host-upload')
+    hostUploadStartedAt = 0
     setStatus(`Host failed: ${error.message || String(error)}`)
   } finally {
     state.hostingSelected = false
     renderActionButtons()
   }
+}
+
+function applyHostUploadProgress(payloadText) {
+  if (!state.hostingSelected) return
+  let progress = null
+  try {
+    progress = JSON.parse(String(payloadText || '{}'))
+  } catch {
+    return
+  }
+  const totalBytes = Math.max(1, Number(progress?.totalBytes || 0))
+  const completedBytes = Math.max(0, Math.min(totalBytes, Number(progress?.completedBytes || 0)))
+  const remainingBytes = Math.max(0, Number(progress?.remainingBytes || totalBytes - completedBytes))
+  const fileIndex = Math.max(0, Number(progress?.fileIndex || 0))
+  const fileCount = Math.max(0, Number(progress?.fileCount || 0))
+  const fileName = String(progress?.fileName || '').trim()
+  const phase = String(progress?.phase || '').trim()
+
+  let subtitle = `Remaining: ${formatBytes(remainingBytes)}`
+  if (fileCount > 0) subtitle += ` • File ${Math.min(fileIndex, fileCount)}/${fileCount}`
+  if (fileName) subtitle += ` • ${fileName}`
+  if (phase === 'done') subtitle = 'Finalizing hosted manifest'
+
+  upsertWorkerActivityBar('host-upload', 'Creating host upload', completedBytes, totalBytes, {
+    displayMode: 'bytes',
+    subtitle,
+    etaMs: estimateRemainingMs(completedBytes, totalBytes, hostUploadStartedAt || Date.now())
+  })
 }
 
 async function buildZipUploadPayload(sources, sessionNameInput) {
@@ -2756,7 +2882,9 @@ function resolveHostShareInvite(host, fallbackInvite = '') {
   const fallback = String(fallbackInvite || '').trim()
   const hostInvite = String(host?.invite || fallback).trim() || fallback
   const active = webRtcShareHosts.get(hostInvite)
-  if (active?.webLink && hasWebRtcSignal(active.webLink)) return active.webLink
+  if (isWebRtcShareHostAlive(active) && active?.webLink && hasWebRtcSignal(active.webLink)) {
+    return active.webLink
+  }
   const direct = String(host?.webSwarmLink || '').trim()
   if (hasWebRtcSignal(direct)) return direct
   return fallback
@@ -2796,7 +2924,13 @@ async function ensureWebRtcShareInvite(nativeInvite) {
   if (!key) return ''
 
   const cached = webRtcShareHosts.get(key)
-  if (cached?.webLink && hasWebRtcSignal(cached.webLink)) return cached.webLink
+  if (cached && !isWebRtcShareHostAlive(cached)) {
+    webRtcShareHosts.delete(key)
+    void cached?.close?.().catch?.(() => {})
+  }
+  if (isWebRtcShareHostAlive(cached) && cached?.webLink && hasWebRtcSignal(cached.webLink)) {
+    return cached.webLink
+  }
   const pending = webRtcShareHostPromises.get(key)
   if (pending) return pending
 
@@ -2843,6 +2977,14 @@ function closeWebRtcShareHosts() {
     void host?.close?.().catch?.(() => {})
   }
   webRtcShareHosts.clear()
+}
+
+function isWebRtcShareHostAlive(host) {
+  if (!host) return false
+  try {
+    if (typeof host.isAlive === 'function') return Boolean(host.isAlive())
+  } catch {}
+  return false
 }
 
 function parseSessionLabel(label) {

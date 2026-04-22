@@ -60,6 +60,9 @@ const api = {
   getThemeMode() {
     return ipcRenderer.invoke('app:getThemeMode')
   },
+  ping() {
+    return ipcRenderer.invoke('app:ping')
+  },
   getUpdateStatus() {
     return ipcRenderer.invoke('app:getUpdateStatus')
   },

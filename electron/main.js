@@ -221,7 +221,7 @@ async function shutdownWorkers() {
           worker.once('exit', onExit)
           const forceKillTimer = setTimeout(() => {
             try {
-              if (Number.isFinite(worker.pid) && worker.pid > 0) process.kill(worker.pid, 'SIGKILL')
+              forceKillWorker(Number(worker.pid || 0))
             } catch {}
             done()
           }, 5000)
@@ -479,10 +479,8 @@ function beginGracefulQuit() {
       console.error('Failed while shutting down workers', error)
     })
     .finally(() => {
-      if (app.isPackaged) {
-        const appDir = resolveBaseDir()
-        killStaleWorkers(path.join(appDir, 'app-storage'))
-      }
+      const appDir = resolveBaseDir()
+      killStaleWorkers(path.join(appDir, 'app-storage'))
       setHostingActive(false)
       app.exit(0)
     })
@@ -524,7 +522,7 @@ function getWorker(specifier) {
     launchId: `${Date.now()}-${process.pid}`
   }
 
-  if (app.isPackaged && !staleWorkersCleared) {
+  if (!staleWorkersCleared) {
     killStaleWorkers(updaterConfig.storage)
     staleWorkersCleared = true
   }
@@ -581,14 +579,26 @@ function killStaleWorkers(storagePath) {
       if (!Number.isFinite(pid) || pid <= 0 || pid === process.pid) continue
 
       const args = value.slice(splitIndex + 1)
-      if (!args.includes('bare-sidecar')) continue
+      if (!args.includes('bare-sidecar') && !args.includes('pear-sidecar')) continue
       if (!args.includes('workers/main.js') && !args.includes('workers\\main.js')) continue
       if (storagePath && !args.includes(storagePath)) continue
 
       try {
-        process.kill(pid, 'SIGKILL')
+        forceKillWorker(pid)
       } catch {}
     }
+  } catch {}
+}
+
+function forceKillWorker(pidLike) {
+  const pid = Number(pidLike || 0)
+  if (!Number.isFinite(pid) || pid <= 0 || pid === process.pid) return
+  try {
+    // Worker sidecars can outlive parents; killing process group reaps descendants too.
+    process.kill(-pid, 'SIGKILL')
+  } catch {}
+  try {
+    process.kill(pid, 'SIGKILL')
   } catch {}
 }
 
@@ -703,6 +713,10 @@ ipcMain.handle('app:getDownloadsPath', async () => {
 
 ipcMain.handle('app:getThemeMode', async () => {
   return themeMode
+})
+
+ipcMain.handle('app:ping', async () => {
+  return { ok: true, pid: process.pid, ts: Date.now() }
 })
 
 ipcMain.handle('app:setHostingActive', async (evt, active) => {
