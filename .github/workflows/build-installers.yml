@@ -49,7 +49,6 @@ jobs:
       - name: Normalize publish filenames
         shell: pwsh
         run: |
-          $version = node -p "require('./package.json').version"
           $publishDir = "out/publish"
           New-Item -ItemType Directory -Path $publishDir -Force | Out-Null
 
@@ -59,7 +58,6 @@ jobs:
             Select-Object -First 1
           if (-not $exe) { throw "No Squirrel setup .exe installer found in out/make." }
 
-          Copy-Item $exe.FullName "$publishDir/PearDrop-Setup-$version.exe" -Force
           Copy-Item $exe.FullName "$publishDir/PearDrop-Setup.exe" -Force
 
           Write-Host "Published artifacts:"
@@ -116,7 +114,6 @@ jobs:
 
       - name: Normalize publish filenames
         run: |
-          version=$(node -p "require('./package.json').version")
           arch="${{ matrix.arch }}"
           publish_dir="out/publish"
           mkdir -p "$publish_dir"
@@ -128,9 +125,7 @@ jobs:
           fi
 
           chmod +x "$appimage"
-          cp "$appimage" "$publish_dir/PearDrop-$version-linux-$arch.AppImage"
           cp "$appimage" "$publish_dir/PearDrop-linux-$arch.AppImage"
-          chmod +x "$publish_dir/PearDrop-$version-linux-$arch.AppImage"
           chmod +x "$publish_dir/PearDrop-linux-$arch.AppImage"
 
           echo "Published artifacts:"
@@ -219,7 +214,6 @@ jobs:
 
       - name: Normalize publish filenames
         run: |
-          version=$(node -p "require('./package.json').version")
           arch="${{ matrix.arch }}"
           publish_dir="out/publish"
           mkdir -p "$publish_dir"
@@ -230,8 +224,16 @@ jobs:
             exit 1
           fi
 
-          cp "$dmg" "$publish_dir/PearDrop-$version-macos-$arch.dmg"
           cp "$dmg" "$publish_dir/PearDrop-macos-$arch.dmg"
+
+          app_bundle="$(find out -type d -name 'PearDrop.app' | head -n 1)"
+          if [ -z "$app_bundle" ]; then
+            echo "No PearDrop.app bundle found."
+            exit 1
+          fi
+
+          rm -rf "$publish_dir/PearDrop-macos-$arch.app"
+          cp -R "$app_bundle" "$publish_dir/PearDrop-macos-$arch.app"
 
           echo "Published artifacts:"
           ls -la "$publish_dir"
@@ -243,9 +245,8 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           set -euo pipefail
-          version=$(node -p "require('./package.json').version")
           arch="${{ matrix.arch }}"
-          dmg="out/publish/PearDrop-$version-macos-$arch.dmg"
+          dmg="out/publish/PearDrop-macos-$arch.dmg"
 
           if [ ! -f "$dmg" ]; then
             echo "Missing DMG for notarization: $dmg"
@@ -347,9 +348,9 @@ jobs:
             exit 1
           fi
 
-          version="$(ls -1 release-assets | sed -nE 's/^PearDrop-Setup-([0-9]+\.[0-9]+\.[0-9]+)\.exe$/\1/p' | head -n 1)"
-          if [ -z "${version}" ]; then
-            echo "Could not detect version from artifacts."
+          version="${GITHUB_REF_NAME#v}"
+          if [ -z "${version}" ] || [ "${version}" = "${GITHUB_REF_NAME}" ]; then
+            echo "Could not detect version from tag (${GITHUB_REF_NAME})."
             exit 1
           fi
 
@@ -452,8 +453,25 @@ jobs:
           }
 
           # Windows EXE only (required)
-          upload "release-assets/PearDrop-Setup-${version}.exe" "win32/v${version}/PearDrop-Setup-${version}.exe"
+          upload "release-assets/PearDrop-Setup.exe" "win32/v${version}/PearDrop-Setup-${version}.exe"
           promote_latest "win32/v${version}/PearDrop-Setup-${version}.exe" "win32/latest/PearDrop-Setup.exe"
+
+      - name: Build applings.zip
+        run: |
+          set -euo pipefail
+          mkdir -p release-assets/applings/arm64
+          mkdir -p release-assets/applings/x64
+
+          cp -R release-assets/PearDrop-macos-arm64.app release-assets/applings/arm64/PearDrop.app
+          cp -R release-assets/PearDrop-macos-x64.app release-assets/applings/x64/PearDrop.app
+          cp release-assets/PearDrop-linux-arm64.AppImage release-assets/applings/arm64/PearDrop.AppImage
+          cp release-assets/PearDrop-linux-x64.AppImage release-assets/applings/x64/PearDrop.AppImage
+
+          # Current CI builds one Windows installer artifact; use it for both bundle folders.
+          cp release-assets/PearDrop-Setup.exe release-assets/applings/arm64/PearDrop.exe
+          cp release-assets/PearDrop-Setup.exe release-assets/applings/x64/PearDrop.exe
+
+          (cd release-assets && zip -r applings.zip applings)
 
       - name: Railway upload suspended
         if: vars.ENABLE_DOWNLOADS_UPLOAD != '1'
@@ -469,8 +487,8 @@ jobs:
           fail_on_unmatched_files: false
           files: |
             release-assets/PearDrop-Setup.exe
-            release-assets/PearDrop.AppImage
-            release-assets/PearDrop.dmg
-            release-assets/PearDrop-Setup-*.exe
-            release-assets/PearDrop-*.AppImage
-            release-assets/PearDrop-*.dmg
+            release-assets/PearDrop-linux-arm64.AppImage
+            release-assets/PearDrop-linux-x64.AppImage
+            release-assets/PearDrop-macos-arm64.dmg
+            release-assets/PearDrop-macos-x64.dmg
+            release-assets/applings.zip

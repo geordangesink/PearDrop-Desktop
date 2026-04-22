@@ -21,6 +21,10 @@ const DEFAULT_ICE_SERVERS = [
 
 let portcullisModulePromise = null
 
+function getIceCandidateCtor() {
+  return typeof globalThis.RTCIceCandidate === 'function' ? globalThis.RTCIceCandidate : null
+}
+
 async function loadPortcullisModule() {
   if (portcullisModulePromise) return portcullisModulePromise
   portcullisModulePromise = import('@tostyssb/portcullis').catch((error) => {
@@ -191,8 +195,8 @@ async function handleSignalConnection(signalSocket, { invite, rpc, portMappings 
       await pc.addIceCandidate(null)
       return true
     }
-    const candidateForAdd =
-      typeof RTCIceCandidate === 'function' ? new RTCIceCandidate(candidate) : candidate
+    const IceCandidate = getIceCandidateCtor()
+    const candidateForAdd = IceCandidate ? new IceCandidate(candidate) : candidate
     await pc.addIceCandidate(candidateForAdd)
     return true
   }
@@ -343,138 +347,154 @@ async function handleSignalConnection(signalSocket, { invite, rpc, portMappings 
   createPeerConnection()
 
   const handleOfferMessage = async (message) => {
-      const incomingOfferSdp = sanitizeIceSdp(String(message.sdp || ''))
-      const incomingOfferId = Number(message.offerId || 0)
+    const incomingOfferSdp = sanitizeIceSdp(String(message.sdp || ''))
+    const incomingOfferId = Number(message.offerId || 0)
+    if (incomingOfferId > 0) {
+      activeCandidateOfferId = incomingOfferId
+      activeOfferCandidateFlow = {
+        offerId: incomingOfferId,
+        received: 0,
+        queued: 0,
+        applied: 0,
+        addErrors: 0,
+        lastAddError: ''
+      }
+    }
+    if (incomingOfferId > 0) {
+      peer.send({ type: 'offer-ack', offerId: incomingOfferId, stage: 'received' })
+    }
+    if (handlingOffer) {
+      // Keep only the freshest pending offer while a prior one is being processed.
+      pendingOfferMessage = message
       if (incomingOfferId > 0) {
-        activeCandidateOfferId = incomingOfferId
-        activeOfferCandidateFlow = {
-          offerId: incomingOfferId,
-          received: 0,
-          queued: 0,
-          applied: 0,
-          addErrors: 0,
-          lastAddError: ''
-        }
-      }
-      if (incomingOfferId > 0) {
-        peer.send({ type: 'offer-ack', offerId: incomingOfferId, stage: 'received' })
-      }
-      if (handlingOffer) {
-        // Keep only the freshest pending offer while a prior one is being processed.
-        pendingOfferMessage = message
-        if (incomingOfferId > 0) {
-          peer.send({ type: 'offer-ack', offerId: incomingOfferId, stage: 'queued' })
-        }
-        return
-      }
-
-      // Web sender may re-send the same offer for reliability.
-      // If we've already answered this SDP, just repeat the cached answer.
-      if (lastAnswerSdp && incomingOfferSdp && incomingOfferSdp === lastOfferSdp) {
-        if (incomingOfferId > 0) {
-          peer.send({ type: 'offer-ack', offerId: incomingOfferId, stage: 'reuse-answer' })
-        }
-        peer.send({ type: 'answer', sdp: lastAnswerSdp, offerId: incomingOfferId || lastOfferId || undefined })
-        return
-      }
-      if (channelOpened && lastAnswerSdp) {
-        if (incomingOfferId > 0) {
-          peer.send({ type: 'offer-ack', offerId: incomingOfferId, stage: 'channel-open' })
-        }
-        peer.send({ type: 'answer', sdp: lastAnswerSdp, offerId: incomingOfferId || lastOfferId || undefined })
-        return
-      }
-
-      const isNewOfferGeneration = incomingOfferSdp && incomingOfferSdp !== lastOfferSdp
-      const iceState = String(pc?.iceConnectionState || '')
-      const connState = String(pc?.connectionState || '')
-      const shouldResetForNewOffer =
-        isNewOfferGeneration &&
-        !channelOpened &&
-        (!pc || iceState === 'failed' || iceState === 'closed' || connState === 'failed' || connState === 'closed')
-      if (shouldResetForNewOffer) {
-        lastAnswerSdp = ''
-        createPeerConnection()
-      }
-      if (isNewOfferGeneration) {
-        // New offer generation: queue incoming candidates until the matching offer is applied.
-        remoteDescriptionSet = false
-        pendingRemoteCandidates.length = 0
-      }
-      const requestedPunchAtMs = normalizePunchAtMs(message.punchAtMs, Date.now())
-      activePunchAtMs = requestedPunchAtMs
-      scheduleOutgoingCandidateFlush()
-      handlingOffer = true
-      if (incomingOfferId > 0) {
-        peer.send({ type: 'offer-ack', offerId: incomingOfferId, stage: 'processing' })
-      }
-      await waitUntilPunchAt(activePunchAtMs)
-
-      // Ignore unexpected offer states instead of crashing negotiation with invalid transitions.
-      if (String(pc.signalingState || '') !== 'stable') {
-        handlingOffer = false
-        if (incomingOfferId > 0) {
-          peer.send({
-            type: 'offer-ack',
-            offerId: incomingOfferId,
-            stage: 'deferred-nonstable',
-            signalingState: String(pc.signalingState || '')
-          })
-        }
-        if (lastAnswerSdp) {
-          peer.send({ type: 'answer', sdp: lastAnswerSdp, offerId: incomingOfferId || lastOfferId || undefined })
-        }
-        const nextOffer = pendingOfferMessage
-        pendingOfferMessage = null
-        if (nextOffer) void handleOfferMessage(nextOffer)
-        return
-      }
-
-      try {
-        await pc.setRemoteDescription({
-          type: 'offer',
-          sdp: incomingOfferSdp
-        })
-        remoteDescriptionSet = true
-        await flushPendingCandidates()
-        const answer = await pc.createAnswer()
-        await pc.setLocalDescription(answer)
-        const sdp = sanitizeIceSdp(String(answer.sdp || ''))
-        lastOfferSdp = incomingOfferSdp
-        lastOfferId = incomingOfferId
-        lastAnswerSdp = sdp
-        if (incomingOfferId > 0) {
-          activeCandidateOfferId = incomingOfferId
-        }
-        peer.send({
-          type: 'answer',
-          sdp,
-          offerId: incomingOfferId || undefined
-        })
-        lastAnsweredOfferId = incomingOfferId
-        if (incomingOfferId > 0) {
-          peer.send({ type: 'offer-ack', offerId: incomingOfferId, stage: 'answered' })
-        }
-      } catch (error) {
-        peer.send({
-          type: 'error',
-          error: error?.message || String(error)
-        })
-        if (incomingOfferId > 0) {
-          peer.send({
-            type: 'offer-ack',
-            offerId: incomingOfferId,
-            stage: 'error',
-            error: String(error?.message || error || '')
-          })
-        }
-      } finally {
-        handlingOffer = false
-        const nextOffer = pendingOfferMessage
-        pendingOfferMessage = null
-        if (nextOffer) void handleOfferMessage(nextOffer)
+        peer.send({ type: 'offer-ack', offerId: incomingOfferId, stage: 'queued' })
       }
       return
+    }
+
+    // Web sender may re-send the same offer for reliability.
+    // If we've already answered this SDP, just repeat the cached answer.
+    if (lastAnswerSdp && incomingOfferSdp && incomingOfferSdp === lastOfferSdp) {
+      if (incomingOfferId > 0) {
+        peer.send({ type: 'offer-ack', offerId: incomingOfferId, stage: 'reuse-answer' })
+      }
+      peer.send({
+        type: 'answer',
+        sdp: lastAnswerSdp,
+        offerId: incomingOfferId || lastOfferId || undefined
+      })
+      return
+    }
+    if (channelOpened && lastAnswerSdp) {
+      if (incomingOfferId > 0) {
+        peer.send({ type: 'offer-ack', offerId: incomingOfferId, stage: 'channel-open' })
+      }
+      peer.send({
+        type: 'answer',
+        sdp: lastAnswerSdp,
+        offerId: incomingOfferId || lastOfferId || undefined
+      })
+      return
+    }
+
+    const isNewOfferGeneration = incomingOfferSdp && incomingOfferSdp !== lastOfferSdp
+    const iceState = String(pc?.iceConnectionState || '')
+    const connState = String(pc?.connectionState || '')
+    const shouldResetForNewOffer =
+      isNewOfferGeneration &&
+      !channelOpened &&
+      (!pc ||
+        iceState === 'failed' ||
+        iceState === 'closed' ||
+        connState === 'failed' ||
+        connState === 'closed')
+    if (shouldResetForNewOffer) {
+      lastAnswerSdp = ''
+      createPeerConnection()
+    }
+    if (isNewOfferGeneration) {
+      // New offer generation: queue incoming candidates until the matching offer is applied.
+      remoteDescriptionSet = false
+      pendingRemoteCandidates.length = 0
+    }
+    const requestedPunchAtMs = normalizePunchAtMs(message.punchAtMs, Date.now())
+    activePunchAtMs = requestedPunchAtMs
+    scheduleOutgoingCandidateFlush()
+    handlingOffer = true
+    if (incomingOfferId > 0) {
+      peer.send({ type: 'offer-ack', offerId: incomingOfferId, stage: 'processing' })
+    }
+    await waitUntilPunchAt(activePunchAtMs)
+
+    // Ignore unexpected offer states instead of crashing negotiation with invalid transitions.
+    if (String(pc.signalingState || '') !== 'stable') {
+      handlingOffer = false
+      if (incomingOfferId > 0) {
+        peer.send({
+          type: 'offer-ack',
+          offerId: incomingOfferId,
+          stage: 'deferred-nonstable',
+          signalingState: String(pc.signalingState || '')
+        })
+      }
+      if (lastAnswerSdp) {
+        peer.send({
+          type: 'answer',
+          sdp: lastAnswerSdp,
+          offerId: incomingOfferId || lastOfferId || undefined
+        })
+      }
+      const nextOffer = pendingOfferMessage
+      pendingOfferMessage = null
+      if (nextOffer) void handleOfferMessage(nextOffer)
+      return
+    }
+
+    try {
+      await pc.setRemoteDescription({
+        type: 'offer',
+        sdp: incomingOfferSdp
+      })
+      remoteDescriptionSet = true
+      await flushPendingCandidates()
+      const answer = await pc.createAnswer()
+      await pc.setLocalDescription(answer)
+      const sdp = sanitizeIceSdp(String(answer.sdp || ''))
+      lastOfferSdp = incomingOfferSdp
+      lastOfferId = incomingOfferId
+      lastAnswerSdp = sdp
+      if (incomingOfferId > 0) {
+        activeCandidateOfferId = incomingOfferId
+      }
+      peer.send({
+        type: 'answer',
+        sdp,
+        offerId: incomingOfferId || undefined
+      })
+      lastAnsweredOfferId = incomingOfferId
+      if (incomingOfferId > 0) {
+        peer.send({ type: 'offer-ack', offerId: incomingOfferId, stage: 'answered' })
+      }
+    } catch (error) {
+      peer.send({
+        type: 'error',
+        error: error?.message || String(error)
+      })
+      if (incomingOfferId > 0) {
+        peer.send({
+          type: 'offer-ack',
+          offerId: incomingOfferId,
+          stage: 'error',
+          error: String(error?.message || error || '')
+        })
+      }
+    } finally {
+      handlingOffer = false
+      const nextOffer = pendingOfferMessage
+      pendingOfferMessage = null
+      if (nextOffer) void handleOfferMessage(nextOffer)
+    }
+    return
   }
 
   peer.onMessage(async (message) => {
@@ -509,8 +529,8 @@ async function handleSignalConnection(signalSocket, { invite, rpc, portMappings 
         return
       }
       try {
-        const candidateForAdd =
-          typeof RTCIceCandidate === 'function' ? new RTCIceCandidate(normalized) : normalized
+        const IceCandidate = getIceCandidateCtor()
+        const candidateForAdd = IceCandidate ? new IceCandidate(normalized) : normalized
         await pc.addIceCandidate(candidateForAdd)
         remoteCandidatesApplied += 1
         if (activeOfferCandidateFlow.offerId === activeCandidateOfferId) {
@@ -678,17 +698,13 @@ module.exports = {
 
 function isRelayIceCandidate(candidateLike) {
   const candidateLine =
-    typeof candidateLike === 'string'
-      ? candidateLike
-      : String(candidateLike?.candidate || '')
+    typeof candidateLike === 'string' ? candidateLike : String(candidateLike?.candidate || '')
   return /\btyp\s+relay\b/i.test(candidateLine)
 }
 
 function isMdnsIceCandidate(candidateLike) {
   const candidateLine =
-    typeof candidateLike === 'string'
-      ? candidateLike
-      : String(candidateLike?.candidate || '')
+    typeof candidateLike === 'string' ? candidateLike : String(candidateLike?.candidate || '')
   return /\b[a-z0-9-]+\.local\b/i.test(candidateLine)
 }
 
@@ -815,10 +831,9 @@ function createPortMappingManager() {
       if (!client) throw new Error(`No ${protocol} client available`)
       protocolClients[protocol] = client
       return client
-    })()
-      .finally(() => {
-        protocolClientInit[protocol] = null
-      })
+    })().finally(() => {
+      protocolClientInit[protocol] = null
+    })
     protocolClientInit[protocol] = initTask
     return initTask
   }
@@ -929,10 +944,9 @@ function createPortMappingManager() {
         'port mapping failed'
       lastError = String(lastProtocolError)
       return false
-    })()
-      .finally(() => {
-        inflight.delete(port)
-      })
+    })().finally(() => {
+      inflight.delete(port)
+    })
 
     inflight.set(port, task)
     return task
@@ -1039,9 +1053,7 @@ function normalizeCandidateForSignal(candidateLike) {
   if (!candidate) return null
   const sdpMid =
     source?.sdpMid === null || typeof source?.sdpMid === 'string' ? source.sdpMid : null
-  const sdpMLineIndex = Number.isInteger(source?.sdpMLineIndex)
-    ? Number(source.sdpMLineIndex)
-    : 0
+  const sdpMLineIndex = Number.isInteger(source?.sdpMLineIndex) ? Number(source.sdpMLineIndex) : 0
   const usernameFragment =
     typeof source?.usernameFragment === 'string' && source.usernameFragment
       ? source.usernameFragment
@@ -1144,9 +1156,7 @@ async function collectIceStatsSummary(pc) {
 
 function parseCandidateKind(candidateLike) {
   const line =
-    typeof candidateLike === 'string'
-      ? candidateLike
-      : String(candidateLike?.candidate || '')
+    typeof candidateLike === 'string' ? candidateLike : String(candidateLike?.candidate || '')
   if (!line) return 'other'
   const match = line.match(/\btyp\s+(host|srflx|prflx|relay)\b/i)
   return match ? String(match[1] || '').toLowerCase() : 'other'

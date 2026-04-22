@@ -361,7 +361,13 @@ function createMockSignalSocket(context) {
 }
 
 function toSdpLines(candidates) {
-  const lines = ['v=0', 'o=- 0 0 IN IP4 127.0.0.1', 's=-', 't=0 0', 'm=application 9 UDP/DTLS/SCTP webrtc-datachannel']
+  const lines = [
+    'v=0',
+    'o=- 0 0 IN IP4 127.0.0.1',
+    's=-',
+    't=0 0',
+    'm=application 9 UDP/DTLS/SCTP webrtc-datachannel'
+  ]
   for (const candidate of Array.isArray(candidates) ? candidates : []) {
     lines.push(`a=${String(candidate)}`)
   }

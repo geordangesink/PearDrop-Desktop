@@ -385,11 +385,14 @@ function startMainHeartbeatWatchdog() {
 function withTimeout(promise, timeoutMs) {
   return new Promise((resolve, reject) => {
     let settled = false
-    const timer = setTimeout(() => {
-      if (settled) return
-      settled = true
-      reject(new Error('Timed out'))
-    }, Number(timeoutMs || 0))
+    const timer = setTimeout(
+      () => {
+        if (settled) return
+        settled = true
+        reject(new Error('Timed out'))
+      },
+      Number(timeoutMs || 0)
+    )
 
     Promise.resolve(promise)
       .then((value) => {
@@ -1001,21 +1004,6 @@ function createRpcClient() {
       return parsed && parsed.ok === true ? parsed.result : parsed
     }
   }
-}
-
-function withTimeout(promise, timeoutMs) {
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error(`Timed out after ${timeoutMs}ms`)), timeoutMs)
-    Promise.resolve(promise)
-      .then((value) => {
-        clearTimeout(timer)
-        resolve(value)
-      })
-      .catch((error) => {
-        clearTimeout(timer)
-        reject(error)
-      })
-  })
 }
 
 function renderAll() {
@@ -1907,7 +1895,10 @@ function applyHostUploadProgress(payloadText) {
   }
   const totalBytes = Math.max(1, Number(progress?.totalBytes || 0))
   const completedBytes = Math.max(0, Math.min(totalBytes, Number(progress?.completedBytes || 0)))
-  const remainingBytes = Math.max(0, Number(progress?.remainingBytes || totalBytes - completedBytes))
+  const remainingBytes = Math.max(
+    0,
+    Number(progress?.remainingBytes || totalBytes - completedBytes)
+  )
   const fileIndex = Math.max(0, Number(progress?.fileIndex || 0))
   const fileCount = Math.max(0, Number(progress?.fileCount || 0))
   const fileName = String(progress?.fileName || '').trim()
