@@ -340,7 +340,7 @@ jobs:
 
   publish-release:
     name: Publish GitHub Release Assets
-    runs-on: ubuntu-latest
+    runs-on: macos-14
     needs:
       - windows-installers
       - linux-installers
@@ -487,11 +487,41 @@ jobs:
       - name: Build applings.zip
         run: |
           set -euo pipefail
+          rm -rf release-assets/applings release-assets/applings.zip
           mkdir -p release-assets/applings/arm64
           mkdir -p release-assets/applings/x64
 
-          cp -R release-assets/PearDrop-macos-arm64.app release-assets/applings/arm64/PearDrop.app
-          cp -R release-assets/PearDrop-macos-x64.app release-assets/applings/x64/PearDrop.app
+          extract_app_from_dmg() {
+            arch="$1"
+            dmg="release-assets/PearDrop-macos-${arch}.dmg"
+            out_app="release-assets/applings/${arch}/PearDrop.app"
+            if [ ! -f "$dmg" ]; then
+              echo "Missing DMG: $dmg"
+              exit 1
+            fi
+
+            attach_output="$(hdiutil attach "$dmg" -nobrowse -readonly -noverify)"
+            mount_point="$(echo "$attach_output" | awk '/\/Volumes\// { print substr($0, index($0, "/Volumes/")); exit }')"
+            if [ -z "$mount_point" ]; then
+              echo "Could not determine mounted DMG path for $dmg."
+              echo "$attach_output"
+              exit 1
+            fi
+
+            app_bundle="$(find "$mount_point" -maxdepth 2 -type d -name 'PearDrop.app' | head -n 1)"
+            if [ -z "$app_bundle" ]; then
+              hdiutil detach "$mount_point" -force || true
+              echo "No PearDrop.app found in $dmg."
+              exit 1
+            fi
+
+            rm -rf "$out_app"
+            ditto "$app_bundle" "$out_app"
+            hdiutil detach "$mount_point" -force || true
+          }
+
+          extract_app_from_dmg "arm64"
+          extract_app_from_dmg "x64"
           cp release-assets/PearDrop-linux-arm64.AppImage release-assets/applings/arm64/PearDrop.AppImage
           cp release-assets/PearDrop-linux-x64.AppImage release-assets/applings/x64/PearDrop.AppImage
 
@@ -501,7 +531,12 @@ jobs:
 
           cp package.json release-assets/package.json
 
-          (cd release-assets && zip -r applings.zip applings package.json)
+          (
+            cd release-assets
+            # Create mac-safe archive for .app bundles, then add package.json at zip root.
+            ditto -c -k --sequesterRsrc --keepParent applings applings.zip
+            zip -u applings.zip package.json
+          )
 
       - name: Railway upload suspended
         if: vars.ENABLE_DOWNLOADS_UPLOAD != '1'
