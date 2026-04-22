@@ -226,14 +226,40 @@ jobs:
 
           cp "$dmg" "$publish_dir/PearDrop-macos-$arch.dmg"
 
-          app_bundle="$(find out -type d -name 'PearDrop.app' | head -n 1)"
+          attach_output="$(hdiutil attach "$dmg" -nobrowse -readonly -noverify)"
+          mount_point="$(echo "$attach_output" | awk '/\/Volumes\// { print substr($0, index($0, "/Volumes/")); exit }')"
+          if [ -z "$mount_point" ]; then
+            echo "Could not determine mounted DMG path."
+            echo "$attach_output"
+            exit 1
+          fi
+
+          app_bundle="$(find "$mount_point" -maxdepth 2 -type d -name 'PearDrop.app' | head -n 1)"
           if [ -z "$app_bundle" ]; then
+            hdiutil detach "$mount_point" -force || true
             echo "No PearDrop.app bundle found."
             exit 1
           fi
 
           rm -rf "$publish_dir/PearDrop-macos-$arch.app"
           cp -R "$app_bundle" "$publish_dir/PearDrop-macos-$arch.app"
+          hdiutil detach "$mount_point" -force || true
+
+          app_exe="$publish_dir/PearDrop-macos-$arch.app/Contents/MacOS/PearDrop"
+          if [ ! -f "$app_exe" ]; then
+            echo "Missing app executable: $app_exe"
+            exit 1
+          fi
+
+          app_arches="$(lipo -archs "$app_exe" 2>/dev/null || true)"
+          expected_arch="x86_64"
+          if [ "$arch" = "arm64" ]; then
+            expected_arch="arm64"
+          fi
+          if [[ "$app_arches" != *"$expected_arch"* ]]; then
+            echo "Arch mismatch for $app_exe. Expected: $expected_arch, got: $app_arches"
+            exit 1
+          fi
 
           echo "Published artifacts:"
           ls -la "$publish_dir"
@@ -320,6 +346,8 @@ jobs:
       - linux-installers
       - macos-installers
     steps:
+      - uses: actions/checkout@v4
+
       - name: Download all installer artifacts
         uses: actions/download-artifact@v4
         with:
@@ -471,7 +499,9 @@ jobs:
           cp release-assets/PearDrop-Setup.exe release-assets/applings/arm64/PearDrop.exe
           cp release-assets/PearDrop-Setup.exe release-assets/applings/x64/PearDrop.exe
 
-          (cd release-assets && zip -r applings.zip applings)
+          cp package.json release-assets/package.json
+
+          (cd release-assets && zip -r applings.zip applings package.json)
 
       - name: Railway upload suspended
         if: vars.ENABLE_DOWNLOADS_UPLOAD != '1'
