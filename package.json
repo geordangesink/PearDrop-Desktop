@@ -2,7 +2,7 @@
   "name": "pear-drops-desktop",
   "productName": "PearDrop",
   "version": "0.4.5",
-  "upgrade": "pear://za3e8sw9mpqjah8uricsbpqmnsq5egcfc9jte4kcj38y7hwgdbay",
+  "upgrade": "pear://nhhms3ww3q5tb5n9n34egq1x9n7ene6keohzdqui3ffbeni9xngo",
   "description": "Native-first desktop uploader/downloader for PearDrop",
   "license": "Apache-2.0",
   "author": "",
@@ -37,7 +37,7 @@
     "hyperswarm": "^4.17.0",
     "nat-upnp": "^1.1.1",
     "paparam": "^1.10.0",
-    "pear-drop-core": "^0.5.1",
+    "pear-drop-core": "^0.5.2",
     "pear-runtime": "^1.0.1",
     "which-runtime": "^1.3.2"
   },
