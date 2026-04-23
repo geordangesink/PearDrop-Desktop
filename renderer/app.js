@@ -45,7 +45,6 @@ const sourceCoverLoadsInFlight = new Set()
 const drivePreviewCache = new Map()
 const drivePreviewLoading = new Set()
 const drivePreviewObjectUrls = new Set()
-const CLOSE_ICON = '<span aria-hidden="true">✕</span>'
 const BIN_ICON =
   '<span class="mini-trash" aria-hidden="true"><span class="mini-trash-lid"></span><span class="mini-trash-body"><span class="mini-trash-line"></span><span class="mini-trash-line"></span></span></span>'
 const SESSION_EDITOR_HISTORY_MARKER = '__peardropSessionEditor'
@@ -768,6 +767,10 @@ function wireUiEvents() {
       void copyShareInviteForHost({ invite, shareInvite, feedbackKey: `host:${invite}` })
       return
     }
+    if (action === 'edit') {
+      void openSessionEditorForActiveHost(invite)
+      return
+    }
     if (action === 'star') {
       if (state.starredHosts.has(invite)) state.starredHosts.delete(invite)
       else state.starredHosts.add(invite)
@@ -785,7 +788,9 @@ function wireUiEvents() {
       renderHosts()
       return
     }
-    void openSessionEditorForActiveHost(invite)
+    if (state.selectedHosts.has(invite)) state.selectedHosts.delete(invite)
+    else state.selectedHosts.add(invite)
+    renderHosts()
   })
 
   historyRowsEl.addEventListener('click', (event) => {
@@ -813,14 +818,20 @@ function wireUiEvents() {
       void rehostHistoryItem(item)
       return
     }
+    if (action === 'edit') {
+      const item = state.hostHistory.find((entry) => String(entry.id || '') === id)
+      if (item) openSessionEditorForHistory(item)
+      return
+    }
     if (target.closest('input[type="checkbox"]')) {
       if (state.selectedHistory.has(id)) state.selectedHistory.delete(id)
       else state.selectedHistory.add(id)
       renderHistory()
       return
     }
-    const item = state.hostHistory.find((entry) => String(entry.id || '') === id)
-    if (item) openSessionEditorForHistory(item)
+    if (state.selectedHistory.has(id)) state.selectedHistory.delete(id)
+    else state.selectedHistory.add(id)
+    renderHistory()
   })
 
   starredRowsEl.addEventListener('click', (event) => {
@@ -841,6 +852,27 @@ function wireUiEvents() {
         shareInvite,
         feedbackKey: `starred:${invite}`
       })
+      return
+    }
+    if (action === 'edit') {
+      const activeHost = state.activeHosts.find(
+        (item) => String(item?.invite || '').trim() === invite
+      )
+      if (activeHost) {
+        void openSessionEditorForActiveHost(invite)
+        return
+      }
+      const historyId = String(row.dataset.historyId || '').trim()
+      if (!historyId) {
+        setStatus('No saved host history available for this starred host.')
+        return
+      }
+      const historyItem = state.hostHistory.find((entry) => String(entry.id || '') === historyId)
+      if (!historyItem) {
+        setStatus('No saved host history available for this starred host.')
+        return
+      }
+      openSessionEditorForHistory(historyItem)
       return
     }
     if (action === 'unstar') {
@@ -865,6 +897,23 @@ function wireUiEvents() {
         return
       }
       void rehostHistoryItem(historyItem)
+      return
+    }
+
+    const activeInvite = state.activeHosts.some(
+      (item) => String(item?.invite || '').trim() === invite
+    )
+    if (activeInvite) {
+      if (state.selectedHosts.has(invite)) state.selectedHosts.delete(invite)
+      else state.selectedHosts.add(invite)
+      renderHosts()
+      return
+    }
+    const historyId = String(row.dataset.historyId || '').trim()
+    if (historyId) {
+      if (state.selectedHistory.has(historyId)) state.selectedHistory.delete(historyId)
+      else state.selectedHistory.add(historyId)
+      renderHistory()
     }
   })
 }
@@ -1072,6 +1121,10 @@ function renderActionButtons() {
     hostsStopSelectedBtn.innerHTML = state.stoppingSelectedHosts
       ? '<span class="mini-spinner"></span>'
       : '⏹'
+  }
+  if (hostsStarSelectedBtn) {
+    hostsStarSelectedBtn.disabled = state.selectedHosts.size === 0
+    hostsStarSelectedBtn.innerHTML = '★'
   }
   if (historyRehostSelectedBtn) {
     historyRehostSelectedBtn.disabled =
@@ -1371,15 +1424,11 @@ function renderSources() {
         ${previewHtml}
         <div>
           <div class="source-name">${escapeHtml(source.name || source.path)}</div>
-          <div class="source-path">${escapeHtml(source.type.toUpperCase())} · ${escapeHtml(source.path)}</div>
-        </div>
-        <div class="source-select">
-          <input type="checkbox" data-action="toggle-source" ${selected ? 'checked' : ''} />
+          <div class="source-kind">${escapeHtml(source.type === 'folder' ? 'Folder' : 'File')}</div>
+          <div class="source-path" title="${escapeHtmlAttr(source.path)}">${escapeHtml(source.path)}</div>
         </div>
       </div>
-      <div class="controls" style="margin-top:8px;">
-        <button class="btn alt icon icon-danger" data-action="remove-source" aria-label="Remove from list" title="Remove from list">${CLOSE_ICON}</button>
-      </div>
+      <span class="source-remove-glyph" data-action="remove-source" aria-label="Remove from list" title="Remove from list">x</span>
     `
     sourcesGridEl.appendChild(card)
   }
@@ -1474,6 +1523,7 @@ function renderHosts() {
         <div class="host-data">${formatBytes(Number(host.totalBytes || 0))}</div>
       </div>
       <div class="controls">
+        <button class="btn alt icon" data-action="edit" aria-label="Edit" title="Edit">✎</button>
         <button class="btn alt icon" data-action="copy" aria-label="Copy" title="Copy">${isCopyFeedbackActive(`host:${invite}`) ? '✓' : '⧉'}</button>
         <button class="btn alt icon" data-action="star" aria-label="${starred ? 'Unstar' : 'Star'}" title="${starred ? 'Unstar' : 'Star'}">${starred ? '★' : '☆'}</button>
         <button class="btn warn icon" data-action="stop" aria-label="Stop" title="Stop" ${isStopping ? 'disabled' : ''}>${isStopping ? '<span class="mini-spinner"></span>' : '⏹'}</button>
@@ -1517,6 +1567,11 @@ function renderStarredHosts() {
     )
     const isRehosting =
       canRehost && state.rehostingHistoryIds.has(String(historyItem?.id || '').trim())
+    const selected = host
+      ? state.selectedHosts.has(invite)
+      : historyItem
+        ? state.selectedHistory.has(String(historyItem.id || ''))
+        : false
     const primaryActionHtml = canStop
       ? `<button class="btn warn icon" data-action="stop" aria-label="Stop" title="Stop" ${isStopping ? 'disabled' : ''}>${isStopping ? '<span class="mini-spinner"></span>' : '⏹'}</button>`
       : canRehost
@@ -1524,9 +1579,10 @@ function renderStarredHosts() {
         : ''
 
     const row = document.createElement('div')
-    row.className = 'row-item'
+    row.className = `row-item${selected ? ' selected' : ''}`
     row.dataset.starredInvite = invite
     row.dataset.shareInvite = shareInvite
+    if (historyItem?.id) row.dataset.historyId = String(historyItem.id || '')
     row.innerHTML = `
       <div class="star">★</div>
       <div>
@@ -1534,6 +1590,7 @@ function renderStarredHosts() {
         <div class="host-data">${escapeHtml(size)}</div>
       </div>
       <div class="controls">
+        <button class="btn alt icon" data-action="edit" aria-label="Edit" title="Edit">✎</button>
         ${primaryActionHtml}
         <button class="btn alt icon" data-action="copy" aria-label="Copy" title="Copy">${isCopyFeedbackActive(`starred:${invite}`) ? '✓' : '⧉'}</button>
         <button class="btn alt icon" data-action="unstar" aria-label="Unstar" title="Unstar">★</button>
@@ -1575,6 +1632,7 @@ function renderHistory() {
         <div class="row-sub">${escapeHtml(sourceSummary)}</div>
       </div>
       <div class="controls">
+        <button class="btn alt icon" data-action="edit" aria-label="Edit" title="Edit">✎</button>
         <button class="btn alt icon" data-action="rehost" aria-label="Re-host" title="Re-host" ${isRehosting ? 'disabled' : ''}>${isRehosting ? '<span class="mini-spinner"></span>' : '▶'}</button>
         <button class="btn alt icon icon-danger" data-action="remove" aria-label="Remove" title="Remove">${BIN_ICON}</button>
       </div>

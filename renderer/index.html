@@ -13,7 +13,7 @@
         --line: #2a2a2a;
         --text: #f1f3f4;
         --muted: #a4a7ad;
-        --brand: #2f7df6;
+        --brand: #1ba344;
         --brand-soft: #171717;
         --star: #ffd25f;
       }
@@ -25,7 +25,7 @@
         --line: #d8dce3;
         --text: #171a21;
         --muted: #5e6675;
-        --brand: #2f7df6;
+        --brand: #1ba344;
         --brand-soft: #ffffff;
         --star: #d4891f;
       }
@@ -74,8 +74,8 @@
         margin: 0 0 12px;
         padding: 10px 12px;
         border-radius: 12px;
-        border: 1px solid #3b6ba7;
-        background: #13263f;
+        border: 1px solid #66a37a;
+        background: #1f3b2b;
       }
       .update-banner-copy {
         display: flex;
@@ -93,8 +93,8 @@
         margin: 0;
       }
       body[data-theme='light'] .update-banner {
-        border-color: #9ec4f5;
-        background: #edf5ff;
+        border-color: #abe0bb;
+        background: #edf9f0;
       }
       .tabs {
         display: flex;
@@ -116,18 +116,18 @@
         cursor: pointer;
       }
       .tab-btn.active {
-        background: var(--brand);
+        background: transparent;
         border-color: var(--brand);
-        color: #fff;
-        box-shadow: 0 0 0 2px rgba(47, 125, 246, 0.22);
+        color: var(--brand);
+        box-shadow: 0 0 0 2px rgba(125, 202, 148, 0.3);
       }
       body[data-theme='light'] .tab-btn {
         background: #f3f5f9;
         border-color: #c8cfdb;
       }
       body[data-theme='light'] .tab-btn.active {
-        background: var(--brand);
-        color: #fff;
+        background: transparent;
+        color: var(--brand);
       }
       .tab-page {
         margin-top: 12px;
@@ -235,6 +235,13 @@
       .btn.icon.icon-danger {
         color: #ff6f6f;
       }
+      .btn.icon-square {
+        width: 36px;
+        min-width: 36px;
+        height: 36px;
+        padding: 0;
+        font-size: 18px;
+      }
       .mini-trash {
         width: 14px;
         height: 14px;
@@ -289,7 +296,7 @@
       }
       .worker-log {
         margin: 6px 0 0;
-        color: #8fa3c7;
+        color: #8dc0a0;
         font-size: 12px;
       }
       body[data-theme='light'] .worker-log {
@@ -374,11 +381,13 @@
         border: 1px solid var(--line);
         border-radius: 12px;
         padding: 10px;
+        padding-bottom: 34px;
         background: var(--brand-soft);
+        position: relative;
       }
       .source-card-main {
         display: grid;
-        grid-template-columns: 84px 1fr auto;
+        grid-template-columns: 84px 1fr;
         gap: 10px;
         align-items: start;
       }
@@ -408,9 +417,6 @@
         height: 100%;
         object-fit: cover;
       }
-      .source-select {
-        margin-top: 2px;
-      }
       body[data-theme='light'] .source-preview {
         background: #eef2f8;
       }
@@ -420,12 +426,39 @@
       }
       .source-name {
         font-weight: 600;
+        line-height: 1.2;
+        word-break: break-word;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+      }
+      .source-kind {
+        color: var(--muted);
+        font-size: 11px;
+        margin-top: 4px;
+        letter-spacing: 0.03em;
+        text-transform: uppercase;
       }
       .source-path {
         color: var(--muted);
         font-size: 12px;
         margin-top: 3px;
         word-break: break-all;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+      }
+      .source-remove-glyph {
+        position: absolute;
+        left: 10px;
+        bottom: 8px;
+        color: #ff6f6f;
+        font-size: 24px;
+        line-height: 1;
+        user-select: none;
+        cursor: pointer;
       }
 
       .rows {
@@ -866,7 +899,14 @@
                     </div>
                   </span>
                   <button id="source-select-toggle" class="btn alt">Select All</button>
-                  <button id="source-remove-all" class="btn alt">Clear Selected</button>
+                  <button
+                    id="source-remove-all"
+                    class="btn alt icon icon-danger icon-square"
+                    title="Clear Selected"
+                    aria-label="Clear Selected"
+                  >
+                    ✕
+                  </button>
                   <button id="host-selected" class="btn">Host Selected</button>
                 </div>
               </div>
@@ -879,6 +919,14 @@
                   <h2 class="panel-title">Active Hosts</h2>
                   <div class="controls">
                     <button id="hosts-select-toggle" class="btn alt">Select All</button>
+                    <button
+                      id="hosts-star-selected"
+                      class="btn icon"
+                      title="Star Selected"
+                      aria-label="Star Selected"
+                    >
+                      ★
+                    </button>
                     <button
                       id="hosts-stop-selected"
                       class="btn warn icon"
