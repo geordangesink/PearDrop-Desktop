@@ -1951,6 +1951,7 @@ async function hostSelectedSources(sessionNameInput = 'Host Session', packaging 
       files,
       sessionName
     })
+    const transferId = extractTransferIdFromResponse(response)
 
     clearWorkerActivityBar('host-upload')
     hostUploadStartedAt = 0
@@ -1959,6 +1960,7 @@ async function hostSelectedSources(sessionNameInput = 'Host Session', packaging 
     if (invite) {
       state.runningHistoryByInvite.set(invite, {
         id: `hist:${Date.now()}:${Math.random().toString(16).slice(2, 8)}`,
+        transferId,
         sourceRefs: picked.map((item) => ({ type: item.type, path: item.path, name: item.name })),
         invite,
         sessionName,
@@ -2337,11 +2339,19 @@ async function applySessionEditorChanges() {
     const invite = previousInvite
     if (invite) {
       const totalBytes = Number(files.reduce((sum, row) => sum + Number(row.byteLength || 0), 0))
+      const transferId =
+        extractTransferIdFromResponse(response) ||
+        String(state.runningHistoryByInvite.get(invite)?.transferId || '').trim() ||
+        String(
+          state.activeHosts.find((row) => String(row?.invite || '').trim() === invite)
+            ?.transferId || ''
+        ).trim()
       state.runningHistoryByInvite.set(invite, {
         id: String(
           state.sessionEditorHistoryId ||
             `hist:${Date.now()}:${Math.random().toString(16).slice(2, 8)}`
         ),
+        transferId,
         sourceRefs: validRefs,
         invite,
         sessionName: state.sessionEditorSessionName,
@@ -2391,41 +2401,69 @@ async function rehostHistoryItem(historyItem) {
   }
   try {
     setWorkerLogMessage('re-hosting session')
-    const refs = Array.isArray(historyItem.sourceRefs) ? historyItem.sourceRefs : []
-    if (!refs.length) throw new Error('History entry does not include saved source paths')
+    const sessionName = String(historyItem.sessionName || 'Host Session').trim() || 'Host Session'
+    const transferId = String(historyItem?.transferId || '').trim()
+    let response = null
+    let validRefs = Array.isArray(historyItem.sourceRefs) ? historyItem.sourceRefs : []
 
-    upsertWorkerActivityBar('rehost-expand', 'Validating history paths', 0, refs.length)
-
-    const validRefs = await resolveExistingSourceRefsWithPrompt(refs, 'Re-host')
-    for (let i = 0; i < validRefs.length; i++) {
-      upsertWorkerActivityBar('rehost-expand', 'Validating history paths', i + 1, validRefs.length)
+    if (transferId) {
+      try {
+        response = await state.rpc.request(RpcCommand.START_HOST_FROM_TRANSFER, {
+          transferId,
+          sessionName
+        })
+      } catch (error) {
+        setWorkerLogMessage(
+          `re-host transfer restart failed, falling back to source rebuild: ${String(error?.message || error)}`
+        )
+      }
     }
 
-    const files = []
-    for (const ref of validRefs) {
-      // eslint-disable-next-line no-await-in-loop
-      const expanded = await expandSourceToFiles(ref)
-      files.push(...expanded)
+    if (!response) {
+      const refs = Array.isArray(historyItem.sourceRefs) ? historyItem.sourceRefs : []
+      if (!refs.length) throw new Error('History entry does not include saved source paths')
+
+      upsertWorkerActivityBar('rehost-expand', 'Validating history paths', 0, refs.length)
+
+      validRefs = await resolveExistingSourceRefsWithPrompt(refs, 'Re-host')
+      for (let i = 0; i < validRefs.length; i++) {
+        upsertWorkerActivityBar(
+          'rehost-expand',
+          'Validating history paths',
+          i + 1,
+          validRefs.length
+        )
+      }
+
+      const files = []
+      for (const ref of validRefs) {
+        // eslint-disable-next-line no-await-in-loop
+        const expanded = await expandSourceToFiles(ref)
+        files.push(...expanded)
+      }
+
+      clearWorkerActivityBar('rehost-expand')
+
+      if (!files.length) throw new Error('No files available from saved sources')
+
+      response = await state.rpc.request(RpcCommand.CREATE_UPLOAD, {
+        files,
+        sessionName,
+        nativeInvite: normalizeInvite(historyItem.invite || '')
+      })
     }
-
-    clearWorkerActivityBar('rehost-expand')
-
-    if (!files.length) throw new Error('No files available from saved sources')
-
-    const response = await state.rpc.request(RpcCommand.CREATE_UPLOAD, {
-      files,
-      sessionName: String(historyItem.sessionName || 'Host Session').trim() || 'Host Session',
-      nativeInvite: normalizeInvite(historyItem.invite || '')
-    })
 
     const invite = String(response?.nativeInvite || response?.invite || '').trim()
     if (invite) {
       state.runningHistoryByInvite.set(invite, {
         ...historyItem,
+        transferId: extractTransferIdFromResponse(response) || transferId,
         sourceRefs: validRefs,
         invite,
         createdAt: Number(historyItem.createdAt || Date.now()),
-        fileCount: Array.isArray(response?.manifest) ? response.manifest.length : files.length,
+        fileCount: Array.isArray(response?.manifest)
+          ? response.manifest.length
+          : Number(historyItem.fileCount || 0),
         totalBytes: Number(response?.transfer?.totalBytes || historyItem.totalBytes || 0)
       })
 
@@ -2599,6 +2637,7 @@ function finalizeStoppedSession(invite, activeHost = null) {
   if (!host) return
   rememberHistory({
     id: `hist:${Date.now()}:${Math.random().toString(16).slice(2, 8)}`,
+    transferId: String(host?.transferId || ''),
     sourceRefs: [],
     invite: key,
     sessionName: String(host?.sessionLabel || host?.sessionName || 'Host Session'),
@@ -2606,6 +2645,12 @@ function finalizeStoppedSession(invite, activeHost = null) {
     fileCount: Number(host?.fileCount || 0),
     totalBytes: Number(host?.totalBytes || 0)
   })
+}
+
+function extractTransferIdFromResponse(response) {
+  const fromTransfer = String(response?.transfer?.transferId || response?.transfer?.id || '').trim()
+  if (fromTransfer) return fromTransfer
+  return ''
 }
 
 function finalizeEndedRunningSessions(activeHosts) {
