@@ -37,7 +37,7 @@
     "hyperswarm": "^4.17.0",
     "nat-upnp": "^1.1.1",
     "paparam": "^1.10.0",
-    "pear-drop-core": "file:../native-shared/pear-drop-core-0.6.1.tgz",
+    "pear-drop-core": "file:../native-shared/pear-drop-core-0.6.2.tgz",
     "pear-runtime": "^1.0.1",
     "which-runtime": "^1.3.2"
   },

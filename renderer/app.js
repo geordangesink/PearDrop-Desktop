@@ -185,6 +185,7 @@ let shutdownForceCloseTimer = null
 let appMainHeartbeatTimer = null
 let appMainHeartbeatFailed = 0
 let hostUploadStartedAt = 0
+let appQuittingCleanupPromise = null
 const webRtcShareHosts = new Map()
 const webRtcShareHostPromises = new Map()
 
@@ -267,9 +268,7 @@ function wireGlobalEvents() {
   })
 
   bridge.onAppQuitting?.((payload) => {
-    stopActiveHostsPolling()
-    finalizeSessionsFromActiveHosts(state.activeHosts)
-    closeWebRtcShareHosts()
+    void runAppQuittingCleanup()
     const message = String(payload?.message || '').trim()
     if (shutdownMessageEl && message) shutdownMessageEl.textContent = message
     shutdownOverlayEl?.classList.remove('hidden')
@@ -355,6 +354,54 @@ function wireGlobalEvents() {
   document.addEventListener('drop', onGlobalDrop, true)
 
   startMainHeartbeatWatchdog()
+}
+
+async function runAppQuittingCleanup() {
+  if (appQuittingCleanupPromise) return await appQuittingCleanupPromise
+
+  const execute = (async () => {
+    stopActiveHostsPolling()
+
+    const snapshotHosts = Array.isArray(state.activeHosts) ? state.activeHosts.slice() : []
+    finalizeSessionsFromActiveHosts(snapshotHosts)
+    closeWebRtcShareHosts()
+
+    const invites = new Set(
+      snapshotHosts.map((host) => String(host?.invite || '').trim()).filter(Boolean)
+    )
+
+    if (state.rpc && typeof state.rpc.request === 'function') {
+      try {
+        const listed = await withTimeout(state.rpc.request(RpcCommand.LIST_ACTIVE_HOSTS, {}), 1400)
+        const hosts = Array.isArray(listed?.hosts) ? listed.hosts : []
+        for (const host of hosts) {
+          const invite = String(host?.invite || '').trim()
+          if (invite) invites.add(invite)
+        }
+      } catch {}
+
+      if (invites.size > 0) {
+        await Promise.allSettled(
+          Array.from(invites).map(async (invite) => {
+            try {
+              await withTimeout(state.rpc.request(RpcCommand.STOP_HOST, { invite }), 1400)
+            } catch {}
+          })
+        )
+      }
+
+      try {
+        await withTimeout(state.rpc.request(RpcCommand.SHUTDOWN, {}), 2200)
+      } catch {}
+    }
+
+    void bridge.setHostingActive?.(false).catch?.(() => {})
+  })().finally(() => {
+    appQuittingCleanupPromise = null
+  })
+
+  appQuittingCleanupPromise = execute
+  return await execute
 }
 
 function startMainHeartbeatWatchdog() {
