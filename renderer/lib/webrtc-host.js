@@ -255,7 +255,6 @@ async function handleSignalConnection(signalSocket, { invite, rpc, portMappings 
       if (pc !== localPc) return
       if (event.candidate) {
         bumpCandidateKind(localCandidateKinds, event.candidate)
-        if (isRelayIceCandidate(event.candidate)) return
         if (isMdnsIceCandidate(event.candidate)) return
         const localPort = parseHostUdpCandidatePort(event.candidate)
         if (localPort > 0) {
@@ -518,7 +517,6 @@ async function handleSignalConnection(signalSocket, { invite, rpc, portMappings 
       if (activeOfferCandidateFlow.offerId === activeCandidateOfferId) {
         activeOfferCandidateFlow.received += 1
       }
-      if (isRelayIceCandidate(normalized)) return
       if (isMdnsIceCandidate(normalized)) return
       if (!remoteDescriptionSet) {
         remoteCandidatesQueued += 1
@@ -696,12 +694,6 @@ module.exports = {
   createWebRtcHost
 }
 
-function isRelayIceCandidate(candidateLike) {
-  const candidateLine =
-    typeof candidateLike === 'string' ? candidateLike : String(candidateLike?.candidate || '')
-  return /\btyp\s+relay\b/i.test(candidateLine)
-}
-
 function isMdnsIceCandidate(candidateLike) {
   const candidateLine =
     typeof candidateLike === 'string' ? candidateLike : String(candidateLike?.candidate || '')
@@ -730,7 +722,6 @@ function sanitizeIceSdp(sdpText) {
       continue
     }
     if (value.startsWith('a=candidate:')) {
-      if (isRelayIceCandidate(value)) continue
       if (isMdnsIceCandidate(value)) continue
     }
     out.push(value)
