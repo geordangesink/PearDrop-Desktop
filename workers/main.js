@@ -17,15 +17,11 @@ async function run() {
   const storage = Bare.argv[2]
   const updaterConfig = JSON.parse(Bare.argv[3] || '{}')
   const baseRoot = updaterConfig.dev ? os.tmpdir() : storage
-  const launchSuffix = String(updaterConfig.launchId || '').replace(/[^a-zA-Z0-9_-]/g, '')
-  const baseName = updaterConfig.dev
-    ? `pear-drops-desktop-dev-${launchSuffix || 'default'}`
-    : 'peardrops'
+  const baseName = updaterConfig.dev ? 'pear-drops-desktop' : 'peardrops'
 
-  const metadataRoot = updaterConfig.dev ? os.tmpdir() : storage || baseRoot
-  const metadataName = updaterConfig.dev
-    ? `pear-drops-desktop-history-dev-${launchSuffix || 'default'}`
-    : 'pear-drops-desktop-history'
+  // Keep metadata persistent in both dev and production so host restart survives app relaunches.
+  const metadataRoot = storage || baseRoot
+  const metadataName = 'pear-drops-desktop-history'
 
   await bootstrapTransferWorker({
     ipc: Bare.IPC,

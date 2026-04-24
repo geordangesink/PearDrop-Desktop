@@ -171,6 +171,11 @@ if (dedupedInitialSources.length !== state.sources.length) {
   state.sources = dedupedInitialSources
   persistSources()
 }
+const dedupedInitialHistory = dedupeHostHistoryRows(state.hostHistory)
+if (dedupedInitialHistory.length !== state.hostHistory.length) {
+  state.hostHistory = dedupedInitialHistory
+  localStorage.setItem(HISTORY_KEY, JSON.stringify(state.hostHistory))
+}
 
 let startupLoading = true
 let pendingHostNameResolve = null
@@ -1958,12 +1963,16 @@ async function hostSelectedSources(sessionNameInput = 'Host Session', packaging 
 
     const invite = String(response?.nativeInvite || response?.invite || '').trim()
     if (invite) {
+      const sessionLabel = String(
+        response?.hostSession?.sessionLabel || response?.hostSession?.sessionName || sessionName
+      ).trim()
       state.runningHistoryByInvite.set(invite, {
         id: `hist:${Date.now()}:${Math.random().toString(16).slice(2, 8)}`,
         transferId,
         sourceRefs: picked.map((item) => ({ type: item.type, path: item.path, name: item.name })),
         invite,
-        sessionName,
+        sessionName: sessionLabel || sessionName,
+        sessionLabel,
         createdAt: Date.now(),
         fileCount: Array.isArray(response?.manifest) ? response.manifest.length : files.length,
         totalBytes: Number(
@@ -2346,6 +2355,12 @@ async function applySessionEditorChanges() {
           state.activeHosts.find((row) => String(row?.invite || '').trim() === invite)
             ?.transferId || ''
         ).trim()
+      const responseSessionLabel = String(
+        response?.hostSession?.sessionLabel ||
+          response?.hostSession?.sessionName ||
+          state.sessionEditorSessionName ||
+          ''
+      ).trim()
       state.runningHistoryByInvite.set(invite, {
         id: String(
           state.sessionEditorHistoryId ||
@@ -2354,7 +2369,10 @@ async function applySessionEditorChanges() {
         transferId,
         sourceRefs: validRefs,
         invite,
-        sessionName: state.sessionEditorSessionName,
+        sessionName: responseSessionLabel || state.sessionEditorSessionName,
+        sessionLabel:
+          responseSessionLabel ||
+          String(state.runningHistoryByInvite.get(invite)?.sessionLabel || '').trim(),
         createdAt: Number(
           state.runningHistoryByInvite.get(invite)?.createdAt ||
             state.activeHosts.find((row) => String(row?.invite || '').trim() === invite)
@@ -2455,11 +2473,16 @@ async function rehostHistoryItem(historyItem) {
 
     const invite = String(response?.nativeInvite || response?.invite || '').trim()
     if (invite) {
+      const responseSessionLabel = String(
+        response?.hostSession?.sessionLabel || response?.hostSession?.sessionName || sessionName
+      ).trim()
       state.runningHistoryByInvite.set(invite, {
         ...historyItem,
         transferId: extractTransferIdFromResponse(response) || transferId,
         sourceRefs: validRefs,
         invite,
+        sessionName: responseSessionLabel || String(historyItem.sessionName || sessionName),
+        sessionLabel: responseSessionLabel || String(historyItem.sessionLabel || ''),
         createdAt: Number(historyItem.createdAt || Date.now()),
         fileCount: Array.isArray(response?.manifest)
           ? response.manifest.length
@@ -2641,6 +2664,7 @@ function finalizeStoppedSession(invite, activeHost = null) {
     sourceRefs: [],
     invite: key,
     sessionName: String(host?.sessionLabel || host?.sessionName || 'Host Session'),
+    sessionLabel: String(host?.sessionLabel || ''),
     createdAt: Number(host?.createdAt || Date.now()),
     fileCount: Number(host?.fileCount || 0),
     totalBytes: Number(host?.totalBytes || 0)
@@ -2648,7 +2672,7 @@ function finalizeStoppedSession(invite, activeHost = null) {
 }
 
 function extractTransferIdFromResponse(response) {
-  const fromTransfer = String(response?.transfer?.transferId || response?.transfer?.id || '').trim()
+  const fromTransfer = String(response?.transfer?.id || response?.transfer?.transferId || '').trim()
   if (fromTransfer) return fromTransfer
   return ''
 }
@@ -2678,10 +2702,117 @@ function finalizeSessionsFromActiveHosts(activeHosts) {
 }
 
 function rememberHistory(entry) {
-  state.hostHistory = [entry, ...state.hostHistory].slice(0, 200)
+  const normalizedIncoming = normalizeHostHistoryEntry(entry)
+  const incomingKey = hostHistoryIdentityKey(normalizedIncoming)
+  const existingIndex = state.hostHistory.findIndex((row) => {
+    const current = normalizeHostHistoryEntry(row)
+    if (!incomingKey) return false
+    return hostHistoryIdentityKey(current) === incomingKey
+  })
+
+  if (existingIndex >= 0) {
+    const merged = mergeHostHistoryEntries(state.hostHistory[existingIndex], normalizedIncoming)
+    const next = state.hostHistory.slice()
+    next.splice(existingIndex, 1)
+    next.unshift(merged)
+    state.hostHistory = dedupeHostHistoryRows(next).slice(0, 200)
+  } else {
+    state.hostHistory = dedupeHostHistoryRows([normalizedIncoming, ...state.hostHistory]).slice(
+      0,
+      200
+    )
+  }
   localStorage.setItem(HISTORY_KEY, JSON.stringify(state.hostHistory))
   renderHistory()
   renderStarredHosts()
+}
+
+function normalizeHostHistoryEntry(entry) {
+  const sourceRefs = Array.isArray(entry?.sourceRefs)
+    ? entry.sourceRefs
+        .map((ref) => ({
+          type: ref?.type === 'folder' ? 'folder' : 'file',
+          path: String(ref?.path || '').trim(),
+          name: String(ref?.name || '').trim()
+        }))
+        .filter((ref) => ref.path)
+    : []
+  const sessionLabel = String(entry?.sessionLabel || '').trim()
+  const sessionNameRaw = String(entry?.sessionName || '').trim()
+  const sessionName = sessionNameRaw || sessionLabel || 'Host Session'
+  return {
+    id: String(entry?.id || `hist:${Date.now()}:${Math.random().toString(16).slice(2, 8)}`),
+    transferId: String(entry?.transferId || '').trim(),
+    sourceRefs,
+    invite: String(entry?.invite || '').trim(),
+    sessionName,
+    sessionLabel,
+    createdAt: Number(entry?.createdAt || Date.now()),
+    fileCount: Math.max(0, Number(entry?.fileCount || 0)),
+    totalBytes: Math.max(0, Number(entry?.totalBytes || 0))
+  }
+}
+
+function hostHistoryIdentityKey(entry) {
+  const transferId = String(entry?.transferId || '').trim()
+  if (transferId) return `transfer:${transferId}`
+  const invite = String(entry?.invite || '').trim()
+  if (invite) return `invite:${invite}`
+  return ''
+}
+
+function mergeHostHistoryEntries(existingRaw, incomingRaw) {
+  const existing = normalizeHostHistoryEntry(existingRaw)
+  const incoming = normalizeHostHistoryEntry(incomingRaw)
+  const merged = {
+    ...existing,
+    ...incoming,
+    id: String(existing.id || incoming.id || '').trim() || incoming.id,
+    transferId: String(incoming.transferId || existing.transferId || '').trim(),
+    invite: String(incoming.invite || existing.invite || '').trim()
+  }
+
+  const existingRefs = Array.isArray(existing.sourceRefs) ? existing.sourceRefs : []
+  const incomingRefs = Array.isArray(incoming.sourceRefs) ? incoming.sourceRefs : []
+  merged.sourceRefs = incomingRefs.length ? incomingRefs : existingRefs
+
+  if (!String(merged.sessionLabel || '').trim()) {
+    merged.sessionLabel = String(existing.sessionLabel || '').trim()
+  }
+  if (!String(merged.sessionName || '').trim()) {
+    merged.sessionName =
+      String(merged.sessionLabel || '').trim() || String(existing.sessionName || 'Host Session')
+  }
+  if (!Number.isFinite(Number(merged.createdAt)) || Number(merged.createdAt) <= 0) {
+    merged.createdAt = Number(existing.createdAt || incoming.createdAt || Date.now())
+  }
+  if (!Number.isFinite(Number(merged.fileCount)) || Number(merged.fileCount) <= 0) {
+    merged.fileCount = Number(existing.fileCount || incoming.fileCount || 0)
+  }
+  if (!Number.isFinite(Number(merged.totalBytes)) || Number(merged.totalBytes) <= 0) {
+    merged.totalBytes = Number(existing.totalBytes || incoming.totalBytes || 0)
+  }
+  return merged
+}
+
+function dedupeHostHistoryRows(rows) {
+  const list = Array.isArray(rows) ? rows : []
+  const output = []
+  for (const row of list) {
+    const normalized = normalizeHostHistoryEntry(row)
+    const key = hostHistoryIdentityKey(normalized)
+    if (!key) {
+      output.push(normalized)
+      continue
+    }
+    const existingIndex = output.findIndex((item) => hostHistoryIdentityKey(item) === key)
+    if (existingIndex === -1) {
+      output.push(normalized)
+      continue
+    }
+    output[existingIndex] = mergeHostHistoryEntries(output[existingIndex], normalized)
+  }
+  return output
 }
 
 function persistSources() {
