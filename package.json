@@ -79,7 +79,7 @@
       "**/*.bare",
       "**/*.dylib"
     ],
-    "afterSign": "scripts/mac-sign-after-pack.cjs",
+    "afterPack": "scripts/mac-prune-after-pack.cjs",
     "mac": {
       "category": "public.app-category.productivity",
       "icon": "build/icon.icns",

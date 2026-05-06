@@ -23,6 +23,7 @@ const appName = pkg.productName || pkg.name
 const protocol = 'peardrops'
 const TRANSFER_WORKER_SPECIFIER = '/workers/main.js'
 const UPDATE_APPLIED_TOKEN = '__PEARDROP_UPDATE_APPLIED__'
+const UPDATE_READY_TOKEN = '__PEARDROP_UPDATE_READY__'
 const DEFAULT_DEV_RELAY = 'wss://pear-drops.up.railway.app'
 const DEFAULT_PROD_RELAY = 'wss://pear-drops.up.railway.app'
 const workers = new Map()
@@ -469,10 +470,11 @@ function beginGracefulQuit() {
   if (isQuitting) return
   isQuitting = true
   hideQuitPrompt()
-  const message =
-    updateReadyInfo?.ready && updateReadyInfo?.applied
-      ? 'Shutting down to apply update...'
-      : 'Shutting down PearDrop...'
+  const updateWillApplyOnShutdown =
+    updateReadyInfo?.ready && (updateReadyInfo?.applied || updateReadyInfo?.platform === 'windows')
+  const message = updateWillApplyOnShutdown
+    ? 'Shutting down to apply update...'
+    : 'Shutting down PearDrop...'
   sendToAll('app:quitting', { message })
   shutdownWorkers()
     .catch((error) => {
@@ -486,13 +488,16 @@ function beginGracefulQuit() {
     })
 }
 
-function markUpdateReady() {
-  if (updateReadyInfo?.ready) return
-  updateReadyInfo = {
-    ready: true,
-    applied: true,
-    requiresShutdown: true,
-    platform: isWindows ? 'windows' : isMac ? 'macos' : isLinux ? 'linux' : process.platform
+function markUpdateReady({ applied = false } = {}) {
+  if (!updateReadyInfo?.ready) {
+    updateReadyInfo = {
+      ready: true,
+      applied: Boolean(applied),
+      requiresShutdown: true,
+      platform: isWindows ? 'windows' : isMac ? 'macos' : isLinux ? 'linux' : process.platform
+    }
+  } else if (applied && !updateReadyInfo.applied) {
+    updateReadyInfo.applied = true
   }
   sendToAll('app:update-ready', updateReadyInfo)
 }
@@ -507,6 +512,7 @@ function getWorker(specifier) {
     dir: appDir,
     app: getAppPath(),
     name: runtimeName(),
+    platform: process.platform,
     dev: !app.isPackaged,
     updates: resolveUpdatesEnabled(),
     version: pkg.version,
@@ -537,8 +543,13 @@ function getWorker(specifier) {
   )
 
   const onStdout = (data) => {
-    if (String(data || '').includes(UPDATE_APPLIED_TOKEN)) {
-      markUpdateReady()
+    const text = String(data || '')
+    if (text.includes(UPDATE_READY_TOKEN)) {
+      markUpdateReady({ applied: false })
+      return
+    }
+    if (text.includes(UPDATE_APPLIED_TOKEN)) {
+      markUpdateReady({ applied: true })
       return
     }
     sendToAll(`pear:worker:stdout:${specifier}`, data)
