@@ -34,6 +34,7 @@
     "bare-path": "^3.0.0",
     "bare-rpc": "^1.1.0",
     "corestore": "^7.9.1",
+    "fflate": "^0.8.2",
     "hyperswarm": "^4.17.0",
     "nat-upnp": "^1.1.1",
     "paparam": "^1.10.0",

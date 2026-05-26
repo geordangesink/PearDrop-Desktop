@@ -9,6 +9,7 @@ const os = require('os')
 const { execFile } = require('child_process')
 const { promisify } = require('util')
 const { webUtils } = require('electron')
+const { zipSync } = require('fflate')
 const { createWebRtcHost } = require('./lib/webrtc-host')
 const execFileAsync = promisify(execFile)
 
@@ -1957,11 +1958,24 @@ async function hostSelectedSources(sessionNameInput = 'Host Session', packaging 
       sessionName
     })
     const transferId = extractTransferIdFromResponse(response)
+    const invite = String(response?.nativeInvite || response?.invite || '').trim()
+
+    if (invite) {
+      try {
+        await verifyHostManifestReadable(invite)
+      } catch (error) {
+        try {
+          await state.rpc.request(RpcCommand.STOP_HOST, { invite })
+        } catch {}
+        throw new Error(
+          `Host verification failed (manifest not readable yet). Please retry. ${String(error?.message || error || '').trim()}`
+        )
+      }
+    }
 
     clearWorkerActivityBar('host-upload')
     hostUploadStartedAt = 0
 
-    const invite = String(response?.nativeInvite || response?.invite || '').trim()
     if (invite) {
       const sessionLabel = String(
         response?.hostSession?.sessionLabel || response?.hostSession?.sessionName || sessionName
@@ -1994,11 +2008,37 @@ async function hostSelectedSources(sessionNameInput = 'Host Session', packaging 
     clearWorkerActivityBar('host-expand')
     clearWorkerActivityBar('host-upload')
     hostUploadStartedAt = 0
+    try {
+      await refreshActiveHosts()
+    } catch {}
     setStatus(`Host failed: ${error.message || String(error)}`)
   } finally {
     state.hostingSelected = false
     renderActionButtons()
   }
+}
+
+async function verifyHostManifestReadable(invite, attempts = 4, pauseMs = 350) {
+  const key = String(invite || '').trim()
+  if (!key || !state.rpc) return
+  let lastError = null
+  for (let i = 0; i < attempts; i++) {
+    try {
+      const manifest = await state.rpc.request(RpcCommand.GET_MANIFEST, { invite: key })
+      const files = Array.isArray(manifest?.files) ? manifest.files : []
+      if (files.length >= 0) return
+    } catch (error) {
+      lastError = error
+    }
+    // eslint-disable-next-line no-await-in-loop
+    // eslint-disable-next-line no-await-in-loop
+    await delayMs(pauseMs)
+  }
+  throw lastError || new Error('Timed out waiting for hosted manifest verification.')
+}
+
+function delayMs(ms) {
+  return new Promise((resolve) => setTimeout(resolve, Math.max(0, Number(ms || 0))))
 }
 
 function applyHostUploadProgress(payloadText) {
@@ -2085,7 +2125,65 @@ async function zipSources(workspaceDir, zipPath, relTargets) {
     await zipSourcesWithPowerShell(workspaceDir, zipPath, relTargets)
     return
   }
-  await execFileAsync('zip', ['-r', '-y', zipPath, ...relTargets], { cwd: workspaceDir })
+  try {
+    await execFileAsync('zip', ['-r', '-y', zipPath, ...relTargets], { cwd: workspaceDir })
+    return
+  } catch (error) {
+    if (String(error?.code || '').toUpperCase() !== 'ENOENT') throw error
+  }
+  await zipSourcesPortable(workspaceDir, zipPath, relTargets)
+}
+
+async function zipSourcesPortable(workspaceDir, zipPath, relTargets) {
+  const zipEntries = {}
+
+  for (const relTarget of relTargets) {
+    const rel = normalizeZipEntryPath(relTarget)
+    if (!rel) continue
+    const abs = nodePath.join(workspaceDir, relTarget)
+    // eslint-disable-next-line no-await-in-loop
+    const stat = await fs.lstat(abs)
+    if (stat.isDirectory()) {
+      // eslint-disable-next-line no-await-in-loop
+      await collectDirectoryForZip(abs, rel, zipEntries)
+      continue
+    }
+    if (stat.isFile()) {
+      // eslint-disable-next-line no-await-in-loop
+      const data = await fs.readFile(abs)
+      zipEntries[rel] = new Uint8Array(data)
+    }
+  }
+
+  const output = zipSync(zipEntries, { level: 0 })
+  await fs.writeFile(zipPath, Buffer.from(output))
+}
+
+async function collectDirectoryForZip(absDir, relDir, zipEntries) {
+  const entries = await fs.readdir(absDir, { withFileTypes: true })
+  for (const entry of entries) {
+    const abs = nodePath.join(absDir, entry.name)
+    const rel = normalizeZipEntryPath(nodePath.posix.join(relDir, entry.name))
+    if (!rel) continue
+    if (entry.isDirectory()) {
+      // eslint-disable-next-line no-await-in-loop
+      await collectDirectoryForZip(abs, rel, zipEntries)
+      continue
+    }
+    if (entry.isFile()) {
+      // eslint-disable-next-line no-await-in-loop
+      const data = await fs.readFile(abs)
+      zipEntries[rel] = new Uint8Array(data)
+    }
+  }
+}
+
+function normalizeZipEntryPath(value) {
+  return String(value || '')
+    .replaceAll('\\', '/')
+    .replace(/^\/+/, '')
+    .replace(/^\.\//, '')
+    .trim()
 }
 
 async function zipSourcesWithPowerShell(workspaceDir, zipPath, relTargets) {
