@@ -1703,6 +1703,12 @@ function renderHosts() {
     const isStopping = state.stoppingInvites.has(invite)
     const parsedLabel = parseSessionLabel(host.sessionLabel || host.sessionName || 'Host Session')
     const sessionDateTime = formatSessionDateTime(host.createdAt, parsedLabel.embeddedDateTime)
+    const hostMode =
+      String(host?.hostMode || 'raw')
+        .trim()
+        .toLowerCase() === 'zip'
+        ? 'ZIP'
+        : 'RAW'
 
     const row = document.createElement('div')
     row.className = 'row-item host-row'
@@ -1717,7 +1723,7 @@ function renderHosts() {
       <div>
         <div class="row-title">${starred ? '<span class="star">★</span> ' : ''}${escapeHtml(parsedLabel.title)}${parsedLabel.hash ? ` <span class="host-hash-inline">(${escapeHtml(parsedLabel.hash)})</span>` : ''}</div>
         ${sessionDateTime ? `<div class="host-date">${escapeHtml(sessionDateTime)}</div>` : ''}
-        <div class="host-data">${formatBytes(Number(host.totalBytes || 0))}</div>
+        <div class="host-data">${formatBytes(Number(host.totalBytes || 0))} • ${hostMode}</div>
       </div>
       <div class="controls">
         <button class="btn alt icon" data-action="edit" aria-label="Edit" title="Edit">✎</button>
@@ -1813,8 +1819,7 @@ function renderHistory() {
   for (const item of state.hostHistory) {
     const selected = state.selectedHistory.has(item.id)
     const isRehosting = state.rehostingHistoryIds.has(String(item.id || '').trim())
-    const sourceSummary =
-      (item.sourceRefs || []).map((ref) => ref.path).join(' | ') || 'No source paths'
+    const sourceSummary = renderHistorySourceSummary(item.sourceRefs || [])
     const parsedLabel = parseSessionLabel(item.sessionName || 'Host Session')
     const sessionDateTime = formatSessionDateTime(item.createdAt, parsedLabel.embeddedDateTime)
 
@@ -1826,7 +1831,7 @@ function renderHistory() {
       <div>
         <div class="row-title">${escapeHtml(parsedLabel.title)}${parsedLabel.hash ? ` <span class="host-hash-inline">(${escapeHtml(parsedLabel.hash)})</span>` : ''}</div>
         ${sessionDateTime ? `<div class="host-date">${escapeHtml(sessionDateTime)}</div>` : ''}
-        <div class="row-sub">${escapeHtml(sourceSummary)}</div>
+        <div class="row-sub">${sourceSummary}</div>
       </div>
       <div class="controls">
         <button class="btn alt icon" data-action="edit" aria-label="Edit" title="Edit">✎</button>
@@ -1837,6 +1842,24 @@ function renderHistory() {
     historyRowsEl.appendChild(row)
   }
   renderActionButtons()
+}
+
+function renderHistorySourceSummary(sourceRefs) {
+  const refs = Array.isArray(sourceRefs) ? sourceRefs : []
+  if (!refs.length) return escapeHtml('No source paths')
+  const items = refs
+    .map((ref) => {
+      const name = String(ref?.name || '').trim()
+      if (name) return name
+      const p = String(ref?.path || '').trim()
+      if (!p) return ''
+      return nodePath.basename(p) || p
+    })
+    .filter(Boolean)
+  if (!items.length) return escapeHtml('No source paths')
+  const lines = items.slice(0, 2).map((value) => escapeHtml(String(value)))
+  if (items.length > 2) lines.push('...')
+  return lines.join('<br/>')
 }
 
 function renderDriveRows() {
@@ -2140,7 +2163,8 @@ async function hostSelectedSources(sessionNameInput = 'Host Session', packaging 
     const sessionName = String(sessionNameInput || '').trim() || 'Host Session'
     const response = await state.rpc.request(RpcCommand.CREATE_UPLOAD, {
       files,
-      sessionName
+      sessionName,
+      hostMode: packaging === 'zip' ? 'zip' : 'raw'
     })
     const transferId = extractTransferIdFromResponse(response)
     const invite = String(response?.nativeInvite || response?.invite || '').trim()
@@ -2172,6 +2196,7 @@ async function hostSelectedSources(sessionNameInput = 'Host Session', packaging 
         invite,
         sessionName: sessionLabel || sessionName,
         sessionLabel,
+        hostMode: packaging === 'zip' ? 'zip' : 'raw',
         createdAt: Date.now(),
         fileCount: Array.isArray(response?.manifest) ? response.manifest.length : files.length,
         totalBytes: Number(
@@ -2948,6 +2973,12 @@ function finalizeStoppedSession(invite, activeHost = null) {
     invite: key,
     sessionName: String(host?.sessionLabel || host?.sessionName || 'Host Session'),
     sessionLabel: String(host?.sessionLabel || ''),
+    hostMode:
+      String(host?.hostMode || '')
+        .trim()
+        .toLowerCase() === 'zip'
+        ? 'zip'
+        : 'raw',
     createdAt: Number(host?.createdAt || Date.now()),
     fileCount: Number(host?.fileCount || 0),
     totalBytes: Number(host?.totalBytes || 0)
@@ -3030,6 +3061,12 @@ function normalizeHostHistoryEntry(entry) {
     invite: String(entry?.invite || '').trim(),
     sessionName,
     sessionLabel,
+    hostMode:
+      String(entry?.hostMode || '')
+        .trim()
+        .toLowerCase() === 'zip'
+        ? 'zip'
+        : 'raw',
     createdAt: Number(entry?.createdAt || Date.now()),
     fileCount: Math.max(0, Number(entry?.fileCount || 0)),
     totalBytes: Math.max(0, Number(entry?.totalBytes || 0))
