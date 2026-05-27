@@ -1,4 +1,4 @@
-/* global window, document, navigator, TextDecoder, Buffer, localStorage */
+/* global window, document, navigator, TextDecoder, Buffer, localStorage, Notification, HTMLInputElement */
 
 const RPC = require('bare-rpc')
 const fs = require('fs/promises')
@@ -25,13 +25,17 @@ const RpcCommand = {
   STOP_HOST: 8,
   START_HOST_FROM_TRANSFER: 9,
   READ_ENTRY_CHUNK: 10,
-  UPDATE_ACTIVE_HOST: 11
+  UPDATE_ACTIVE_HOST: 11,
+  LIST_HOST_PEER_ACTIVITY: 12,
+  REPORT_HOST_PEER_EVENT: 13,
+  SET_PEER_PROFILE: 14
 }
 
 const SOURCES_KEY = 'peardrops.desktop.sources.v1'
 const HISTORY_KEY = 'peardrops.desktop.host-history.v1'
 const STARRED_HOSTS_KEY = 'peardrops.desktop.starred-hosts.v1'
 const HOST_PACKAGING_KEY = 'peardrops.desktop.host-packaging.v1'
+const PROFILE_KEY = 'peardrops.desktop.profile.v1'
 const PUBLIC_SITE_ORIGIN = 'https://peardrop.online'
 const FALLBACK_RELAY_URL = 'wss://pear-drops.up.railway.app'
 const workerSpecifier = '/workers/main.js'
@@ -88,6 +92,7 @@ const checkAllDriveEl = document.getElementById('check-all-drive')
 const driveSelectToggleBtn = document.getElementById('drive-select-toggle')
 
 const hostsRowsEl = document.getElementById('hosts-rows')
+const peerActivityRowsEl = document.getElementById('peer-activity-rows')
 const starredRowsEl = document.getElementById('starred-rows')
 const hostsSelectToggleBtn = document.getElementById('hosts-select-toggle')
 const hostsStarSelectedBtn = document.getElementById('hosts-star-selected')
@@ -126,6 +131,9 @@ const sessionEditorAddFolderBtn = document.getElementById('session-editor-add-fo
 const sessionEditorSelectToggleBtn = document.getElementById('session-editor-select-toggle')
 const sessionEditorRemoveSelectedBtn = document.getElementById('session-editor-remove-selected')
 const sessionEditorApplyBtn = document.getElementById('session-editor-apply')
+const onboardingModalEl = document.getElementById('onboarding-modal')
+const onboardingPeerNameEl = document.getElementById('onboarding-peer-name')
+const onboardingContinueBtn = document.getElementById('onboarding-continue')
 
 const state = {
   rpc: null,
@@ -165,7 +173,10 @@ const state = {
   sessionEditorHistoryActive: false,
   quitPromptOpen: false,
   updateReady: false,
-  updatePlatform: ''
+  updatePlatform: '',
+  profile: loadJson(PROFILE_KEY, { peerName: '', done: false }),
+  hostPeerRows: [],
+  hostPeerLastEventId: 0
 }
 const dedupedInitialSources = dedupeSourceRows(state.sources)
 if (dedupedInitialSources.length !== state.sources.length) {
@@ -183,6 +194,7 @@ let pendingHostNameResolve = null
 let copyFeedbackTimer = null
 let activeCopyFeedbackKey = ''
 let activeHostsPollTimer = null
+let peerActivityPollTimer = null
 let workerReadySeen = false
 let workerReadyWaiters = []
 let sessionSwipeAccumulator = 0
@@ -465,6 +477,19 @@ function withTimeout(promise, timeoutMs) {
 function wireUiEvents() {
   uploadTabBtn.addEventListener('click', () => setTab('upload'))
   downloadTabBtn.addEventListener('click', () => setTab('download'))
+  onboardingPeerNameEl?.addEventListener('input', () => renderOnboarding())
+  onboardingContinueBtn?.addEventListener('click', () => {
+    const peerName = String(onboardingPeerNameEl?.value || '').trim()
+    if (!peerName) return
+    const themeNode = document.querySelector('input[name="onboarding-theme"]:checked')
+    const themeMode = String(themeNode?.value || 'system')
+    state.profile = { peerName, done: true }
+    localStorage.setItem(PROFILE_KEY, JSON.stringify(state.profile))
+    applyThemeMode(themeMode)
+    void bridge.setThemeMode?.(themeMode).catch?.(() => {})
+    void syncPeerProfileWithWorker()
+    renderOnboarding()
+  })
 
   sourceAddBtn.addEventListener('click', (event) => {
     event.stopPropagation()
@@ -971,6 +996,15 @@ function wireUiEvents() {
   })
 }
 
+async function syncPeerProfileWithWorker() {
+  if (!state.rpc) return
+  const name = String(state.profile?.peerName || '').trim()
+  if (!name) return
+  try {
+    await state.rpc.request(RpcCommand.SET_PEER_PROFILE, { name })
+  } catch {}
+}
+
 async function boot() {
   try {
     setWorkerLogMessage('starting worker')
@@ -986,13 +1020,20 @@ async function boot() {
     state.rpc = createRpcClient()
     setWorkerLogMessage('initializing worker RPC')
     await state.rpc.request(RpcCommand.INIT, {}, { timeoutMs: WORKER_INIT_TIMEOUT_MS })
+    await syncPeerProfileWithWorker()
 
     const mode = await bridge.getThemeMode?.()
     applyThemeMode(mode)
     const updateStatus = await bridge.getUpdateStatus?.()
     applyUpdateStatus(updateStatus)
+    try {
+      if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
+        void Notification.requestPermission()
+      }
+    } catch {}
 
     await refreshActiveHosts()
+    await refreshHostPeerActivity()
     await pruneMissingSources('launch')
     startActiveHostsPolling()
     renderAll()
@@ -1068,12 +1109,20 @@ function startActiveHostsPolling() {
   activeHostsPollTimer = setInterval(() => {
     void refreshActiveHosts()
   }, 4000)
+  peerActivityPollTimer = setInterval(() => {
+    void refreshHostPeerActivity()
+  }, 1200)
 }
 
 function stopActiveHostsPolling() {
-  if (!activeHostsPollTimer) return
-  clearInterval(activeHostsPollTimer)
-  activeHostsPollTimer = null
+  if (activeHostsPollTimer) {
+    clearInterval(activeHostsPollTimer)
+    activeHostsPollTimer = null
+  }
+  if (peerActivityPollTimer) {
+    clearInterval(peerActivityPollTimer)
+    peerActivityPollTimer = null
+  }
 }
 
 function createRpcClient() {
@@ -1118,6 +1167,101 @@ function renderAll() {
   renderDriveRows()
   renderSessionEditor()
   renderActionButtons()
+  renderPeerActivity()
+  renderOnboarding()
+}
+
+function formatPeerLabel(peerName, peerHex4) {
+  const name = String(peerName || '').trim() || 'Unknown'
+  const hex4 =
+    String(peerHex4 || '')
+      .trim()
+      .slice(0, 4) || '----'
+  return `${name} (${hex4})`
+}
+
+function renderOnboarding() {
+  if (!onboardingModalEl) return
+  const done =
+    Boolean(state.profile?.done) && String(state.profile?.peerName || '').trim().length > 0
+  onboardingModalEl.classList.toggle('hidden', done)
+  if (onboardingPeerNameEl && !onboardingPeerNameEl.value) {
+    onboardingPeerNameEl.value = String(state.profile?.peerName || '')
+  }
+  const activeTheme = String(state.themeMode || 'system')
+  for (const node of Array.from(document.querySelectorAll('input[name="onboarding-theme"]'))) {
+    if (!(node instanceof HTMLInputElement)) continue
+    node.checked = node.value === activeTheme
+  }
+  if (onboardingContinueBtn) {
+    onboardingContinueBtn.disabled = String(onboardingPeerNameEl?.value || '').trim().length === 0
+  }
+}
+
+function renderPeerActivity() {
+  if (!peerActivityRowsEl) return
+  const rows = Array.isArray(state.hostPeerRows) ? state.hostPeerRows : []
+  if (!rows.length) {
+    peerActivityRowsEl.innerHTML = '<div class="muted-empty">No joining peers yet.</div>'
+    return
+  }
+  peerActivityRowsEl.innerHTML = rows
+    .map((row) => {
+      const progress = Math.max(0, Math.min(100, Math.round(Number(row?.progress || 0) * 100)))
+      const status = String(row?.status || '').toLowerCase()
+      const complete = status === 'completed'
+      const joined = status === 'joined'
+      const downloading = status === 'downloading'
+      const label = joined
+        ? 'Joined'
+        : complete
+          ? 'Downloaded'
+          : downloading
+            ? 'Downloading'
+            : `${progress}%`
+      const bar = joined
+        ? ''
+        : `<div class="activity-track"><div class="activity-fill" style="width:${progress}%"></div></div>`
+      return `<div class="row-item"><div style="min-width:0;"><div class="row-title">${escapeHtml(formatPeerLabel(row?.peerName, row?.peerHex4))}</div><div class="row-sub">${escapeHtml(String(row?.sessionName || 'Host Session'))}</div>${bar}</div><div class="controls"><span class="btn alt" style="padding:4px 8px;cursor:default;">${escapeHtml(label)}</span></div></div>`
+    })
+    .join('')
+}
+
+function notifyPeerEvent(event) {
+  const type = String(event?.type || '').toLowerCase()
+  if (!['joined', 'started', 'downloading', 'aborted', 'completed'].includes(type)) return
+  const session = String(event?.sessionName || 'Host Session')
+  const label = formatPeerLabel(event?.peerName, event?.peerHex4)
+  const message =
+    type === 'joined'
+      ? `Peer ${label} joined ${session}`
+      : type === 'downloading'
+        ? `Peer ${label} is downloading ${session}`
+        : type === 'started'
+          ? `Peer ${label} started downloading ${session}`
+          : type === 'aborted'
+            ? `Peer ${label} aborted downloading ${session}`
+            : `Peer ${label} downloaded ${session}`
+  try {
+    new Notification('PearDrop', { body: message })
+  } catch {}
+}
+
+async function refreshHostPeerActivity() {
+  if (!state.rpc) return
+  try {
+    const response = await state.rpc.request(RpcCommand.LIST_HOST_PEER_ACTIVITY, {})
+    const peers = Array.isArray(response?.peers) ? response.peers : []
+    const events = Array.isArray(response?.events) ? response.events : []
+    state.hostPeerRows = peers
+    for (const item of events) {
+      const id = Number(item?.eventId || 0)
+      if (id <= state.hostPeerLastEventId) continue
+      state.hostPeerLastEventId = id
+      notifyPeerEvent(item)
+    }
+    renderPeerActivity()
+  } catch {}
 }
 
 function applyUpdateStatus(payload) {
@@ -1817,6 +1961,7 @@ async function downloadInviteSelected() {
   if (!targetDir) return setStatus('No destination selected.')
 
   try {
+    const normalizedPeerName = String(state.profile?.peerName || '').trim()
     state.downloadingSelected = true
     renderActionButtons()
     const knownTotalBytes = selected.reduce(
@@ -1840,6 +1985,16 @@ async function downloadInviteSelected() {
         )
       }
     )
+    if (normalizedPeerName) {
+      void state.rpc
+        .request(RpcCommand.REPORT_HOST_PEER_EVENT, {
+          invite: state.inviteSource,
+          peerName: normalizedPeerName,
+          type: 'downloading',
+          progress: 0
+        })
+        .catch(() => {})
+    }
 
     for (let i = 0; i < selected.length; i++) {
       const entry = selected[i]
@@ -1857,6 +2012,16 @@ async function downloadInviteSelected() {
         ({ doneBytes }) => {
           if (!useByteProgress) return
           completedBytes = baseCompletedBytes + Math.max(0, Number(doneBytes || 0))
+          if (normalizedPeerName && knownTotalBytes > 0) {
+            void state.rpc
+              .request(RpcCommand.REPORT_HOST_PEER_EVENT, {
+                invite: state.inviteSource,
+                peerName: normalizedPeerName,
+                type: 'downloading',
+                progress: Math.max(0, Math.min(1, completedBytes / knownTotalBytes))
+              })
+              .catch(() => {})
+          }
           const totalUnits = knownTotalBytes
           upsertWorkerActivityBar(
             'download-selected',
@@ -1888,12 +2053,32 @@ async function downloadInviteSelected() {
         }
       )
     }
+    if (normalizedPeerName) {
+      void state.rpc
+        .request(RpcCommand.REPORT_HOST_PEER_EVENT, {
+          invite: state.inviteSource,
+          peerName: normalizedPeerName,
+          type: 'completed',
+          progress: 1
+        })
+        .catch(() => {})
+    }
 
     clearWorkerActivityBar('download-selected')
     setStatus(
       `Downloaded ${selected.length} file${selected.length === 1 ? '' : 's'} to ${targetDir}.`
     )
   } catch (error) {
+    const normalizedPeerName = String(state.profile?.peerName || '').trim()
+    if (normalizedPeerName) {
+      void state.rpc
+        .request(RpcCommand.REPORT_HOST_PEER_EVENT, {
+          invite: state.inviteSource,
+          peerName: normalizedPeerName,
+          type: 'aborted'
+        })
+        .catch(() => {})
+    }
     clearWorkerActivityBar('download-selected')
     setStatus(`Download failed: ${error.message || String(error)}`)
   } finally {

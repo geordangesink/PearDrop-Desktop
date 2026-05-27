@@ -598,6 +598,21 @@ async function handleSignalConnection(signalSocket, { invite, rpc, portMappings 
 }
 
 function bindDataChannel(channel, { invite, rpc }) {
+  const peerName = { value: '' }
+  const reportPeer = (type, progress = undefined) => {
+    void rpc
+      .request(13, {
+        invite,
+        peerName: String(peerName.value || '').trim() || 'Web',
+        type,
+        progress
+      })
+      .catch(() => {})
+  }
+  reportPeer('joined', 0)
+  channel.onclose = () => {
+    reportPeer('aborted')
+  }
   channel.onmessage = async (event) => {
     let request = null
     try {
@@ -613,14 +628,19 @@ function bindDataChannel(channel, { invite, rpc }) {
     }
 
     try {
+      if (request?.peerName) {
+        peerName.value = String(request.peerName || '').trim()
+      }
       if (request.type === 'manifest') {
         const manifest = await rpc.request(3, { invite })
+        reportPeer('joined', 0)
         reply({ ok: true, manifest })
         return
       }
 
       if (request.type === 'file') {
         const entry = await rpc.request(6, { invite, drivePath: request.path })
+        reportPeer('joined', 0)
         reply({ ok: true, dataBase64: entry.dataBase64 })
         return
       }
@@ -638,6 +658,27 @@ function bindDataChannel(channel, { invite, rpc }) {
           byteLength: Number(entry?.byteLength || 0),
           dataBase64: entry?.dataBase64 || ''
         })
+        const fileSize = Math.max(0, Number(request.fileSize || 0))
+        const offset = Math.max(0, Number(request.offset || 0))
+        const chunkLen = Math.max(0, Number(entry?.byteLength || 0))
+        if (fileSize > 0) {
+          const progress = Math.max(0, Math.min(1, (offset + chunkLen) / fileSize))
+          reportPeer('downloading', progress)
+        } else {
+          reportPeer('joined', 0)
+        }
+        return
+      }
+
+      if (request.type === 'complete') {
+        reportPeer('completed', 1)
+        reply({ ok: true })
+        return
+      }
+
+      if (request.type === 'abort') {
+        reportPeer('aborted')
+        reply({ ok: true })
         return
       }
 

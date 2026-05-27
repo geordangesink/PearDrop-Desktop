@@ -942,6 +942,13 @@
 
               <article class="panel">
                 <div class="panel-head">
+                  <h2 class="panel-title">Joining Peers</h2>
+                </div>
+                <div id="peer-activity-rows" class="rows"></div>
+              </article>
+
+              <article class="panel">
+                <div class="panel-head">
                   <h2 class="panel-title">Starred Hosts</h2>
                 </div>
                 <div id="starred-rows" class="rows"></div>
@@ -1093,6 +1100,25 @@
           <h2 class="shutdown-title">Shutting Down</h2>
           <p id="shutdown-message" class="shutdown-sub">Closing PearDrop safely</p>
           <div class="shutdown-spinner" aria-hidden="true"></div>
+        </div>
+      </section>
+
+      <section id="onboarding-modal" class="modal-root hidden">
+        <div class="modal-backdrop"></div>
+        <div class="modal-card">
+          <h3 class="modal-title">Welcome to PearDrop</h3>
+          <p class="modal-sub">Choose your theme and set your peer name.</p>
+          <div class="modal-packaging">
+            <label
+              ><input type="radio" name="onboarding-theme" value="system" checked /> System</label
+            >
+            <label><input type="radio" name="onboarding-theme" value="dark" /> Dark</label>
+            <label><input type="radio" name="onboarding-theme" value="light" /> Light</label>
+          </div>
+          <input id="onboarding-peer-name" class="input" placeholder="Enter your name" />
+          <div class="modal-actions">
+            <button id="onboarding-continue" class="btn" disabled>Continue</button>
+          </div>
         </div>
       </section>
     </main>

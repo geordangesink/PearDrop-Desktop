@@ -30,7 +30,6 @@ const workers = new Map()
 const exitedWorkers = new WeakSet()
 const pendingDeepLinks = []
 let isQuitting = false
-let forceQuit = false
 let workersShuttingDown = null
 let staleWorkersCleared = false
 let themeMode = 'system'
@@ -47,9 +46,13 @@ const cmd = command(
 )
 
 const launchArgs = app.isPackaged ? process.argv.slice(1) : process.argv.slice(2)
+const storageOverride = readStorageOverride(launchArgs)
+const storageOverrideFallback = readStorageOverride(process.argv.slice(1))
+const storageOverrideEnv = String(process.env.PEARDROPS_STORAGE || '').trim()
 if (handleSquirrelStartupEvent(launchArgs)) process.exit(0)
 for (const link of findAppLaunchPayloads(launchArgs)) pendingDeepLinks.push(link)
 cmd.parse(sanitizeCliArgs(launchArgs))
+applyStorageOverrides()
 
 function handleSquirrelStartupEvent(argv) {
   if (!app.isPackaged || !isWindows) return false
@@ -152,7 +155,14 @@ function sanitizeCliArgs(argv) {
       continue
     }
 
-    if ((value === '--relay' || value === '--storage') && i + 1 < input.length) {
+    if (value === '--storage' || value.startsWith('--storage=')) {
+      if (value === '--storage' && i + 1 < input.length && !String(input[i + 1]).startsWith('-')) {
+        i++
+      }
+      continue
+    }
+
+    if (value === '--relay' && i + 1 < input.length) {
       const next = String(input[i + 1] || '')
       if (next && !next.startsWith('-')) {
         output.push(`${value}=${next}`)
@@ -192,6 +202,9 @@ function normalizeAppLaunchPayload(value) {
 }
 
 function resolveBaseDir() {
+  if (storageOverride) return storageOverride
+  if (storageOverrideFallback) return storageOverrideFallback
+  if (storageOverrideEnv) return path.resolve(storageOverrideEnv)
   if (cmd.flags.storage) return cmd.flags.storage
   if (!app.isPackaged) return app.getPath('userData')
 
@@ -200,6 +213,38 @@ function resolveBaseDir() {
     : isLinux
       ? path.join(os.homedir(), '.config', appName)
       : app.getPath('userData')
+}
+
+function applyStorageOverrides() {
+  const baseDir = resolveBaseDir()
+  if (!baseDir) return
+  try {
+    fs.mkdirSync(baseDir, { recursive: true })
+  } catch {}
+  try {
+    app.setPath('userData', baseDir)
+  } catch {}
+  try {
+    app.setPath('sessionData', path.join(baseDir, 'session-data'))
+  } catch {}
+}
+
+function readStorageOverride(argv) {
+  const input = Array.isArray(argv) ? argv : []
+  for (let i = 0; i < input.length; i++) {
+    const value = String(input[i] || '').trim()
+    if (!value) continue
+    if (value.startsWith('--storage=')) {
+      const direct = value.slice('--storage='.length).trim()
+      if (direct) return path.resolve(direct)
+      continue
+    }
+    if (value === '--storage' && i + 1 < input.length) {
+      const next = String(input[i + 1] || '').trim()
+      if (next && !next.startsWith('-')) return path.resolve(next)
+    }
+  }
+  return ''
 }
 
 async function shutdownWorkers() {
@@ -349,6 +394,11 @@ function focusMainWindow(existingWindow = null) {
       ? existingWindow
       : BrowserWindow.getAllWindows()[0]
   if (!existing || existing.isDestroyed()) return
+  if (isMac && app.dock && typeof app.dock.show === 'function') {
+    try {
+      app.dock.show()
+    } catch {}
+  }
   if (!existing.isVisible()) existing.show()
   if (existing.isMinimized()) existing.restore()
   if (isWindows && typeof existing.moveTop === 'function') existing.moveTop()
@@ -422,8 +472,10 @@ function createTray() {
       {
         label: 'Quit PearDrop',
         click: () => {
-          forceQuit = true
-          app.quit()
+          hideQuitPrompt()
+          void revealMainWindow().then(() => {
+            presentQuitPrompt()
+          })
         }
       }
     ])
@@ -435,6 +487,16 @@ function createTray() {
 function hideAllWindows() {
   for (const win of BrowserWindow.getAllWindows()) {
     if (!win.isDestroyed()) win.hide()
+  }
+}
+
+function enterBackgroundMode() {
+  hideQuitPrompt()
+  hideAllWindows()
+  if (isMac && app.dock && typeof app.dock.hide === 'function') {
+    try {
+      app.dock.hide()
+    } catch {}
   }
 }
 
@@ -643,7 +705,7 @@ async function createWindow() {
   })
 
   win.on('close', (event) => {
-    if (isQuitting || forceQuit) return
+    if (isQuitting) return
     event.preventDefault()
     win.hide()
   })
@@ -755,8 +817,7 @@ ipcMain.handle('app:quitPromptAction', async (evt, actionRaw) => {
     .trim()
     .toLowerCase()
   if (action === 'close-window') {
-    hideQuitPrompt()
-    hideAllWindows()
+    enterBackgroundMode()
     return true
   }
   if (action === 'cancel') {
@@ -810,16 +871,7 @@ if (!lock) {
   app.on('before-quit', (evt) => {
     evt.preventDefault()
     if (isQuitting) return
-    if (forceQuit || quitPromptOpen) {
-      beginGracefulQuit()
-      return
-    }
-    const windows = BrowserWindow.getAllWindows().filter((win) => !win.isDestroyed())
-    if (!windows.length) {
-      beginGracefulQuit()
-      return
-    }
-    presentQuitPrompt()
+    enterBackgroundMode()
   })
 
   app.on('will-quit', () => {

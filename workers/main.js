@@ -14,9 +14,11 @@ try {
 async function run() {
   const parentPidAtStart = Number(process.ppid || 0)
   const parentWatchdog = startParentWatchdog(parentPidAtStart)
-  const storage = Bare.argv[2]
+  const storage = String(Bare.argv[2] || '').trim()
   const updaterConfig = JSON.parse(Bare.argv[3] || '{}')
-  const baseRoot = updaterConfig.dev ? os.tmpdir() : storage
+  // In dev, prefer explicit storage override when provided so worker corestore
+  // does not collapse into a shared temp root that can leave stale lock retries.
+  const baseRoot = storage || (updaterConfig.dev ? os.tmpdir() : storage)
   const baseName = updaterConfig.dev ? 'pear-drops-desktop' : 'peardrops'
 
   // Keep metadata persistent in both dev and production so host restart survives app relaunches.
