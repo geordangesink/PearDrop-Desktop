@@ -4,12 +4,7 @@ const process = require('bare-process')
 const WORKER_READY_TOKEN = '__PEARDROP_WORKER_RPC_READY__'
 let bootstrapTransferWorker = null
 
-try {
-  // In local development, prefer the in-repo core so desktop and native-shared stay aligned.
-  ;({ bootstrapTransferWorker } = require('../../native-shared/src/index.js'))
-} catch {
-  ;({ bootstrapTransferWorker } = require('pear-drop-core'))
-}
+;({ bootstrapTransferWorker } = require('pear-drop-core'))
 
 async function run() {
   const parentPidAtStart = Number(process.ppid || 0)
