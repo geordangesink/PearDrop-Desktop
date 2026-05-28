@@ -40,14 +40,6 @@ const api = {
     ipcRenderer.on('app:update-ready', wrap)
     return () => ipcRenderer.removeListener('app:update-ready', wrap)
   },
-  onQuitPrompt(listener) {
-    const wrap = (evt, payload) => listener(payload || {})
-    ipcRenderer.on('app:quit-prompt', wrap)
-    return () => ipcRenderer.removeListener('app:quit-prompt', wrap)
-  },
-  quitPromptAction(action) {
-    return ipcRenderer.invoke('app:quitPromptAction', String(action || ''))
-  },
   pickDirectory() {
     return ipcRenderer.invoke('app:pickDirectory')
   },

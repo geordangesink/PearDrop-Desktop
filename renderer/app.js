@@ -28,7 +28,8 @@ const RpcCommand = {
   UPDATE_ACTIVE_HOST: 11,
   LIST_HOST_PEER_ACTIVITY: 12,
   REPORT_HOST_PEER_EVENT: 13,
-  SET_PEER_PROFILE: 14
+  SET_PEER_PROFILE: 14,
+  CANCEL_OPERATION: 15
 }
 
 const SOURCES_KEY = 'peardrops.desktop.sources.v1'
@@ -109,12 +110,6 @@ const hostNameBackdropEl = document.getElementById('host-name-backdrop')
 const hostNameInputEl = document.getElementById('host-name-input')
 const hostNameCancelBtn = document.getElementById('host-name-cancel')
 const hostNameSubmitBtn = document.getElementById('host-name-submit')
-const appQuitModalEl = document.getElementById('app-quit-modal')
-const appQuitBackdropEl = document.getElementById('app-quit-backdrop')
-const appQuitSubEl = document.getElementById('app-quit-sub')
-const appQuitCloseWindowBtn = document.getElementById('app-quit-close-window')
-const appQuitConfirmBtn = document.getElementById('app-quit-confirm')
-const appQuitCancelBtn = document.getElementById('app-quit-cancel')
 const updateBannerEl = document.getElementById('update-banner')
 const updateBannerSubEl = document.getElementById('update-banner-sub')
 const updateShutdownBtn = document.getElementById('update-shutdown-btn')
@@ -171,12 +166,14 @@ const state = {
   sessionEditorSelected: new Set(),
   sessionEditorApplying: false,
   sessionEditorHistoryActive: false,
-  quitPromptOpen: false,
   updateReady: false,
   updatePlatform: '',
   profile: loadJson(PROFILE_KEY, { peerName: '', done: false }),
   hostPeerRows: [],
-  hostPeerLastEventId: 0
+  hostPeerLastEventId: 0,
+  activeHostOperationId: '',
+  activeInviteLoadOperationId: '',
+  activeDownloadOperationId: ''
 }
 const dedupedInitialSources = dedupeSourceRows(state.sources)
 if (dedupedInitialSources.length !== state.sources.length) {
@@ -303,17 +300,6 @@ function wireGlobalEvents() {
 
   bridge.onUpdateReady?.((payload) => {
     applyUpdateStatus(payload)
-  })
-
-  bridge.onQuitPrompt?.((payload) => {
-    const open = Boolean(payload?.open)
-    state.quitPromptOpen = open
-    appQuitModalEl?.classList.toggle('hidden', !open)
-    if (open) {
-      const detail = String(payload?.detail || '').trim()
-      if (detail && appQuitSubEl) appQuitSubEl.textContent = detail
-      appQuitConfirmBtn?.focus?.()
-    }
   })
 
   bridge.onThemeMode?.((payload) => {
@@ -552,7 +538,11 @@ function wireUiEvents() {
   })
 
   hostSelectedBtn.addEventListener('click', async () => {
-    if (state.hostingSelected || pendingHostNameResolve) return
+    if (state.hostingSelected) {
+      void cancelBackendOperation(state.activeHostOperationId)
+      return
+    }
+    if (pendingHostNameResolve) return
     const options = await promptForHostOptions('Host Session')
     if (options === null) return
     void hostSelectedSources(options.sessionName, options.packaging)
@@ -579,27 +569,11 @@ function wireUiEvents() {
     }
   })
 
-  appQuitBackdropEl?.addEventListener('click', () => {
-    void bridge.quitPromptAction?.('cancel')
-  })
-  appQuitCancelBtn?.addEventListener('click', () => {
-    void bridge.quitPromptAction?.('cancel')
-  })
-  appQuitCloseWindowBtn?.addEventListener('click', () => {
-    void bridge.quitPromptAction?.('close-window')
-  })
-  appQuitConfirmBtn?.addEventListener('click', () => {
-    void bridge.quitPromptAction?.('quit')
-  })
   updateShutdownBtn?.addEventListener('click', () => {
     void bridge.updateAction?.('shutdown')
   })
   window.addEventListener('keydown', (event) => {
-    if (!state.quitPromptOpen) return
-    if (event.key === 'Escape') {
-      event.preventDefault()
-      void bridge.quitPromptAction?.('cancel')
-    }
+    if (event.key !== 'Escape') return
   })
 
   sessionEditorBackBtn?.addEventListener('click', () => closeSessionEditor())
@@ -664,11 +638,17 @@ function wireUiEvents() {
   })
 
   viewDriveBtn.addEventListener('click', () => {
-    if (state.loadingInviteManifest) return
+    if (state.loadingInviteManifest) {
+      void cancelBackendOperation(state.activeInviteLoadOperationId)
+      return
+    }
     void openInviteFiles()
   })
   downloadSelectedBtn.addEventListener('click', () => {
-    if (state.downloadingSelected) return
+    if (state.downloadingSelected) {
+      void cancelBackendOperation(state.activeDownloadOperationId)
+      return
+    }
     void downloadInviteSelected()
   })
 
@@ -1294,23 +1274,24 @@ function renderUpdateBanner() {
 
 function renderActionButtons() {
   if (hostSelectedBtn) {
-    hostSelectedBtn.disabled = state.hostingSelected || state.selectedSources.size === 0
+    hostSelectedBtn.disabled = !state.hostingSelected && state.selectedSources.size === 0
     hostSelectedBtn.innerHTML = state.hostingSelected
-      ? '<span class="mini-spinner"></span> Hosting...'
+      ? '<span class="mini-spinner"></span> Cancel'
       : 'Host Selected'
   }
   if (viewDriveBtn) {
-    viewDriveBtn.disabled = state.loadingInviteManifest
+    viewDriveBtn.disabled = false
     viewDriveBtn.innerHTML = state.loadingInviteManifest
-      ? '<span class="mini-spinner"></span> Loading...'
+      ? '<span class="mini-spinner"></span> Cancel'
       : 'View Drive'
   }
   if (downloadSelectedBtn) {
     const disabled =
-      state.downloadingSelected || !state.inviteEntries.length || state.inviteSelected.size === 0
+      !state.downloadingSelected &&
+      (!state.inviteEntries.length || state.inviteSelected.size === 0)
     downloadSelectedBtn.disabled = disabled
     downloadSelectedBtn.innerHTML = state.downloadingSelected
-      ? '<span class="mini-spinner"></span> Downloading...'
+      ? '<span class="mini-spinner"></span> Cancel'
       : 'Download Selected'
   }
   if (hostsStopSelectedBtn) {
@@ -1933,6 +1914,8 @@ async function openInviteFiles() {
   const inviteVariants = buildInviteManifestVariants(invite)
 
   try {
+    const operationId = newOperationId()
+    state.activeInviteLoadOperationId = operationId
     state.loadingInviteManifest = true
     clearDrivePreviewCache()
     renderActionButtons()
@@ -1946,7 +1929,10 @@ async function openInviteFiles() {
       try {
         setWorkerLogMessage(`loading invite manifest (attempt ${i + 1}/${inviteVariants.length})`)
         // eslint-disable-next-line no-await-in-loop
-        manifest = await state.rpc.request(RpcCommand.GET_MANIFEST, { invite: candidate })
+        manifest = await state.rpc.request(RpcCommand.GET_MANIFEST, {
+          invite: candidate,
+          operationId
+        })
         resolvedInvite = candidate
         break
       } catch (error) {
@@ -1966,6 +1952,7 @@ async function openInviteFiles() {
   } catch (error) {
     setStatus(`View drive failed: ${error.message || String(error)}`)
   } finally {
+    state.activeInviteLoadOperationId = ''
     state.loadingInviteManifest = false
     renderActionButtons()
   }
@@ -1984,6 +1971,8 @@ async function downloadInviteSelected() {
   if (!targetDir) return setStatus('No destination selected.')
 
   try {
+    const operationId = newOperationId()
+    state.activeDownloadOperationId = operationId
     const normalizedPeerName = String(state.profile?.peerName || '').trim()
     state.downloadingSelected = true
     renderActionButtons()
@@ -2032,6 +2021,7 @@ async function downloadInviteSelected() {
         drivePath,
         outputPath,
         Number(entry.byteLength || 0),
+        operationId,
         ({ doneBytes }) => {
           if (!useByteProgress) return
           completedBytes = baseCompletedBytes + Math.max(0, Number(doneBytes || 0))
@@ -2105,6 +2095,7 @@ async function downloadInviteSelected() {
     clearWorkerActivityBar('download-selected')
     setStatus(`Download failed: ${error.message || String(error)}`)
   } finally {
+    state.activeDownloadOperationId = ''
     state.downloadingSelected = false
     renderActionButtons()
   }
@@ -2121,6 +2112,8 @@ async function hostSelectedSources(sessionNameInput = 'Host Session', packaging 
   if (!picked.length) return setStatus('Selected sources are no longer available.')
 
   try {
+    const operationId = newOperationId()
+    state.activeHostOperationId = operationId
     state.hostingSelected = true
     renderActionButtons()
     let files = []
@@ -2164,7 +2157,8 @@ async function hostSelectedSources(sessionNameInput = 'Host Session', packaging 
     const response = await state.rpc.request(RpcCommand.CREATE_UPLOAD, {
       files,
       sessionName,
-      hostMode: packaging === 'zip' ? 'zip' : 'raw'
+      hostMode: packaging === 'zip' ? 'zip' : 'raw',
+      operationId
     })
     const transferId = extractTransferIdFromResponse(response)
     const invite = String(response?.nativeInvite || response?.invite || '').trim()
@@ -2223,6 +2217,7 @@ async function hostSelectedSources(sessionNameInput = 'Host Session', packaging 
     } catch {}
     setStatus(`Host failed: ${error.message || String(error)}`)
   } finally {
+    state.activeHostOperationId = ''
     state.hostingSelected = false
     renderActionButtons()
   }
@@ -2249,6 +2244,18 @@ async function verifyHostManifestReadable(invite, attempts = 4, pauseMs = 350) {
 
 function delayMs(ms) {
   return new Promise((resolve) => setTimeout(resolve, Math.max(0, Number(ms || 0))))
+}
+
+function newOperationId() {
+  return `op:${Date.now()}:${Math.random().toString(16).slice(2, 10)}`
+}
+
+async function cancelBackendOperation(operationId) {
+  const opId = String(operationId || '').trim()
+  if (!opId || !state.rpc) return
+  try {
+    await state.rpc.request(RpcCommand.CANCEL_OPERATION, { operationId: opId })
+  } catch {}
 }
 
 function applyHostUploadProgress(payloadText) {
@@ -3248,7 +3255,15 @@ async function expandSourceToFiles(source) {
   return files
 }
 
-async function writeEntryToFile(rpc, invite, drivePath, outputPath, byteLength, onProgress = null) {
+async function writeEntryToFile(
+  rpc,
+  invite,
+  drivePath,
+  outputPath,
+  byteLength,
+  operationId = '',
+  onProgress = null
+) {
   const fd = await fs.open(outputPath, 'w')
   const chunkSize = 256 * 1024
 
@@ -3263,7 +3278,8 @@ async function writeEntryToFile(rpc, invite, drivePath, outputPath, byteLength, 
           invite,
           drivePath,
           offset,
-          length: chunkSize
+          length: chunkSize,
+          operationId
         })
         const bytes = Buffer.from(String(chunk?.dataBase64 || ''), 'base64')
         if (!bytes.byteLength) break
@@ -3283,7 +3299,8 @@ async function writeEntryToFile(rpc, invite, drivePath, outputPath, byteLength, 
         invite,
         drivePath,
         offset,
-        length
+        length,
+        operationId
       })
       const bytes = Buffer.from(String(chunk?.dataBase64 || ''), 'base64')
       if (!bytes.byteLength) throw new Error(`Empty chunk at offset ${offset}`)

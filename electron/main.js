@@ -35,7 +35,6 @@ let staleWorkersCleared = false
 let themeMode = 'system'
 let tray = null
 let sleepBlockerId = null
-let quitPromptOpen = false
 let updateReadyInfo = null
 
 const cmd = command(
@@ -472,10 +471,7 @@ function createTray() {
       {
         label: 'Quit PearDrop',
         click: () => {
-          hideQuitPrompt()
-          void revealMainWindow().then(() => {
-            presentQuitPrompt()
-          })
+          beginGracefulQuit()
         }
       }
     ])
@@ -491,7 +487,6 @@ function hideAllWindows() {
 }
 
 function enterBackgroundMode() {
-  hideQuitPrompt()
   hideAllWindows()
   if (isMac && app.dock && typeof app.dock.hide === 'function') {
     try {
@@ -513,25 +508,9 @@ function setHostingActive(shouldPreventSleep) {
   sleepBlockerId = null
 }
 
-function presentQuitPrompt() {
-  quitPromptOpen = true
-  sendToAll('app:quit-prompt', {
-    open: true,
-    detail:
-      'Quitting PearDrop stops all active hosts. Choose "Close Window" to keep hosting sessions open in the background.'
-  })
-}
-
-function hideQuitPrompt() {
-  if (!quitPromptOpen) return
-  quitPromptOpen = false
-  sendToAll('app:quit-prompt', { open: false })
-}
-
 function beginGracefulQuit() {
   if (isQuitting) return
   isQuitting = true
-  hideQuitPrompt()
   const updateWillApplyOnShutdown =
     updateReadyInfo?.ready && (updateReadyInfo?.applied || updateReadyInfo?.platform === 'windows')
   const message = updateWillApplyOnShutdown
@@ -810,25 +789,6 @@ ipcMain.handle('app:updateAction', async (evt, actionRaw) => {
     return { ok: true }
   }
   return { ok: false }
-})
-
-ipcMain.handle('app:quitPromptAction', async (evt, actionRaw) => {
-  const action = String(actionRaw || '')
-    .trim()
-    .toLowerCase()
-  if (action === 'close-window') {
-    enterBackgroundMode()
-    return true
-  }
-  if (action === 'cancel') {
-    hideQuitPrompt()
-    return true
-  }
-  if (action === 'quit') {
-    beginGracefulQuit()
-    return true
-  }
-  return false
 })
 
 app.setAsDefaultProtocolClient(protocol)
