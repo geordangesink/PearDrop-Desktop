@@ -58,19 +58,6 @@ const IS_MAC = process.platform === 'darwin'
 const SESSION_SWIPE_TRIGGER_PX = 180
 const SESSION_SWIPE_IDLE_MS = 220
 
-const statusEls = [
-  document.getElementById('upload-status'),
-  document.getElementById('download-status')
-].filter(Boolean)
-const workerLogEls = [
-  document.getElementById('upload-worker-log'),
-  document.getElementById('download-worker-log')
-].filter(Boolean)
-const workerActivityBarsEls = [
-  document.getElementById('upload-worker-activity-bars'),
-  document.getElementById('download-worker-activity-bars')
-].filter(Boolean)
-
 const uploadTabBtn = document.getElementById('tab-upload')
 const downloadTabBtn = document.getElementById('tab-download')
 const uploadPageEl = document.getElementById('upload-page')
@@ -96,13 +83,16 @@ const hostsRowsEl = document.getElementById('hosts-rows')
 const peerActivityRowsEl = document.getElementById('peer-activity-rows')
 const starredRowsEl = document.getElementById('starred-rows')
 const hostsSelectToggleBtn = document.getElementById('hosts-select-toggle')
-const hostsStarSelectedBtn = document.getElementById('hosts-star-selected')
 const hostsStopSelectedBtn = document.getElementById('hosts-stop-selected')
 
 const historyRowsEl = document.getElementById('history-rows')
 const historySelectToggleBtn = document.getElementById('history-select-toggle')
 const historyRehostSelectedBtn = document.getElementById('history-rehost-selected')
 const historyRemoveSelectedBtn = document.getElementById('history-remove-selected')
+const activeHostsCountEl = document.getElementById('active-hosts-count')
+const peerCountEl = document.getElementById('peer-count')
+const starredCountEl = document.getElementById('starred-count')
+const historyCountEl = document.getElementById('history-count')
 
 const filePicker = document.getElementById('file-picker')
 const hostNameModalEl = document.getElementById('host-name-modal')
@@ -150,6 +140,8 @@ const state = {
   hostingSelected: false,
   stoppingSelectedHosts: false,
   rehostingSelectedBulk: false,
+  cancelStoppingSelectedBulk: false,
+  cancelRehostingSelectedBulk: false,
   inviteSource: '',
   themeMode: 'system',
   sourceMenuOpen: false,
@@ -727,20 +719,12 @@ function wireUiEvents() {
     renderHosts()
   })
 
-  hostsStarSelectedBtn?.addEventListener('click', () => {
-    if (!state.selectedHosts.size) {
-      setStatus('Select at least one active host first.')
+  hostsStopSelectedBtn.addEventListener('click', () => {
+    if (state.stoppingSelectedHosts) {
+      state.cancelStoppingSelectedBulk = true
+      setStatus('Stopping selected hosts cancelled.')
       return
     }
-    for (const invite of state.selectedHosts) state.starredHosts.add(invite)
-    persistStarredHosts()
-    renderHosts()
-    setStatus(
-      `Starred ${state.selectedHosts.size} host${state.selectedHosts.size === 1 ? '' : 's'}.`
-    )
-  })
-  hostsStopSelectedBtn.addEventListener('click', () => {
-    if (state.stoppingSelectedHosts) return
     void stopSelectedHosts()
   })
 
@@ -755,7 +739,11 @@ function wireUiEvents() {
   })
 
   historyRehostSelectedBtn.addEventListener('click', () => {
-    if (state.rehostingSelectedBulk) return
+    if (state.rehostingSelectedBulk) {
+      state.cancelRehostingSelectedBulk = true
+      setStatus('Re-hosting cancelled.')
+      return
+    }
     void rehostSelectedHistory()
   })
   historyRemoveSelectedBtn.addEventListener('click', () => {
@@ -863,10 +851,16 @@ function wireUiEvents() {
     const action = String(actionNode?.getAttribute('data-action') || '')
 
     if (action === 'remove') {
+      const removed = state.hostHistory.find((entry) => entry.id === id)
+      const removedInvite = String(removed?.invite || '').trim()
       state.hostHistory = state.hostHistory.filter((entry) => entry.id !== id)
       state.selectedHistory.delete(id)
+      if (removedInvite) state.starredHosts.delete(removedInvite)
       localStorage.setItem(HISTORY_KEY, JSON.stringify(state.hostHistory))
+      persistStarredHosts()
       renderHistory()
+      renderStarredHosts()
+      renderHosts()
       return
     }
 
@@ -874,6 +868,22 @@ function wireUiEvents() {
       const item = state.hostHistory.find((entry) => entry.id === id)
       if (!item) return
       void rehostHistoryItem(item)
+      return
+    }
+    if (action === 'copy') {
+      const invite = String(row.dataset.invite || '').trim()
+      if (!invite) return
+      const shareInvite = String(row.dataset.shareInvite || '').trim()
+      void copyShareInviteForHost({ invite, shareInvite, feedbackKey: `history:${id}` })
+      return
+    }
+    if (action === 'star') {
+      const invite = String(row.dataset.invite || '').trim()
+      if (!invite) return
+      if (state.starredHosts.has(invite)) state.starredHosts.delete(invite)
+      else state.starredHosts.add(invite)
+      persistHostState()
+      renderActiveHosts()
       return
     }
     if (action === 'edit') {
@@ -1181,8 +1191,9 @@ function renderOnboarding() {
 function renderPeerActivity() {
   if (!peerActivityRowsEl) return
   const rows = Array.isArray(state.hostPeerRows) ? state.hostPeerRows : []
+  if (peerCountEl) peerCountEl.textContent = String(rows.length)
   if (!rows.length) {
-    peerActivityRowsEl.innerHTML = '<div class="muted-empty">No joining peers yet.</div>'
+    peerActivityRowsEl.innerHTML = '<div class="muted-empty">No peers connected</div>'
     return
   }
   peerActivityRowsEl.innerHTML = rows
@@ -1214,16 +1225,16 @@ function notifyPeerEvent(event) {
   const label = formatPeerLabel(event?.peerName, event?.peerHex4)
   const message =
     type === 'joined'
-      ? `Peer ${label} joined ${session}`
+      ? `joined ${session}`
       : type === 'downloading'
-        ? `Peer ${label} is downloading ${session}`
+        ? `is downloading ${session}`
         : type === 'started'
-          ? `Peer ${label} started downloading ${session}`
+          ? `started downloading ${session}`
           : type === 'aborted'
-            ? `Peer ${label} aborted downloading ${session}`
-            : `Peer ${label} downloaded ${session}`
+            ? `aborted downloading ${session}`
+            : `downloaded ${session}`
   try {
-    new Notification('PearDrop', { body: message })
+    new Notification(label, { body: message })
   } catch {}
 }
 
@@ -1273,42 +1284,45 @@ function renderUpdateBanner() {
 }
 
 function renderActionButtons() {
+  const loadingCancelMarkup = () =>
+    '<span class="loading-swap"><span class="spinner-glyph mini-spinner"></span><span class="cancel-glyph"><ion-icon name="close-outline"></ion-icon></span></span>'
   if (hostSelectedBtn) {
     hostSelectedBtn.disabled = !state.hostingSelected && state.selectedSources.size === 0
+    hostSelectedBtn.classList.toggle('loading-cancel', state.hostingSelected)
     hostSelectedBtn.innerHTML = state.hostingSelected
-      ? '<span class="mini-spinner"></span> Cancel'
-      : 'Host Selected'
+      ? loadingCancelMarkup()
+      : '<ion-icon name="rocket-outline"></ion-icon>'
   }
   if (viewDriveBtn) {
     viewDriveBtn.disabled = false
+    viewDriveBtn.classList.toggle('loading-cancel', state.loadingInviteManifest)
     viewDriveBtn.innerHTML = state.loadingInviteManifest
-      ? '<span class="mini-spinner"></span> Cancel'
-      : 'View Drive'
+      ? loadingCancelMarkup()
+      : '<ion-icon name="search-outline"></ion-icon>'
   }
   if (downloadSelectedBtn) {
     const disabled =
       !state.downloadingSelected &&
       (!state.inviteEntries.length || state.inviteSelected.size === 0)
     downloadSelectedBtn.disabled = disabled
+    downloadSelectedBtn.classList.toggle('loading-cancel', state.downloadingSelected)
     downloadSelectedBtn.innerHTML = state.downloadingSelected
-      ? '<span class="mini-spinner"></span> Cancel'
-      : 'Download Selected'
+      ? loadingCancelMarkup()
+      : '<ion-icon name="download-outline"></ion-icon>'
   }
   if (hostsStopSelectedBtn) {
-    hostsStopSelectedBtn.disabled = state.stoppingSelectedHosts || state.selectedHosts.size === 0
+    hostsStopSelectedBtn.disabled = !state.stoppingSelectedHosts && state.selectedHosts.size === 0
+    hostsStopSelectedBtn.classList.toggle('loading-cancel', state.stoppingSelectedHosts)
     hostsStopSelectedBtn.innerHTML = state.stoppingSelectedHosts
-      ? '<span class="mini-spinner"></span>'
+      ? loadingCancelMarkup()
       : '⏹'
-  }
-  if (hostsStarSelectedBtn) {
-    hostsStarSelectedBtn.disabled = state.selectedHosts.size === 0
-    hostsStarSelectedBtn.innerHTML = '★'
   }
   if (historyRehostSelectedBtn) {
     historyRehostSelectedBtn.disabled =
-      state.rehostingSelectedBulk || state.selectedHistory.size === 0
+      !state.rehostingSelectedBulk && state.selectedHistory.size === 0
+    historyRehostSelectedBtn.classList.toggle('loading-cancel', state.rehostingSelectedBulk)
     historyRehostSelectedBtn.innerHTML = state.rehostingSelectedBulk
-      ? '<span class="mini-spinner"></span>'
+      ? loadingCancelMarkup()
       : '▶'
   }
   if (sessionEditorAddFileBtn) sessionEditorAddFileBtn.disabled = state.sessionEditorApplying
@@ -1350,7 +1364,9 @@ function renderSessionEditor() {
     state.sessionEditorRefs.length > 0 &&
     state.sessionEditorSelected.size === state.sessionEditorRefs.length
   if (sessionEditorSelectToggleBtn) {
-    sessionEditorSelectToggleBtn.textContent = allSelected ? 'Deselect All' : 'Select All'
+    sessionEditorSelectToggleBtn.innerHTML = allSelected
+      ? '<ion-icon name="checkbox-outline"></ion-icon>'
+      : '<ion-icon name="square-outline"></ion-icon>'
   }
 
   if (!state.sessionEditorRefs.length) {
@@ -1582,11 +1598,13 @@ function renderSources() {
   sourcesGridEl.textContent = ''
   const allSelected =
     state.sources.length > 0 && state.selectedSources.size === state.sources.length
-  sourceSelectToggleBtn.textContent = allSelected ? 'Deselect All' : 'Select All'
+  sourceSelectToggleBtn.innerHTML = allSelected
+    ? '<ion-icon name="checkbox-outline"></ion-icon>'
+    : '<ion-icon name="square-outline"></ion-icon>'
 
   if (!state.sources.length) {
     sourcesGridEl.innerHTML =
-      '<div class="muted-empty">Assets to prepare your Hosting session will show up here.</div>'
+      '<div class="source-empty-state"><ion-icon name="document-outline"></ion-icon></div>'
     renderActionButtons()
     return
   }
@@ -1606,7 +1624,7 @@ function renderSources() {
           <div class="source-path" title="${escapeHtmlAttr(source.path)}">${escapeHtml(source.path)}</div>
         </div>
       </div>
-      <span class="source-remove-glyph" data-action="remove-source" aria-label="Remove from list" title="Remove from list">x</span>
+      <button class="source-remove-glyph" data-action="remove-source" aria-label="Remove from list" title="Remove from list">${BIN_ICON}</button>
     `
     sourcesGridEl.appendChild(card)
   }
@@ -1667,7 +1685,10 @@ function renderHosts() {
   })
 
   const allSelected = hosts.length > 0 && state.selectedHosts.size === hosts.length
-  hostsSelectToggleBtn.textContent = allSelected ? 'Deselect All' : 'Select All'
+  hostsSelectToggleBtn.innerHTML = allSelected
+    ? '<ion-icon name="checkbox-outline"></ion-icon>'
+    : '<ion-icon name="square-outline"></ion-icon>'
+  if (activeHostsCountEl) activeHostsCountEl.textContent = String(hosts.length)
 
   if (!hosts.length) {
     hostsRowsEl.innerHTML = '<div class="muted-empty">No active hosts.</div>'
@@ -1723,6 +1744,7 @@ function renderStarredHosts() {
   starredRowsEl.textContent = ''
 
   const starredInvites = Array.from(state.starredHosts)
+  if (starredCountEl) starredCountEl.textContent = String(starredInvites.length)
   if (!starredInvites.length) {
     starredRowsEl.innerHTML = '<div class="muted-empty">No starred hosts.</div>'
     return
@@ -1775,9 +1797,9 @@ function renderStarredHosts() {
       </div>
       <div class="controls">
         <button class="btn alt icon" data-action="edit" aria-label="Edit" title="Edit">✎</button>
-        ${primaryActionHtml}
         <button class="btn alt icon" data-action="copy" aria-label="Copy" title="Copy">${isCopyFeedbackActive(`starred:${invite}`) ? '✓' : '⧉'}</button>
         <button class="btn alt icon" data-action="unstar" aria-label="Unstar" title="Unstar">★</button>
+        ${primaryActionHtml}
       </div>
     `
     starredRowsEl.appendChild(row)
@@ -1789,7 +1811,10 @@ function renderHistory() {
 
   const allSelected =
     state.hostHistory.length > 0 && state.selectedHistory.size === state.hostHistory.length
-  historySelectToggleBtn.textContent = allSelected ? 'Deselect All' : 'Select All'
+  historySelectToggleBtn.innerHTML = allSelected
+    ? '<ion-icon name="checkbox-outline"></ion-icon>'
+    : '<ion-icon name="square-outline"></ion-icon>'
+  if (historyCountEl) historyCountEl.textContent = String(state.hostHistory.length)
 
   if (!state.hostHistory.length) {
     historyRowsEl.innerHTML = '<div class="muted-empty">No host history yet.</div>'
@@ -1800,6 +1825,9 @@ function renderHistory() {
   for (const item of state.hostHistory) {
     const selected = state.selectedHistory.has(item.id)
     const isRehosting = state.rehostingHistoryIds.has(String(item.id || '').trim())
+    const invite = String(item?.invite || '').trim()
+    const shareInvite = invite ? toShareableInvite(invite) : ''
+    const isStarred = invite ? state.starredHosts.has(invite) : false
     const sourceSummary = renderHistorySourceSummary(item.sourceRefs || [])
     const parsedLabel = parseSessionLabel(item.sessionName || 'Host Session')
     const sessionDateTime = formatSessionDateTime(item.createdAt, parsedLabel.embeddedDateTime)
@@ -1807,6 +1835,10 @@ function renderHistory() {
     const row = document.createElement('div')
     row.className = 'row-item history-row'
     row.dataset.historyId = String(item.id || '')
+    if (invite) {
+      row.dataset.invite = invite
+      row.dataset.shareInvite = shareInvite
+    }
     row.innerHTML = `
       <input type="checkbox" ${selected ? 'checked' : ''} />
       <div>
@@ -1816,6 +1848,8 @@ function renderHistory() {
       </div>
       <div class="controls">
         <button class="btn alt icon" data-action="edit" aria-label="Edit" title="Edit">✎</button>
+        <button class="btn alt icon" data-action="copy" aria-label="Copy" title="Copy" ${invite ? '' : 'disabled'}>${isCopyFeedbackActive(`history:${String(item.id || '')}`) ? '✓' : '⧉'}</button>
+        <button class="btn alt icon" data-action="star" aria-label="${isStarred ? 'Unstar' : 'Star'}" title="${isStarred ? 'Unstar' : 'Star'}" ${invite ? '' : 'disabled'}>${isStarred ? '★' : '☆'}</button>
         <button class="btn alt icon" data-action="rehost" aria-label="Re-host" title="Re-host" ${isRehosting ? 'disabled' : ''}>${isRehosting ? '<span class="mini-spinner"></span>' : '▶'}</button>
         <button class="btn alt icon icon-danger" data-action="remove" aria-label="Remove" title="Remove">${BIN_ICON}</button>
       </div>
@@ -1848,7 +1882,9 @@ function renderDriveRows() {
 
   const allSelected =
     state.inviteEntries.length > 0 && state.inviteSelected.size === state.inviteEntries.length
-  driveSelectToggleBtn.textContent = allSelected ? 'Deselect All' : 'Select All'
+  driveSelectToggleBtn.innerHTML = allSelected
+    ? '<ion-icon name="checkbox-outline"></ion-icon>'
+    : '<ion-icon name="square-outline"></ion-icon>'
 
   if (!state.inviteEntries.length) {
     const tr = document.createElement('tr')
@@ -2496,11 +2532,13 @@ async function stopSelectedHosts() {
   if (!invites.length) return setStatus('Select at least one active host first.')
 
   state.stoppingSelectedHosts = true
+  state.cancelStoppingSelectedBulk = false
   renderActionButtons()
   try {
     upsertWorkerActivityBar('hosts-stop', 'Stopping selected hosts', 0, invites.length)
 
     for (let i = 0; i < invites.length; i++) {
+      if (state.cancelStoppingSelectedBulk) break
       const invite = invites[i]
       const activeHost = state.activeHosts.find(
         (host) => String(host?.invite || '').trim() === invite
@@ -2514,11 +2552,14 @@ async function stopSelectedHosts() {
     }
 
     clearWorkerActivityBar('hosts-stop')
-    state.selectedHosts.clear()
+    if (!state.cancelStoppingSelectedBulk) state.selectedHosts.clear()
     await refreshActiveHosts()
-    setStatus(`Stopped ${invites.length} host${invites.length === 1 ? '' : 's'}.`)
+    if (!state.cancelStoppingSelectedBulk) {
+      setStatus(`Stopped ${invites.length} host${invites.length === 1 ? '' : 's'}.`)
+    }
   } finally {
     state.stoppingSelectedHosts = false
+    state.cancelStoppingSelectedBulk = false
     clearWorkerActivityBar('hosts-stop')
     renderActionButtons()
   }
@@ -2560,11 +2601,13 @@ async function rehostSelectedHistory() {
   if (!picked.length) return setStatus('Select at least one history item first.')
 
   state.rehostingSelectedBulk = true
+  state.cancelRehostingSelectedBulk = false
   renderActionButtons()
   try {
     upsertWorkerActivityBar('rehost-bulk', 'Re-hosting selected history', 0, picked.length)
 
     for (let i = 0; i < picked.length; i++) {
+      if (state.cancelRehostingSelectedBulk) break
       // eslint-disable-next-line no-await-in-loop
       await rehostHistoryItem(picked[i])
       upsertWorkerActivityBar('rehost-bulk', 'Re-hosting selected history', i + 1, picked.length)
@@ -2575,6 +2618,7 @@ async function rehostSelectedHistory() {
     renderAll()
   } finally {
     state.rehostingSelectedBulk = false
+    state.cancelRehostingSelectedBulk = false
     clearWorkerActivityBar('rehost-bulk')
     renderActionButtons()
   }
@@ -2954,6 +2998,8 @@ function extractFileUrisFromText(text) {
 function finalizeStoppedSession(invite, activeHost = null) {
   const key = String(invite || '').trim()
   if (!key) return
+  state.starredHosts.delete(key)
+  persistStarredHosts()
   webRtcShareHostPromises.delete(key)
   const webRtcShareHost = webRtcShareHosts.get(key)
   if (webRtcShareHost) {
@@ -3943,10 +3989,7 @@ function guessMimeTypeByName(name) {
 
 function setWorkerLogMessage(message) {
   const text = redactInviteText(String(message || '').trim())
-  for (const el of workerLogEls) {
-    if (!el) continue
-    el.textContent = `Worker log: ${text || 'waiting for events.'}`
-  }
+  if (text) console.log(`[worker] ${text}`)
 }
 
 function redactInviteText(value) {
@@ -3982,37 +4025,7 @@ function clearWorkerActivityBar(id) {
 }
 
 function renderWorkerActivityBars() {
-  if (!workerActivityBarsEls.length) return
-  const barsHtml = Array.from(workerActivityBars.values())
-    .map((bar) => {
-      const percent = Math.round(
-        (Number(bar.done || 0) / Math.max(1, Number(bar.total || 1))) * 100
-      )
-      const progressText =
-        bar.displayMode === 'bytes'
-          ? `${percent}% (${formatBytes(Number(bar.done || 0))} / ${formatBytes(Number(bar.total || 0))})`
-          : `${Number(bar.done || 0)}/${Math.max(1, Number(bar.total || 1))}`
-      const subtitleHtml = bar.subtitle
-        ? `<div class="activity-label" style="margin-top:3px;">${escapeHtml(bar.subtitle)}</div>`
-        : ''
-      const etaHtml =
-        Number.isFinite(Number(bar.etaMs)) && Number(bar.etaMs) > 0
-          ? `<div class="activity-label" style="margin-top:3px;">ETA ${escapeHtml(formatEta(Number(bar.etaMs)))}</div>`
-          : ''
-      return `<div class="activity-bar"><div class="activity-label">${escapeHtml(bar.label)} ${progressText}</div>${subtitleHtml}${etaHtml}<div class="activity-track"><div class="activity-fill" style="width:${percent}%"></div></div></div>`
-    })
-    .join('')
-
-  for (const el of workerActivityBarsEls) {
-    if (!el) continue
-    if (workerActivityBars.size === 0) {
-      el.classList.add('hidden')
-      el.textContent = ''
-      continue
-    }
-    el.classList.remove('hidden')
-    el.innerHTML = barsHtml
-  }
+  return
 }
 
 function applyThemeMode(mode) {
@@ -4030,11 +4043,7 @@ function resolveSystemTheme() {
 }
 
 function setStatus(message) {
-  const text = String(message || '')
-  for (const el of statusEls) {
-    if (!el) continue
-    el.textContent = text
-  }
+  void message
 }
 
 async function pathExists(targetPath) {

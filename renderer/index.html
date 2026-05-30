@@ -281,6 +281,33 @@
         display: inline-block;
         animation: spin 0.8s linear infinite;
       }
+      .loading-swap {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        position: relative;
+        width: 16px;
+        height: 16px;
+      }
+      .loading-swap .cancel-glyph {
+        position: absolute;
+        inset: 0;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        opacity: 0;
+        transition: opacity 0.15s ease;
+      }
+      .loading-swap .spinner-glyph {
+        opacity: 1;
+        transition: opacity 0.15s ease;
+      }
+      .btn.loading-cancel:hover .loading-swap .spinner-glyph {
+        opacity: 0;
+      }
+      .btn.loading-cancel:hover .loading-swap .cancel-glyph {
+        opacity: 1;
+      }
       body[data-theme='light'] .btn.alt {
         background: #f3f5f9;
         border-color: #c8cfdb;
@@ -289,33 +316,6 @@
         background: #fdeeee;
         color: #a53939;
         border-color: #e9b9b9;
-      }
-      .status {
-        margin: 8px 0 0;
-        color: var(--muted);
-      }
-      .worker-log {
-        margin: 6px 0 0;
-        color: #8dc0a0;
-        font-size: 12px;
-      }
-      body[data-theme='light'] .worker-log {
-        color: #5e6675;
-      }
-      .activity-bars {
-        margin-top: 8px;
-        display: grid;
-        gap: 8px;
-      }
-      .activity-bar {
-        border: 1px solid var(--line);
-        border-radius: 10px;
-        padding: 8px;
-      }
-      .activity-label {
-        color: var(--muted);
-        font-size: 12px;
-        margin-bottom: 4px;
       }
       .activity-track {
         width: 100%;
@@ -331,6 +331,10 @@
         height: 100%;
         width: 0%;
         background: var(--brand);
+      }
+      .status {
+        margin: 8px 0 0;
+        color: var(--muted);
       }
 
       .layout {
@@ -366,6 +370,37 @@
         margin: 0;
         font-size: 18px;
       }
+      .section-bar {
+        min-height: 26px;
+        padding: 0;
+        display: flex;
+        align-items: center;
+        justify-content: flex-start;
+        gap: 8px;
+        font-size: 16px;
+        flex: 0 0 auto;
+      }
+      .section-count {
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--muted);
+      }
+      .panel-head.section-inline {
+        justify-content: space-between;
+      }
+      .panel-head.section-inline .controls {
+        margin-left: auto;
+      }
+      ion-icon {
+        font-size: 20px;
+        color: currentColor;
+        display: inline-block;
+        vertical-align: middle;
+      }
+      .btn.icon-square ion-icon,
+      .btn.icon ion-icon {
+        font-size: 18px;
+      }
       .controls {
         display: flex;
         gap: 6px;
@@ -376,6 +411,7 @@
         display: grid;
         grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
         gap: 8px;
+        min-height: 260px;
       }
       .source-card {
         border: 1px solid var(--line);
@@ -454,11 +490,38 @@
         position: absolute;
         left: 10px;
         bottom: 8px;
-        color: #ff6f6f;
-        font-size: 24px;
+        border: 1px solid color-mix(in srgb, #ff6f6f 45%, transparent);
+        background: color-mix(in srgb, #ff6f6f 12%, transparent);
+        color: #ff8a8a;
+        border-radius: 10px;
+        width: 34px;
+        height: 34px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0;
         line-height: 1;
         user-select: none;
         cursor: pointer;
+      }
+      .source-remove-glyph .mini-trash {
+        width: 14px;
+        height: 14px;
+      }
+      .source-empty-state {
+        grid-column: 1 / -1;
+        height: 100%;
+        min-height: 160px;
+        border: 1px dashed var(--line);
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--muted);
+      }
+      .source-empty-state ion-icon {
+        font-size: 44px;
+        opacity: 0.9;
       }
 
       .rows {
@@ -864,8 +927,12 @@
     <main class="app">
       <div class="mode-switch">
         <div class="tabs">
-          <button id="tab-upload" class="tab-btn active">Upload</button>
-          <button id="tab-download" class="tab-btn">Download</button>
+          <button id="tab-upload" class="tab-btn active" aria-label="Upload">
+            <ion-icon name="cloud-upload-outline"></ion-icon>
+          </button>
+          <button id="tab-download" class="tab-btn" aria-label="Download">
+            <ion-icon name="cloud-download-outline"></ion-icon>
+          </button>
         </div>
       </div>
       <section id="update-banner" class="update-banner hidden">
@@ -880,34 +947,37 @@
 
       <section id="upload-page" class="tab-page">
         <div id="upload-main-content">
-          <section class="hero">
-            <p id="upload-status" class="status">Starting worker...</p>
-            <p id="upload-worker-log" class="worker-log">Worker logs: waiting for events.</p>
-            <div id="upload-worker-activity-bars" class="activity-bars hidden"></div>
-          </section>
-
           <section class="layout">
             <article class="panel">
               <div class="panel-head">
                 <h2 class="panel-title">Local Sources</h2>
                 <div class="controls">
                   <span class="menu-wrap">
-                    <button id="source-add" class="btn">＋</button>
+                    <button id="source-add" class="btn icon-square" aria-label="Add source">＋</button>
                     <div id="source-add-menu" class="menu hidden">
                       <button id="add-file-action">Add File(s)</button>
                       <button id="add-folder-action">Add Folder</button>
                     </div>
                   </span>
-                  <button id="source-select-toggle" class="btn alt">Select All</button>
+                  <button id="source-select-toggle" class="btn alt icon-square" aria-label="Select all sources">
+                    <ion-icon name="square-outline"></ion-icon>
+                  </button>
                   <button
                     id="source-remove-all"
                     class="btn alt icon icon-danger icon-square"
                     title="Clear Selected"
                     aria-label="Clear Selected"
                   >
-                    ✕
+                    <span class="mini-trash" aria-hidden="true"
+                      ><span class="mini-trash-lid"></span
+                      ><span class="mini-trash-body"
+                        ><span class="mini-trash-line"></span
+                        ><span class="mini-trash-line"></span></span
+                    ></span>
                   </button>
-                  <button id="host-selected" class="btn">Host Selected</button>
+                  <button id="host-selected" class="btn icon-square" aria-label="Host selected">
+                    <ion-icon name="rocket-outline"></ion-icon>
+                  </button>
                 </div>
               </div>
               <div id="sources-grid" class="source-grid"></div>
@@ -916,20 +986,21 @@
             <div class="right-col">
               <article class="panel">
                 <div class="panel-head">
-                  <h2 class="panel-title">Active Hosts</h2>
+                  <div class="section-bar"><span><ion-icon name="person-outline"></ion-icon></span><span id="peer-count" class="section-count">0</span></div>
+                </div>
+                <div id="peer-activity-rows" class="rows"></div>
+              </article>
+
+              <article class="panel">
+                <div class="panel-head section-inline">
+                  <div class="section-bar"><span><ion-icon name="git-network-outline"></ion-icon></span><span id="active-hosts-count" class="section-count">0</span></div>
                   <div class="controls">
-                    <button id="hosts-select-toggle" class="btn alt">Select All</button>
-                    <button
-                      id="hosts-star-selected"
-                      class="btn icon"
-                      title="Star Selected"
-                      aria-label="Star Selected"
-                    >
-                      ★
+                    <button id="hosts-select-toggle" class="btn alt icon-square" aria-label="Select all hosts">
+                      <ion-icon name="square-outline"></ion-icon>
                     </button>
                     <button
                       id="hosts-stop-selected"
-                      class="btn warn icon"
+                      class="btn warn icon icon-square"
                       title="Stop Selected"
                       aria-label="Stop Selected"
                     >
@@ -942,14 +1013,7 @@
 
               <article class="panel">
                 <div class="panel-head">
-                  <h2 class="panel-title">Joining Peers</h2>
-                </div>
-                <div id="peer-activity-rows" class="rows"></div>
-              </article>
-
-              <article class="panel">
-                <div class="panel-head">
-                  <h2 class="panel-title">Starred Hosts</h2>
+                  <div class="section-bar"><span><ion-icon name="star-outline"></ion-icon></span><span id="starred-count" class="section-count">0</span></div>
                 </div>
                 <div id="starred-rows" class="rows"></div>
               </article>
@@ -957,13 +1021,15 @@
           </section>
 
           <section class="panel" style="margin-top: 12px">
-            <div class="panel-head">
-              <h2 class="panel-title">Host History</h2>
+            <div class="panel-head section-inline">
+              <div class="section-bar"><span><ion-icon name="time-outline"></ion-icon></span><span id="history-count" class="section-count">0</span></div>
               <div class="controls">
-                <button id="history-select-toggle" class="btn alt">Select All</button>
+                <button id="history-select-toggle" class="btn alt icon-square" aria-label="Select all history">
+                  <ion-icon name="square-outline"></ion-icon>
+                </button>
                 <button
                   id="history-rehost-selected"
-                  class="btn icon"
+                  class="btn icon icon-square"
                   title="Re-host Selected"
                   aria-label="Re-host Selected"
                 >
@@ -971,7 +1037,7 @@
                 </button>
                 <button
                   id="history-remove-selected"
-                  class="btn alt icon icon-danger"
+                  class="btn alt icon icon-danger icon-square"
                   title="Remove Selected"
                   aria-label="Remove Selected"
                 >
@@ -1000,13 +1066,17 @@
               <div class="controls">
                 <button id="session-editor-add-file" class="btn alt">Add File(s)</button>
                 <button id="session-editor-add-folder" class="btn alt">Add Folder</button>
-                <button id="session-editor-select-toggle" class="btn alt">Select All</button>
+                <button id="session-editor-select-toggle" class="btn alt icon-square" aria-label="Select all session files">
+                  <ion-icon name="square-outline"></ion-icon>
+                </button>
                 <button id="session-editor-remove-selected" class="btn alt">Remove Selected</button>
               </div>
             </div>
             <div id="session-editor-rows" class="rows"></div>
             <div class="modal-actions" style="margin-top: 12px">
-              <button id="session-editor-cancel" class="btn alt">Cancel</button>
+              <button id="session-editor-cancel" class="btn alt icon-square" aria-label="Cancel">
+                <ion-icon name="close-outline"></ion-icon>
+              </button>
               <button id="session-editor-apply" class="btn">Apply Changes</button>
             </div>
           </div>
@@ -1017,12 +1087,10 @@
         <section class="hero">
           <div class="row">
             <input id="invite-input" class="input" placeholder="Paste peardrops://invite..." />
-            <button id="view-drive" class="btn alt">View Drive</button>
+            <button id="view-drive" class="btn alt icon-square" aria-label="Join drive">
+              <ion-icon name="search-outline"></ion-icon>
+            </button>
           </div>
-
-          <p id="download-status" class="status">Starting worker...</p>
-          <p id="download-worker-log" class="worker-log">Worker logs: waiting for events.</p>
-          <div id="download-worker-activity-bars" class="activity-bars hidden"></div>
         </section>
 
         <section style="margin-top: 12px">
@@ -1030,8 +1098,12 @@
             <div class="panel-head">
               <h2 class="panel-title">Drive Files</h2>
               <div class="controls">
-                <button id="download-selected" class="btn">Download Selected</button>
-                <button id="drive-select-toggle" class="btn alt">Select All</button>
+                <button id="download-selected" class="btn icon-square" aria-label="Download selected">
+                  <ion-icon name="download-outline"></ion-icon>
+                </button>
+                <button id="drive-select-toggle" class="btn alt icon-square" aria-label="Select all drive files">
+                  <ion-icon name="square-outline"></ion-icon>
+                </button>
               </div>
             </div>
             <table class="table">
@@ -1073,7 +1145,9 @@
             <label><input type="radio" name="host-packaging" value="raw" /> Raw files</label>
           </div>
           <div class="modal-actions">
-            <button id="host-name-cancel" class="btn alt">Cancel</button>
+            <button id="host-name-cancel" class="btn alt icon-square" aria-label="Cancel">
+              <ion-icon name="close-outline"></ion-icon>
+            </button>
             <button id="host-name-submit" class="btn">Start</button>
           </div>
         </div>
@@ -1107,6 +1181,8 @@
       </section>
     </main>
 
+    <script type="module" src="https://unpkg.com/ionicons@8.0.13/dist/ionicons/ionicons.esm.js"></script>
+    <script nomodule src="https://unpkg.com/ionicons@8.0.13/dist/ionicons/ionicons.js"></script>
     <script src="./app.js"></script>
   </body>
 </html>
