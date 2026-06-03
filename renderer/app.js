@@ -888,8 +888,10 @@ function wireUiEvents() {
       if (!invite) return
       if (state.starredHosts.has(invite)) state.starredHosts.delete(invite)
       else state.starredHosts.add(invite)
-      persistHostState()
-      renderActiveHosts()
+      persistStarredHosts()
+      renderHistory()
+      renderStarredHosts()
+      renderHosts()
       return
     }
     if (action === 'edit') {
@@ -1308,8 +1310,7 @@ function renderActionButtons() {
   }
   if (downloadSelectedBtn) {
     const disabled =
-      !state.downloadingSelected &&
-      (!state.inviteEntries.length || state.inviteSelected.size === 0)
+      !state.downloadingSelected && (!state.inviteEntries.length || state.inviteSelected.size === 0)
     downloadSelectedBtn.disabled = disabled
     downloadSelectedBtn.classList.toggle('loading-cancel', state.downloadingSelected)
     downloadSelectedBtn.innerHTML = state.downloadingSelected
@@ -1319,17 +1320,13 @@ function renderActionButtons() {
   if (hostsStopSelectedBtn) {
     hostsStopSelectedBtn.disabled = !state.stoppingSelectedHosts && state.selectedHosts.size === 0
     hostsStopSelectedBtn.classList.toggle('loading-cancel', state.stoppingSelectedHosts)
-    hostsStopSelectedBtn.innerHTML = state.stoppingSelectedHosts
-      ? loadingCancelMarkup()
-      : '⏹'
+    hostsStopSelectedBtn.innerHTML = state.stoppingSelectedHosts ? loadingCancelMarkup() : '⏹'
   }
   if (historyRehostSelectedBtn) {
     historyRehostSelectedBtn.disabled =
       !state.rehostingSelectedBulk && state.selectedHistory.size === 0
     historyRehostSelectedBtn.classList.toggle('loading-cancel', state.rehostingSelectedBulk)
-    historyRehostSelectedBtn.innerHTML = state.rehostingSelectedBulk
-      ? loadingCancelMarkup()
-      : '▶'
+    historyRehostSelectedBtn.innerHTML = state.rehostingSelectedBulk ? loadingCancelMarkup() : '▶'
   }
   if (sessionEditorAddFileBtn) sessionEditorAddFileBtn.disabled = state.sessionEditorApplying
   if (sessionEditorAddFolderBtn) sessionEditorAddFolderBtn.disabled = state.sessionEditorApplying
@@ -2348,7 +2345,7 @@ function cancelBackendOperationOptimistic(operationId, resetUi) {
   try {
     if (typeof resetUi === 'function') resetUi()
   } catch {}
-  renderButtons()
+  renderActionButtons()
   void cancelBackendOperation(operationId)
 }
 
@@ -4268,17 +4265,6 @@ function estimateRemainingMs(done, total, startedAtMs) {
   const ratePerMs = safeDone / elapsedMs
   if (!Number.isFinite(ratePerMs) || ratePerMs <= 0) return null
   return (safeTotal - safeDone) / ratePerMs
-}
-
-function formatEta(ms) {
-  const seconds = Math.max(0, Math.ceil(Number(ms || 0) / 1000))
-  if (seconds < 60) return `${seconds}s`
-  const minutes = Math.floor(seconds / 60)
-  const rem = seconds % 60
-  if (minutes < 60) return `${minutes}m ${rem}s`
-  const hours = Math.floor(minutes / 60)
-  const minRem = minutes % 60
-  return `${hours}h ${minRem}m`
 }
 
 function loadJson(key, fallback) {

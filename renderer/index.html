@@ -953,13 +953,19 @@
                 <h2 class="panel-title">Local Sources</h2>
                 <div class="controls">
                   <span class="menu-wrap">
-                    <button id="source-add" class="btn icon-square" aria-label="Add source">＋</button>
+                    <button id="source-add" class="btn icon-square" aria-label="Add source">
+                      ＋
+                    </button>
                     <div id="source-add-menu" class="menu hidden">
                       <button id="add-file-action">Add File(s)</button>
                       <button id="add-folder-action">Add Folder</button>
                     </div>
                   </span>
-                  <button id="source-select-toggle" class="btn alt icon-square" aria-label="Select all sources">
+                  <button
+                    id="source-select-toggle"
+                    class="btn alt icon-square"
+                    aria-label="Select all sources"
+                  >
                     <ion-icon name="square-outline"></ion-icon>
                   </button>
                   <button
@@ -986,16 +992,26 @@
             <div class="right-col">
               <article class="panel">
                 <div class="panel-head">
-                  <div class="section-bar"><span><ion-icon name="person-outline"></ion-icon></span><span id="peer-count" class="section-count">0</span></div>
+                  <div class="section-bar">
+                    <span><ion-icon name="person-outline"></ion-icon></span
+                    ><span id="peer-count" class="section-count">0</span>
+                  </div>
                 </div>
                 <div id="peer-activity-rows" class="rows"></div>
               </article>
 
               <article class="panel">
                 <div class="panel-head section-inline">
-                  <div class="section-bar"><span><ion-icon name="git-network-outline"></ion-icon></span><span id="active-hosts-count" class="section-count">0</span></div>
+                  <div class="section-bar">
+                    <span><ion-icon name="git-network-outline"></ion-icon></span
+                    ><span id="active-hosts-count" class="section-count">0</span>
+                  </div>
                   <div class="controls">
-                    <button id="hosts-select-toggle" class="btn alt icon-square" aria-label="Select all hosts">
+                    <button
+                      id="hosts-select-toggle"
+                      class="btn alt icon-square"
+                      aria-label="Select all hosts"
+                    >
                       <ion-icon name="square-outline"></ion-icon>
                     </button>
                     <button
@@ -1013,7 +1029,10 @@
 
               <article class="panel">
                 <div class="panel-head">
-                  <div class="section-bar"><span><ion-icon name="star-outline"></ion-icon></span><span id="starred-count" class="section-count">0</span></div>
+                  <div class="section-bar">
+                    <span><ion-icon name="star-outline"></ion-icon></span
+                    ><span id="starred-count" class="section-count">0</span>
+                  </div>
                 </div>
                 <div id="starred-rows" class="rows"></div>
               </article>
@@ -1022,9 +1041,16 @@
 
           <section class="panel" style="margin-top: 12px">
             <div class="panel-head section-inline">
-              <div class="section-bar"><span><ion-icon name="time-outline"></ion-icon></span><span id="history-count" class="section-count">0</span></div>
+              <div class="section-bar">
+                <span><ion-icon name="time-outline"></ion-icon></span
+                ><span id="history-count" class="section-count">0</span>
+              </div>
               <div class="controls">
-                <button id="history-select-toggle" class="btn alt icon-square" aria-label="Select all history">
+                <button
+                  id="history-select-toggle"
+                  class="btn alt icon-square"
+                  aria-label="Select all history"
+                >
                   <ion-icon name="square-outline"></ion-icon>
                 </button>
                 <button
@@ -1066,7 +1092,11 @@
               <div class="controls">
                 <button id="session-editor-add-file" class="btn alt">Add File(s)</button>
                 <button id="session-editor-add-folder" class="btn alt">Add Folder</button>
-                <button id="session-editor-select-toggle" class="btn alt icon-square" aria-label="Select all session files">
+                <button
+                  id="session-editor-select-toggle"
+                  class="btn alt icon-square"
+                  aria-label="Select all session files"
+                >
                   <ion-icon name="square-outline"></ion-icon>
                 </button>
                 <button id="session-editor-remove-selected" class="btn alt">Remove Selected</button>
@@ -1098,10 +1128,18 @@
             <div class="panel-head">
               <h2 class="panel-title">Drive Files</h2>
               <div class="controls">
-                <button id="download-selected" class="btn icon-square" aria-label="Download selected">
+                <button
+                  id="download-selected"
+                  class="btn icon-square"
+                  aria-label="Download selected"
+                >
                   <ion-icon name="download-outline"></ion-icon>
                 </button>
-                <button id="drive-select-toggle" class="btn alt icon-square" aria-label="Select all drive files">
+                <button
+                  id="drive-select-toggle"
+                  class="btn alt icon-square"
+                  aria-label="Select all drive files"
+                >
                   <ion-icon name="square-outline"></ion-icon>
                 </button>
               </div>
@@ -1183,7 +1221,10 @@
       </section>
     </main>
 
-    <script type="module" src="https://unpkg.com/ionicons@8.0.13/dist/ionicons/ionicons.esm.js"></script>
+    <script
+      type="module"
+      src="https://unpkg.com/ionicons@8.0.13/dist/ionicons/ionicons.esm.js"
+    ></script>
     <script nomodule src="https://unpkg.com/ionicons@8.0.13/dist/ionicons/ionicons.js"></script>
     <script src="./app.js"></script>
   </body>
