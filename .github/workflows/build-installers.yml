@@ -57,9 +57,14 @@ jobs:
           [IO.File]::WriteAllBytes($certPath, [Convert]::FromBase64String($env:WINDOWS_CODESIGN_CERT_P12_BASE64))
           "WINDOWS_CERTIFICATE_FILE=$certPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           "WINDOWS_CERTIFICATE_PASSWORD=$env:WINDOWS_CODESIGN_CERT_PASSWORD" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "CSC_LINK=$certPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "CSC_KEY_PASSWORD=$env:WINDOWS_CODESIGN_CERT_PASSWORD" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Build Windows artifacts
-        run: npm run make:win32:squirrel
+        shell: bash
+        run: |
+          npm run icons:sync
+          npx electron-builder --win squirrel --x64 --publish never
 
       - name: Normalize publish filenames
         shell: pwsh
@@ -137,14 +142,11 @@ jobs:
       - name: Install dependencies
         run: npm ci || (sleep 20 && npm ci)
 
-      - name: Install Linux build tools
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y jq
-          chmod +x scripts/build-app-image.sh
-
       - name: Build Linux artifacts
-        run: npm run make:linux
+        run: |
+          arch="${{ matrix.arch }}"
+          npm run icons:sync
+          npx electron-builder --linux AppImage "--$arch" --publish never
 
       - name: Normalize publish filenames
         run: |
@@ -259,7 +261,11 @@ jobs:
         env:
           MAC_NOTARIZE_ON_PACKAGE: '0'
           DEBUG: electron-osx-sign*,electron-notarize*,@electron/osx-sign*,@electron/notarize*
-        run: npm run make:darwin
+        run: |
+          set -euo pipefail
+          arch="${{ matrix.arch }}"
+          npm run icons:sync
+          npx electron-builder --mac dmg "--$arch" --publish never -c.mac.identity="$MAC_CODESIGN_IDENTITY"
 
       - name: Normalize publish filenames
         run: |
