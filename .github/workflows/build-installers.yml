@@ -252,9 +252,11 @@ jobs:
             exit 1
           fi
 
+          dev_id_identity_name="${dev_id_identity#Developer ID Application: }"
+
           echo "Using Developer ID identity: $dev_id_identity"
-          echo "MAC_CODESIGN_IDENTITY=$dev_id_identity" >> "$GITHUB_ENV"
-          echo "CSC_NAME=$dev_id_identity" >> "$GITHUB_ENV"
+          echo "MAC_CODESIGN_IDENTITY=$dev_id_identity_name" >> "$GITHUB_ENV"
+          echo "CSC_NAME=$dev_id_identity_name" >> "$GITHUB_ENV"
           echo "CSC_KEYCHAIN=$keychain_path" >> "$GITHUB_ENV"
 
       - name: Build macOS artifacts

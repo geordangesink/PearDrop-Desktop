@@ -5,7 +5,7 @@
   "upgrade": "pear://nhhms3ww3q5tb5n9n34egq1x9n7ene6keohzdqui3ffbeni9xngo",
   "description": "Native-first desktop uploader/downloader for PearDrop",
   "license": "Apache-2.0",
-  "author": "",
+  "author": "PearDrop",
   "type": "commonjs",
   "main": "electron/main.js",
   "private": true,
