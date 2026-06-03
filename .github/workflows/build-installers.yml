@@ -67,11 +67,15 @@ jobs:
           $publishDir = "out/publish"
           New-Item -ItemType Directory -Path $publishDir -Force | Out-Null
 
-          $exe = Get-ChildItem -Path out/make -Recurse -Filter *Setup*.exe |
-            Where-Object { $_.Name -match "^PearDrop-Setup-.*\.exe$" } |
+          $exe = Get-ChildItem -Path out -Recurse -Filter *.exe |
+            Where-Object { $_.Name -like "*Setup*.exe" } |
             Sort-Object Length -Descending |
             Select-Object -First 1
-          if (-not $exe) { throw "No Squirrel setup .exe installer found in out/make." }
+          if (-not $exe) {
+            Write-Host "Available out files:"
+            Get-ChildItem -Path out -Recurse -File | ForEach-Object { Write-Host $_.FullName }
+            throw "No Squirrel setup .exe installer found in out."
+          }
 
           Copy-Item $exe.FullName "$publishDir/PearDrop-Setup.exe" -Force
 
@@ -265,7 +269,23 @@ jobs:
 
           dmg="$(find out -type f -name '*.dmg' | head -n 1)"
           if [ -z "$dmg" ]; then
+            app_dir="$(find out -maxdepth 2 -type d -name 'PearDrop.app' | head -n 1)"
+            if [ -n "$app_dir" ]; then
+              fallback_dmg="out/make/PearDrop.dmg"
+              mkdir -p out/make
+              hdiutil create \
+                -volname "PearDrop Installer" \
+                -srcfolder "$app_dir" \
+                -ov \
+                -format UDZO \
+                "$fallback_dmg"
+              dmg="$fallback_dmg"
+            fi
+          fi
+          if [ -z "$dmg" ]; then
             echo "No .dmg found."
+            echo "Available out files:"
+            find out -maxdepth 4 -print | sort || true
             exit 1
           fi
 

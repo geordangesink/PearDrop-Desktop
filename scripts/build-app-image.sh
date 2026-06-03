@@ -33,7 +33,21 @@ APP_DIR="$ROOT/out/${APP_NAME}-linux-${ARCH}"
 STAGE_DIR="$ROOT/out/make/__appImage-${ARCH}"
 OUTPUT="$ROOT/out/make/${APP_NAME}.AppImage"
 
+if [ ! -d "$APP_DIR" ]; then
+  FOUND_APP_DIR="$(find "$ROOT/out" -maxdepth 1 -type d -name "*-linux-${ARCH}" | head -n 1)"
+  if [ -n "$FOUND_APP_DIR" ]; then
+    APP_DIR="$FOUND_APP_DIR"
+  fi
+fi
+
 echo "→ Using app dir: $APP_DIR"
+
+if [ ! -d "$APP_DIR" ]; then
+  echo "Could not find packaged Linux app directory."
+  echo "Available out/ entries:"
+  find "$ROOT/out" -maxdepth 2 -print 2>/dev/null | sort || true
+  exit 1
+fi
 
 # use icons in build-assets and fallback to app-builder-lib icons for missing icons
 ICON_SIZES=(16 32 48 64 128 256)
