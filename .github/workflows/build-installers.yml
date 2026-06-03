@@ -63,7 +63,7 @@ jobs:
       - name: Build Windows artifacts
         shell: bash
         run: |
-          npm run icons:sync
+          bash scripts/sync-icons.sh
           npx electron-builder --win squirrel --x64 --publish never
 
       - name: Normalize publish filenames
@@ -145,7 +145,7 @@ jobs:
       - name: Build Linux artifacts
         run: |
           arch="${{ matrix.arch }}"
-          npm run icons:sync
+          bash scripts/sync-icons.sh
           npx electron-builder --linux AppImage "--$arch" --publish never
 
       - name: Normalize publish filenames
@@ -264,7 +264,7 @@ jobs:
         run: |
           set -euo pipefail
           arch="${{ matrix.arch }}"
-          npm run icons:sync
+          bash scripts/sync-icons.sh
           npx electron-builder --mac dmg "--$arch" --publish never -c.mac.identity="$MAC_CODESIGN_IDENTITY"
 
       - name: Normalize publish filenames
