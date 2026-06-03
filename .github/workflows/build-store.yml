@@ -48,8 +48,20 @@ jobs:
           cache: npm
           cache-dependency-path: package-lock.json
 
+      - name: Cache Electron binaries
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/electron
+            ~/.cache/electron-builder
+            ~/Library/Caches/electron
+            ~/Library/Caches/electron-builder
+          key: ${{ runner.os }}-electron-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-electron-
+
       - name: Install dependencies
-        run: npm ci
+        run: npm ci || (sleep 20 && npm ci)
 
       - name: Verify required build secrets
         run: |

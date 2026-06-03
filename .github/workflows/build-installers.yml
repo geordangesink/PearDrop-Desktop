@@ -31,8 +31,23 @@ jobs:
           node-version: 24
           cache: npm
 
+      - name: Cache Electron binaries
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/electron
+            ~/.cache/electron-builder
+            ~/Library/Caches/electron
+            ~/Library/Caches/electron-builder
+            ~\AppData\Local\electron\Cache
+            ~\AppData\Local\electron-builder\Cache
+          key: ${{ runner.os }}-electron-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-electron-
+
       - name: Install dependencies
-        run: npm ci
+        shell: bash
+        run: npm ci || (sleep 20 && npm ci)
 
       - name: Import Windows code-signing certificate
         if: ${{ env.WINDOWS_CODESIGN_CERT_P12_BASE64 != '' && env.WINDOWS_CODESIGN_CERT_PASSWORD != '' }}
@@ -100,8 +115,23 @@ jobs:
           node-version: 24
           cache: npm
 
+      - name: Cache Electron binaries
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/electron
+            ~/.cache/electron-builder
+            ~/Library/Caches/electron
+            ~/Library/Caches/electron-builder
+            ~\AppData\Local\electron\Cache
+            ~\AppData\Local\electron-builder\Cache
+          key: ${{ runner.os }}-${{ matrix.arch }}-electron-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ matrix.arch }}-electron-
+            ${{ runner.os }}-electron-
+
       - name: Install dependencies
-        run: npm ci
+        run: npm ci || (sleep 20 && npm ci)
 
       - name: Install Linux build tools
         run: |
@@ -158,8 +188,23 @@ jobs:
           node-version: 24
           cache: npm
 
+      - name: Cache Electron binaries
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/electron
+            ~/.cache/electron-builder
+            ~/Library/Caches/electron
+            ~/Library/Caches/electron-builder
+            ~\AppData\Local\electron\Cache
+            ~\AppData\Local\electron-builder\Cache
+          key: ${{ runner.os }}-${{ matrix.arch }}-electron-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ matrix.arch }}-electron-
+            ${{ runner.os }}-electron-
+
       - name: Install dependencies
-        run: npm ci
+        run: npm ci || (sleep 20 && npm ci)
 
       - name: Import Apple code-signing certificate
         env:
