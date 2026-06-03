@@ -531,7 +531,9 @@ function wireUiEvents() {
 
   hostSelectedBtn.addEventListener('click', async () => {
     if (state.hostingSelected) {
-      void cancelBackendOperation(state.activeHostOperationId)
+      cancelBackendOperationOptimistic(state.activeHostOperationId, () => {
+        state.hostingSelected = false
+      })
       return
     }
     if (pendingHostNameResolve) return
@@ -631,14 +633,18 @@ function wireUiEvents() {
 
   viewDriveBtn.addEventListener('click', () => {
     if (state.loadingInviteManifest) {
-      void cancelBackendOperation(state.activeInviteLoadOperationId)
+      cancelBackendOperationOptimistic(state.activeInviteLoadOperationId, () => {
+        state.loadingInviteManifest = false
+      })
       return
     }
     void openInviteFiles()
   })
   downloadSelectedBtn.addEventListener('click', () => {
     if (state.downloadingSelected) {
-      void cancelBackendOperation(state.activeDownloadOperationId)
+      cancelBackendOperationOptimistic(state.activeDownloadOperationId, () => {
+        state.downloadingSelected = false
+      })
       return
     }
     void downloadInviteSelected()
@@ -1950,6 +1956,7 @@ async function openInviteFiles() {
   const inviteVariants = buildInviteManifestVariants(invite)
 
   try {
+    void sendJoinPushPing(invite, 'Host Session')
     const operationId = newOperationId()
     state.activeInviteLoadOperationId = operationId
     state.loadingInviteManifest = true
@@ -2007,6 +2014,7 @@ async function downloadInviteSelected() {
   if (!targetDir) return setStatus('No destination selected.')
 
   try {
+    void sendJoinPushPing(state.inviteSource, 'Host Session')
     const operationId = newOperationId()
     state.activeDownloadOperationId = operationId
     const normalizedPeerName = String(state.profile?.peerName || '').trim()
@@ -2135,6 +2143,30 @@ async function downloadInviteSelected() {
     state.downloadingSelected = false
     renderActionButtons()
   }
+}
+
+async function sendJoinPushPing(inviteRaw, sessionName = 'Host Session') {
+  try {
+    const invite = normalizeInvite(inviteRaw)
+    if (!invite) return
+    const url = new URL(invite)
+    const pushTarget = String(url.searchParams.get('push') || '').trim()
+    if (!pushTarget) return
+    const relayUrl = String(url.searchParams.get('relay') || '').trim()
+    const endpoint = relayWsToHttp(relayUrl, '/push/join-request')
+    if (!endpoint) return
+    const peerName = String(state.profile?.peerName || '').trim()
+    await postJsonWithRetry(
+      endpoint,
+      {
+        pushTarget,
+        invite,
+        sessionName: String(sessionName || 'Host Session').trim() || 'Host Session',
+        peerName
+      },
+      3
+    )
+  } catch {}
 }
 
 async function hostSelectedSources(sessionNameInput = 'Host Session', packaging = 'raw') {
@@ -2282,6 +2314,24 @@ function delayMs(ms) {
   return new Promise((resolve) => setTimeout(resolve, Math.max(0, Number(ms || 0))))
 }
 
+async function postJsonWithRetry(url, body, attempts = 3) {
+  for (let i = 0; i < Math.max(1, Number(attempts || 1)); i++) {
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body || {})
+      })
+      if (response.ok) return true
+    } catch {}
+    if (i < attempts - 1) {
+      // eslint-disable-next-line no-await-in-loop
+      await delayMs(250 * (i + 1))
+    }
+  }
+  return false
+}
+
 function newOperationId() {
   return `op:${Date.now()}:${Math.random().toString(16).slice(2, 10)}`
 }
@@ -2292,6 +2342,14 @@ async function cancelBackendOperation(operationId) {
   try {
     await state.rpc.request(RpcCommand.CANCEL_OPERATION, { operationId: opId })
   } catch {}
+}
+
+function cancelBackendOperationOptimistic(operationId, resetUi) {
+  try {
+    if (typeof resetUi === 'function') resetUi()
+  } catch {}
+  renderButtons()
+  void cancelBackendOperation(operationId)
 }
 
 function applyHostUploadProgress(payloadText) {
@@ -3521,6 +3579,20 @@ function buildInviteManifestVariants(invite) {
   } catch {}
 
   return variants
+}
+
+function relayWsToHttp(relayUrl, endpointPath) {
+  try {
+    const url = new URL(String(relayUrl || '').trim())
+    if (url.protocol !== 'ws:' && url.protocol !== 'wss:') return ''
+    url.protocol = url.protocol === 'wss:' ? 'https:' : 'http:'
+    url.pathname = String(endpointPath || '/')
+    url.search = ''
+    url.hash = ''
+    return url.toString()
+  } catch {
+    return ''
+  }
 }
 
 function toShareableInvite(rawInvite) {
