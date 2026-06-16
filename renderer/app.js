@@ -119,6 +119,9 @@ const sessionEditorApplyBtn = document.getElementById('session-editor-apply')
 const onboardingModalEl = document.getElementById('onboarding-modal')
 const onboardingPeerNameEl = document.getElementById('onboarding-peer-name')
 const onboardingContinueBtn = document.getElementById('onboarding-continue')
+const startupGateEl = document.getElementById('startup-gate')
+const startupTitleEl = document.getElementById('startup-title')
+const startupMessageEl = document.getElementById('startup-message')
 
 const state = {
   rpc: null,
@@ -179,12 +182,14 @@ if (dedupedInitialHistory.length !== state.hostHistory.length) {
 }
 
 let startupLoading = true
+let startupError = ''
 let pendingHostNameResolve = null
 let copyFeedbackTimer = null
 let activeCopyFeedbackKey = ''
 let activeHostsPollTimer = null
 let peerActivityPollTimer = null
 let workerReadySeen = false
+let workerStartupExitError = null
 let workerReadyWaiters = []
 let sessionSwipeAccumulator = 0
 let sessionSwipeTimer = null
@@ -266,6 +271,15 @@ function wireGlobalEvents() {
     const clean = text.trim()
     if (!clean) return
     setWorkerLogMessage(clean)
+    if (startupLoading && startupMessageEl && !startupError) {
+      startupMessageEl.textContent = clean
+    }
+  })
+
+  bridge.onWorkerExit?.(workerSpecifier, (code) => {
+    if (workerReadySeen) return
+    workerStartupExitError = new Error(`Worker exited before ready signal${formatExitCode(code)}`)
+    rejectWorkerReadyWaiters(workerStartupExitError)
   })
 
   bridge.onDeepLink?.((url) => {
@@ -1007,6 +1021,7 @@ async function boot() {
   try {
     setWorkerLogMessage('starting worker')
     workerReadySeen = false
+    workerStartupExitError = null
     const start = await bridge.startWorker(workerSpecifier)
     if (start && typeof start === 'object' && start.alreadyRunning) {
       // On renderer refresh, the existing worker won't emit a fresh READY token.
@@ -1039,21 +1054,40 @@ async function boot() {
     setStatus('Ready.')
     setWorkerLogMessage('ready')
   } catch (error) {
-    setStartupLoading(false)
-    renderAll()
-    setStatus(`Worker start failed: ${error.message || String(error)}`)
-    setWorkerLogMessage(`start failed: ${error.message || String(error)}`)
+    const message = error.message || String(error)
+    setStartupError(`Worker start failed: ${message}`)
+    setStatus(`Worker start failed: ${message}`)
+    setWorkerLogMessage(`start failed: ${message}`)
   }
 }
 
 function setStartupLoading(isLoading) {
   startupLoading = !!isLoading
   if (document?.body) document.body.dataset.startupLoading = startupLoading ? '1' : '0'
+  if (!startupLoading) setStartupError('')
+  if (startupGateEl) startupGateEl.setAttribute('aria-busy', startupLoading ? 'true' : 'false')
+  if (startupLoading && startupTitleEl) startupTitleEl.textContent = 'Starting PearDrop'
+  if (startupLoading && startupMessageEl && !startupError) {
+    startupMessageEl.textContent = 'Preparing transfer worker...'
+  }
   if (startupLoading) renderStartupSkeletons()
 }
 
+function setStartupError(message) {
+  startupError = String(message || '').trim()
+  if (document?.body) document.body.dataset.startupError = startupError ? '1' : '0'
+  if (startupGateEl) startupGateEl.setAttribute('aria-busy', 'false')
+  if (startupTitleEl) {
+    startupTitleEl.textContent = startupError ? 'Transfer worker failed' : 'Starting PearDrop'
+  }
+  if (startupMessageEl) {
+    startupMessageEl.textContent = startupError || 'Preparing transfer worker...'
+  }
+  if (startupError) renderStartupSkeletons()
+}
+
 function renderStartupSkeletons() {
-  if (!startupLoading) return
+  if (!startupLoading && !startupError) return
   if (sourcesGridEl) {
     sourcesGridEl.innerHTML = '<div class="skeleton-container source" aria-hidden="true"></div>'
   }
@@ -1074,6 +1108,7 @@ function renderStartupSkeletons() {
 
 function waitForWorkerReadySignal(timeoutMs) {
   if (workerReadySeen) return Promise.resolve()
+  if (workerStartupExitError) return Promise.reject(workerStartupExitError)
 
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
@@ -1081,13 +1116,32 @@ function waitForWorkerReadySignal(timeoutMs) {
       reject(new Error(`Worker ready signal timed out after ${timeoutMs}ms`))
     }, timeoutMs)
 
-    const onReady = () => {
+    const onReady = (error) => {
       clearTimeout(timer)
+      if (error) {
+        reject(error)
+        return
+      }
       resolve()
     }
 
     workerReadyWaiters.push(onReady)
   })
+}
+
+function rejectWorkerReadyWaiters(error) {
+  const waiters = workerReadyWaiters
+  workerReadyWaiters = []
+  for (const waiter of waiters) {
+    try {
+      waiter(error)
+    } catch {}
+  }
+}
+
+function formatExitCode(code) {
+  if (code === null || code === undefined || code === '') return ''
+  return ` (code ${code})`
 }
 
 function markWorkerReady() {
@@ -4112,7 +4166,10 @@ function resolveSystemTheme() {
 }
 
 function setStatus(message) {
-  void message
+  const text = String(message || '').trim()
+  if (!text) return
+  if (startupLoading && startupMessageEl && !startupError) startupMessageEl.textContent = text
+  console.log(`[status] ${redactInviteText(text)}`)
 }
 
 async function pathExists(targetPath) {

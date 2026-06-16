@@ -25,6 +25,11 @@ const api = {
     ipcRenderer.on(`pear:worker:stderr:${specifier}`, wrap)
     return () => ipcRenderer.removeListener(`pear:worker:stderr:${specifier}`, wrap)
   },
+  onWorkerExit(specifier, listener) {
+    const wrap = (evt, code) => listener(code)
+    ipcRenderer.on(`pear:worker:exit:${specifier}`, wrap)
+    return () => ipcRenderer.removeListener(`pear:worker:exit:${specifier}`, wrap)
+  },
   onDeepLink(listener) {
     const wrap = (evt, url) => listener(String(url || ''))
     ipcRenderer.on('app:deep-link', wrap)

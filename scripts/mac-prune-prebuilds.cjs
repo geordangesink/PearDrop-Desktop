@@ -11,7 +11,7 @@ function walk(dir, visitor) {
 }
 
 function prunePrebuilds(root) {
-  const allowed = new Set(['darwin-arm64', 'darwin-universal'])
+  const allowed = new Set(['darwin-arm64', 'darwin-x64', 'darwin-universal'])
   let pruned = 0
 
   walk(root, (full, entry) => {

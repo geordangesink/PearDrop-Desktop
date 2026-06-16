@@ -336,6 +336,55 @@
         margin: 8px 0 0;
         color: var(--muted);
       }
+      .startup-gate {
+        position: fixed;
+        inset: 0;
+        z-index: 2200;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+        background: color-mix(in srgb, var(--bg) 88%, transparent);
+        backdrop-filter: blur(10px);
+      }
+      body[data-startup-loading='1'] .startup-gate,
+      body[data-startup-error='1'] .startup-gate {
+        display: flex;
+      }
+      .startup-card {
+        width: min(420px, 92vw);
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        background: var(--card);
+        padding: 18px;
+        box-shadow: var(--shadow);
+      }
+      .startup-row {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      .startup-spinner {
+        flex: 0 0 auto;
+        width: 24px;
+        height: 24px;
+        border-radius: 999px;
+        border: 3px solid rgba(127, 127, 127, 0.25);
+        border-top-color: var(--brand);
+        animation: spin 0.9s linear infinite;
+      }
+      body[data-startup-error='1'] .startup-spinner {
+        display: none;
+      }
+      .startup-title {
+        margin: 0;
+        font-size: 18px;
+      }
+      .startup-message {
+        margin: 6px 0 0;
+        color: var(--muted);
+        line-height: 1.45;
+      }
 
       .layout {
         margin-top: 12px;
@@ -943,6 +992,17 @@
           </p>
         </div>
         <button id="update-shutdown-btn" class="btn">Shutdown for update</button>
+      </section>
+      <section id="startup-gate" class="startup-gate" aria-live="polite" aria-busy="true">
+        <div class="startup-card">
+          <div class="startup-row">
+            <span class="startup-spinner" aria-hidden="true"></span>
+            <div>
+              <p id="startup-title" class="startup-title">Starting PearDrop</p>
+              <p id="startup-message" class="startup-message">Preparing transfer worker...</p>
+            </div>
+          </div>
+        </div>
       </section>
 
       <section id="upload-page" class="tab-page">

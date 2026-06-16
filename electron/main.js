@@ -302,8 +302,18 @@ function runtimeName() {
 }
 
 function resolveUpdatesEnabled() {
+  if (hasNoUpdatesFlag(launchArgs)) return false
   if (Object.hasOwn(cmd.indices.flags, 'updates')) return Boolean(cmd.flags.updates)
   return app.isPackaged
+}
+
+function hasNoUpdatesFlag(argv) {
+  return (Array.isArray(argv) ? argv : []).some((value) => {
+    const raw = String(value || '')
+      .trim()
+      .toLowerCase()
+    return raw === '--no-updates' || raw === '--updates=false' || raw === '--updates=0'
+  })
 }
 
 function isSquirrelInstall() {
@@ -547,7 +557,7 @@ function getWorker(specifier) {
   if (workers.has(specifier)) return workers.get(specifier)
 
   const appDir = resolveBaseDir()
-  const workerPath = path.resolve(__dirname, '..' + specifier)
+  const workerPath = resolveWorkerPath(specifier)
   const relayUrl = resolveRelayUrl()
   const updaterConfig = {
     dir: appDir,
@@ -613,6 +623,23 @@ function getWorker(specifier) {
 
   workers.set(specifier, worker)
   return worker
+}
+
+function resolveWorkerPath(specifier) {
+  const relativeSpecifier = '.' + String(specifier || '')
+  const candidates = app.isPackaged
+    ? [
+        path.resolve(process.resourcesPath, 'app.asar.unpacked', relativeSpecifier),
+        path.resolve(process.resourcesPath, 'app', relativeSpecifier),
+        path.resolve(__dirname, '..', relativeSpecifier)
+      ]
+    : [path.resolve(__dirname, '..', relativeSpecifier)]
+
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) return candidate
+  }
+
+  throw new Error(`Worker entrypoint not found: ${candidates.join(', ')}`)
 }
 
 function killStaleWorkers(storagePath) {
