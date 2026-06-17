@@ -269,6 +269,32 @@ jobs:
           bash scripts/sync-icons.sh
           npx electron-builder --mac dmg "--$arch" --publish never -c.mac.identity="$MAC_CODESIGN_IDENTITY"
 
+      - name: Verify macOS sidecar unpacking
+        run: |
+          set -euo pipefail
+          app_dir="$(find out -type d -path '*/PearDrop.app' | head -n 1)"
+          if [ -z "$app_dir" ]; then
+            echo "Could not find PearDrop.app in out/."
+            exit 1
+          fi
+
+          bare_path="$(find "$app_dir/Contents/Resources/app.asar.unpacked/node_modules/bare-sidecar/prebuilds" -type f -name bare | head -n 1 || true)"
+          worker_path="$app_dir/Contents/Resources/app.asar.unpacked/workers/main.js"
+
+          if [ -z "$bare_path" ] || [ ! -x "$bare_path" ]; then
+            echo "Missing executable unpacked bare-sidecar binary."
+            find "$app_dir/Contents/Resources" -maxdepth 6 -path '*bare-sidecar*' -print || true
+            exit 1
+          fi
+
+          if [ ! -f "$worker_path" ]; then
+            echo "Missing unpacked transfer worker: $worker_path"
+            exit 1
+          fi
+
+          echo "Verified unpacked sidecar: $bare_path"
+          echo "Verified unpacked worker: $worker_path"
+
       - name: Normalize publish filenames
         run: |
           arch="${{ matrix.arch }}"

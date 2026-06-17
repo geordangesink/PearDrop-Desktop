@@ -8,11 +8,11 @@ const {
   nativeImage,
   powerSaveBlocker
 } = require('electron')
-const { execFileSync } = require('child_process')
+const { execFileSync, spawn } = require('child_process')
+const { Duplex } = require('stream')
 const fs = require('fs')
 const os = require('os')
 const path = require('path')
-const PearRuntime = require('pear-runtime')
 const { command, flag } = require('paparam')
 const { isMac, isLinux, isWindows } = require('which-runtime')
 const pkg = require('../package.json')
@@ -584,14 +584,10 @@ function getWorker(specifier) {
     staleWorkersCleared = true
   }
 
-  const runtimeStorage = path.join(appDir, 'runtime-storage')
-  const worker = PearRuntime.run(
-    workerPath,
-    [updaterConfig.storage, JSON.stringify(updaterConfig)],
-    {
-      storage: runtimeStorage
-    }
-  )
+  const worker = createBareSidecar(workerPath, [
+    updaterConfig.storage,
+    JSON.stringify(updaterConfig)
+  ])
 
   const onStdout = (data) => {
     const text = String(data || '')
@@ -626,7 +622,13 @@ function getWorker(specifier) {
 }
 
 function resolveWorkerPath(specifier) {
-  const relativeSpecifier = '.' + String(specifier || '')
+  const normalized = String(specifier || '').startsWith('/')
+    ? String(specifier || '')
+    : `/${specifier}`
+  const resolved = resolveAsUnpackedIfAvailable(require.resolve('..' + normalized))
+  if (fs.existsSync(resolved)) return resolved
+
+  const relativeSpecifier = '.' + normalized
   const candidates = app.isPackaged
     ? [
         path.resolve(process.resourcesPath, 'app.asar.unpacked', relativeSpecifier),
@@ -640,6 +642,89 @@ function resolveWorkerPath(specifier) {
   }
 
   throw new Error(`Worker entrypoint not found: ${candidates.join(', ')}`)
+}
+
+function createBareSidecar(entry, args = []) {
+  return new BareSidecarProcess(resolveBareExecutable(), entry, args)
+}
+
+function resolveBareExecutable() {
+  const packageDir = path.dirname(require.resolve('bare-sidecar/package'))
+  const extension = isWindows ? '.exe' : ''
+  const platformArch = `${process.platform}-${process.arch}`
+  const candidates = [
+    path.join(packageDir, 'prebuilds', platformArch, `bare${extension}`),
+    path.join(packageDir, 'prebuilds', `${process.platform}-universal`, `bare${extension}`)
+  ].flatMap((candidate) => [resolveAsUnpackedIfAvailable(candidate), candidate])
+
+  for (const candidate of candidates) {
+    if (!fs.existsSync(candidate)) continue
+    if (!isWindows) {
+      try {
+        fs.chmodSync(candidate, 0o755)
+      } catch {}
+    }
+    return candidate
+  }
+
+  throw new Error(`Bare executable not found: ${candidates.join(', ')}`)
+}
+
+function resolveAsUnpackedIfAvailable(filePath) {
+  const value = String(filePath || '')
+  if (!value.includes('.asar')) return value
+  const unpacked = value.replace(/\.asar(?=$|[\\/])/, '.asar.unpacked')
+  return fs.existsSync(unpacked) ? unpacked : value
+}
+
+class BareSidecarProcess extends Duplex {
+  constructor(bareExecutable, entry, args = []) {
+    super()
+
+    this._process = spawn(bareExecutable, [entry, ...args], {
+      stdio: ['pipe', 'pipe', 'pipe', 'overlapped']
+    })
+    this.pid = this._process.pid
+    this.stdin = this._process.stdin
+    this.stdout = this._process.stdout
+    this.stderr = this._process.stderr
+    this._ipc = this._process.stdio[3]
+
+    this._process.on('exit', (code, signal) => this.emit('exit', code, signal))
+    this._process.on('close', () => this.destroy())
+    this._process.on('error', (error) => this.destroy(error))
+
+    if (this._ipc) {
+      this._ipc.on('end', () => {
+        this._ipc.end()
+        this.push(null)
+      })
+      this._ipc.on('error', (error) => this.destroy(error))
+    }
+  }
+
+  _read() {
+    if (!this._ipc) {
+      this.push(null)
+      return
+    }
+    const data = this._ipc.read()
+    if (data) this.push(data)
+    else this._ipc.once('data', (chunk) => this.push(chunk))
+  }
+
+  _write(chunk, encoding, callback) {
+    if (!this._ipc) {
+      callback(new Error('Bare sidecar IPC is unavailable'))
+      return
+    }
+    this._ipc.write(chunk, encoding, callback)
+  }
+
+  _destroy(error, callback) {
+    if (this._process && !this._process.killed) this._process.kill()
+    callback(error)
+  }
 }
 
 function killStaleWorkers(storagePath) {
