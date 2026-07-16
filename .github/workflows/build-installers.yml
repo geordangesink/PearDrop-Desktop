@@ -160,12 +160,19 @@ jobs:
             exit 1
           fi
 
-          chmod +x "$appimage"
-          cp "$appimage" "$publish_dir/PearDrop-linux-$arch.AppImage"
-          chmod +x "$publish_dir/PearDrop-linux-$arch.AppImage"
+          # The in-app updater expects the runtime to be named exactly
+          # PearDrop.AppImage, but release assets share one flat namespace,
+          # so each arch ships as a tarball carrying the platform/arch in its
+          # name with PearDrop.AppImage inside. tar also preserves the
+          # executable bit, which upload-artifact would otherwise strip.
+          staging_dir="$(mktemp -d)"
+          cp "$appimage" "$staging_dir/PearDrop.AppImage"
+          chmod +x "$staging_dir/PearDrop.AppImage"
+          tar -czf "$publish_dir/PearDrop-linux-$arch.tar.gz" -C "$staging_dir" PearDrop.AppImage
 
           echo "Published artifacts:"
           ls -la "$publish_dir"
+          tar -tzvf "$publish_dir/PearDrop-linux-$arch.tar.gz"
 
       - name: Upload workflow artifacts
         uses: actions/upload-artifact@v4
@@ -597,7 +604,7 @@ jobs:
           fail_on_unmatched_files: false
           files: |
             release-assets/PearDrop-Setup.exe
-            release-assets/PearDrop-linux-arm64.AppImage
-            release-assets/PearDrop-linux-x64.AppImage
+            release-assets/PearDrop-linux-arm64.tar.gz
+            release-assets/PearDrop-linux-x64.tar.gz
             release-assets/PearDrop-macos-arm64.dmg
             release-assets/PearDrop-macos-x64.dmg
