@@ -596,15 +596,68 @@ jobs:
 
       - name: Publish versioned release
         if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v2
-        with:
-          name: ${{ github.ref_name }}
-          tag_name: ${{ github.ref_name }}
-          make_latest: true
-          fail_on_unmatched_files: false
-          files: |
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          tag="${GITHUB_REF_NAME}"
+          assets=(
             release-assets/PearDrop-Setup.exe
             release-assets/PearDrop-linux-arm64.tar.gz
             release-assets/PearDrop-linux-x64.tar.gz
             release-assets/PearDrop-macos-arm64.dmg
             release-assets/PearDrop-macos-x64.dmg
+          )
+
+          retry() {
+            max_attempts=8
+            attempt=1
+            while [ "$attempt" -le "$max_attempts" ]; do
+              if "$@"; then
+                return 0
+              fi
+
+              if [ "$attempt" -eq "$max_attempts" ]; then
+                return 1
+              fi
+
+              sleep_seconds=$((attempt * 10))
+              echo "Attempt $attempt/$max_attempts failed; retrying in ${sleep_seconds}s..."
+              sleep "$sleep_seconds"
+              attempt=$((attempt + 1))
+            done
+          }
+
+          ensure_release() {
+            max_attempts=8
+            attempt=1
+            while [ "$attempt" -le "$max_attempts" ]; do
+              if gh release view "$tag" >/dev/null 2>&1; then
+                return 0
+              fi
+
+              if gh release create "$tag" --title "$tag" --latest --notes ""; then
+                return 0
+              fi
+
+              if [ "$attempt" -eq "$max_attempts" ]; then
+                return 1
+              fi
+
+              sleep_seconds=$((attempt * 10))
+              echo "Release ensure attempt $attempt/$max_attempts failed; retrying in ${sleep_seconds}s..."
+              sleep "$sleep_seconds"
+              attempt=$((attempt + 1))
+            done
+          }
+
+          ensure_release
+
+          for asset in "${assets[@]}"; do
+            if [ ! -f "$asset" ]; then
+              echo "Skipping missing release asset: $asset"
+              continue
+            fi
+            retry gh release upload "$tag" "$asset" --clobber
+          done

@@ -331,6 +331,50 @@
         height: 100%;
         width: 0%;
         background: var(--brand);
+        transition: width 180ms ease-out;
+      }
+      .download-progress {
+        margin-bottom: 12px;
+        border: 1px solid color-mix(in srgb, var(--brand) 48%, var(--line));
+        border-radius: 12px;
+        background: color-mix(in srgb, var(--brand) 7%, var(--bg-soft));
+        padding: 12px;
+      }
+      .download-progress-head,
+      .download-progress-meta {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+      .download-progress-label,
+      .download-progress-value {
+        font-size: 13px;
+        font-weight: 700;
+      }
+      .download-progress-value {
+        color: var(--brand);
+        font-variant-numeric: tabular-nums;
+      }
+      .download-progress-meta {
+        margin: 5px 0 9px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .download-progress-subtitle {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .download-progress-amount {
+        flex: 0 0 auto;
+        font-variant-numeric: tabular-nums;
+      }
+      .download-progress-eta {
+        margin: 7px 0 0;
+        color: var(--muted);
+        font-size: 11px;
       }
       .status {
         margin: 8px 0 0;
@@ -970,20 +1014,688 @@
           transform: rotate(360deg);
         }
       }
+      :root {
+        --bg: #0b2018;
+        --bg-soft: rgba(13, 39, 28, 0.9);
+        --card: rgba(17, 47, 34, 0.9);
+        --line: #2a4c3a;
+        --text: #f4f8ef;
+        --muted: #9caf9f;
+        --brand: #b8f24b;
+        --brand-soft: rgba(184, 242, 75, 0.055);
+        --star: #f2ca62;
+        --accent-ink: #102016;
+        --danger: #ff8f87;
+        --shadow: 0 18px 48px rgba(0, 0, 0, 0.2);
+        --shadow-soft: 0 8px 24px rgba(0, 0, 0, 0.12);
+      }
+      body[data-theme='light'] {
+        --bg: #f5f3ea;
+        --bg-soft: rgba(245, 243, 234, 0.88);
+        --card: rgba(255, 254, 249, 0.9);
+        --line: #d8d8cc;
+        --text: #101713;
+        --muted: #667169;
+        --brand: #a4ec2c;
+        --brand-soft: rgba(164, 236, 44, 0.075);
+        --star: #c88725;
+        --accent-ink: #132316;
+        --danger: #bf4e47;
+        --shadow: 0 18px 48px rgba(22, 35, 27, 0.09);
+        --shadow-soft: 0 8px 24px rgba(22, 35, 27, 0.065);
+      }
+      body {
+        overflow: hidden;
+        align-items: stretch;
+        justify-content: stretch;
+        background:
+          radial-gradient(
+            circle at 82% -12%,
+            color-mix(in srgb, var(--brand) 24%, transparent) 0,
+            transparent 34%
+          ),
+          linear-gradient(color-mix(in srgb, var(--line) 25%, transparent) 1px, transparent 1px),
+          linear-gradient(
+            90deg,
+            color-mix(in srgb, var(--line) 25%, transparent) 1px,
+            transparent 1px
+          ),
+          var(--bg);
+        background-size:
+          auto,
+          38px 38px,
+          38px 38px,
+          auto;
+      }
+      button,
+      input {
+        font: inherit;
+      }
+      button:focus-visible,
+      input:focus-visible {
+        outline: 2px solid var(--brand);
+        outline-offset: 2px;
+      }
+      input[type='checkbox'],
+      input[type='radio'] {
+        accent-color: var(--brand);
+      }
+      .sr-only {
+        position: absolute !important;
+        width: 1px !important;
+        height: 1px !important;
+        overflow: hidden !important;
+        clip: rect(0, 0, 0, 0) !important;
+        white-space: nowrap !important;
+      }
+      .app {
+        width: 100%;
+        height: 100%;
+        padding: 18px 22px 28px;
+        border: 0;
+        border-radius: 0;
+        background: transparent;
+        box-shadow: none;
+        scrollbar-color: color-mix(in srgb, var(--muted) 45%, transparent) transparent;
+      }
+      .app-dock {
+        position: sticky;
+        z-index: 40;
+        top: 0;
+        display: grid;
+        width: min(560px, 100%);
+        min-height: 62px;
+        margin: 0 auto 18px;
+        padding: 8px;
+        border: 1px solid color-mix(in srgb, var(--line) 88%, transparent);
+        border-radius: 22px;
+        grid-template-columns: 46px 1fr 46px;
+        align-items: center;
+        gap: 10px;
+        background: color-mix(in srgb, var(--card) 92%, transparent);
+        box-shadow: var(--shadow-soft);
+        backdrop-filter: blur(22px);
+      }
+      .brand-sigil {
+        position: relative;
+        display: grid;
+        width: 42px;
+        height: 42px;
+        overflow: hidden;
+        border-radius: 14px;
+        place-items: center;
+        background: #123326;
+        box-shadow: inset 0 0 0 1px rgba(197, 255, 84, 0.18);
+      }
+      .brand-sigil::before {
+        width: 20px;
+        height: 20px;
+        border: 2px solid var(--brand);
+        border-radius: 50%;
+        content: '';
+      }
+      .brand-sigil::after,
+      .brand-sigil span::before,
+      .brand-sigil span::after {
+        position: absolute;
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: var(--brand);
+        box-shadow: 0 0 12px color-mix(in srgb, var(--brand) 55%, transparent);
+        content: '';
+      }
+      .brand-sigil::after {
+        top: 8px;
+        right: 9px;
+      }
+      .brand-sigil span::before {
+        right: 8px;
+        bottom: 9px;
+      }
+      .brand-sigil span::after {
+        bottom: 8px;
+        left: 9px;
+      }
+      .modal-sigil {
+        margin: 0 auto 8px;
+      }
+      .mode-switch {
+        margin: 0;
+      }
+      .tabs {
+        width: 100%;
+        padding: 4px;
+        border: 0;
+        border-radius: 15px;
+        background: color-mix(in srgb, var(--bg) 70%, transparent);
+      }
+      .tab-btn {
+        min-width: 0;
+        min-height: 38px;
+        flex: 1;
+        padding: 0;
+        border: 0;
+        border-radius: 11px;
+        color: var(--muted);
+        background: transparent;
+        box-shadow: none;
+        transition:
+          color 160ms ease,
+          background 160ms ease,
+          transform 160ms ease;
+      }
+      .tab-btn:hover {
+        color: var(--text);
+        background: color-mix(in srgb, var(--card) 72%, transparent);
+      }
+      .tab-btn.active,
+      body[data-theme='light'] .tab-btn.active {
+        border: 0;
+        color: var(--accent-ink);
+        background: var(--brand);
+        box-shadow: 0 3px 0 color-mix(in srgb, #315b22 72%, transparent);
+      }
+      body[data-theme='light'] .tab-btn {
+        border: 0;
+        background: transparent;
+      }
+      .dock-action {
+        display: grid;
+        width: 42px;
+        height: 42px;
+        padding: 0;
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        place-items: center;
+        color: var(--text);
+        background: color-mix(in srgb, var(--card) 80%, transparent);
+        cursor: pointer;
+        transition:
+          border-color 160ms ease,
+          transform 160ms ease;
+      }
+      .dock-action:hover {
+        border-color: color-mix(in srgb, var(--brand) 65%, var(--line));
+        transform: rotate(8deg);
+      }
+      .update-banner {
+        width: min(940px, 100%);
+        margin: 0 auto 14px;
+        border-color: color-mix(in srgb, var(--brand) 42%, var(--line));
+        border-radius: 16px;
+        background: color-mix(in srgb, var(--brand) 10%, var(--card));
+      }
+      .tab-page {
+        width: min(1320px, 100%);
+        margin: 0 auto;
+        animation: workspaceIn 260ms ease both;
+      }
+      .layout {
+        margin-top: 0;
+        grid-template-columns: minmax(0, 1.45fr) minmax(320px, 0.75fr);
+        gap: 14px;
+      }
+      .right-col {
+        gap: 14px;
+      }
+      .panel,
+      .hero {
+        border: 1px solid color-mix(in srgb, var(--line) 92%, transparent);
+        border-radius: 20px;
+        background: color-mix(in srgb, var(--card) 94%, transparent);
+        box-shadow: var(--shadow-soft);
+        backdrop-filter: blur(16px);
+      }
+      .panel {
+        padding: 14px;
+      }
+      .compact-panel {
+        padding: 12px;
+        border-radius: 17px;
+      }
+      .source-panel {
+        min-height: 430px;
+      }
+      .history-panel,
+      .download-content {
+        margin-top: 14px;
+      }
+      .panel-head {
+        min-height: 40px;
+        margin-bottom: 12px;
+      }
+      .panel-title {
+        color: var(--text);
+        font-size: 18px;
+        font-weight: 720;
+        letter-spacing: -0.025em;
+      }
+      .section-bar {
+        gap: 7px;
+      }
+      .section-bar > span:first-child {
+        display: grid;
+        width: 34px;
+        height: 34px;
+        border: 1px solid color-mix(in srgb, var(--brand) 30%, var(--line));
+        border-radius: 11px;
+        place-items: center;
+        color: color-mix(in srgb, var(--brand) 82%, var(--text));
+        background: color-mix(in srgb, var(--brand) 8%, transparent);
+      }
+      .section-bar > span:first-child ion-icon {
+        font-size: 18px;
+      }
+      .section-count {
+        min-width: 24px;
+        padding: 3px 7px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        color: var(--muted);
+        background: color-mix(in srgb, var(--bg) 62%, transparent);
+        font-family: 'SFMono-Regular', 'Cascadia Mono', monospace;
+        font-size: 10px;
+        line-height: 1.2;
+        text-align: center;
+      }
+      .controls {
+        flex-wrap: nowrap;
+        gap: 7px;
+      }
+      .btn {
+        border-color: color-mix(in srgb, var(--brand) 70%, #527c24);
+        border-radius: 12px;
+        color: var(--accent-ink);
+        background: var(--brand);
+        box-shadow: 0 3px 0 color-mix(in srgb, #315b22 72%, transparent);
+        transition:
+          transform 140ms ease,
+          box-shadow 140ms ease,
+          border-color 140ms ease;
+      }
+      .btn:not(:disabled):hover {
+        box-shadow: 0 1px 0 color-mix(in srgb, #315b22 72%, transparent);
+        transform: translateY(2px);
+      }
+      .btn.alt,
+      body[data-theme='light'] .btn.alt {
+        border-color: var(--line);
+        color: var(--text);
+        background: color-mix(in srgb, var(--card) 80%, transparent);
+        box-shadow: none;
+      }
+      .btn.warn,
+      body[data-theme='light'] .btn.warn {
+        border-color: color-mix(in srgb, var(--danger) 42%, var(--line));
+        color: var(--danger);
+        background: color-mix(in srgb, var(--danger) 9%, transparent);
+        box-shadow: none;
+      }
+      .btn.icon-square {
+        width: 40px;
+        min-width: 40px;
+        height: 40px;
+      }
+      .btn.icon {
+        min-width: 36px;
+        height: 34px;
+        border-radius: 11px;
+      }
+      .btn.icon.icon-danger,
+      .rowDeleteText {
+        color: var(--danger);
+      }
+      .input {
+        min-height: 44px;
+        border-color: var(--line);
+        border-radius: 13px;
+        color: var(--text);
+        background: color-mix(in srgb, var(--bg) 58%, transparent);
+        box-shadow: inset 0 1px 0 color-mix(in srgb, var(--line) 45%, transparent);
+      }
+      body[data-theme='light'] .input {
+        background: rgba(255, 254, 249, 0.82);
+      }
+      .hero {
+        padding: 12px;
+        border-color: #2e5946;
+        background:
+          radial-gradient(circle at 92% 0, rgba(184, 242, 75, 0.13), transparent 35%),
+          linear-gradient(145deg, #123326, #0b2018 76%);
+      }
+      .hero .row {
+        margin-top: 0;
+      }
+      .hero .input {
+        border-color: rgba(210, 239, 200, 0.16);
+        color: #f5f9f0;
+        background: rgba(255, 255, 255, 0.06);
+      }
+      .hero .input::placeholder {
+        color: #8fa198;
+      }
+      .hero .btn.alt {
+        border-color: #7eb633;
+        color: var(--accent-ink);
+        background: var(--brand);
+      }
+      .source-grid {
+        min-height: 342px;
+        grid-template-columns: repeat(auto-fill, minmax(205px, 1fr));
+        gap: 10px;
+      }
+      .source-card {
+        min-height: 132px;
+        padding: 11px;
+        padding-bottom: 48px;
+        border-color: var(--line);
+        border-radius: 16px;
+        background: color-mix(in srgb, var(--brand-soft) 75%, var(--card));
+        transition:
+          border-color 160ms ease,
+          background 160ms ease,
+          transform 160ms ease;
+      }
+      .source-card:hover {
+        border-color: color-mix(in srgb, var(--brand) 45%, var(--line));
+        transform: translateY(-1px);
+      }
+      .source-card.selected,
+      .row-item.selected {
+        outline: 0;
+        border-color: color-mix(in srgb, var(--brand) 72%, var(--line));
+        background: color-mix(in srgb, var(--brand) 10%, var(--card));
+        box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--brand) 30%, transparent);
+      }
+      .source-card-main {
+        grid-template-columns: 72px 1fr;
+      }
+      .source-preview {
+        width: 72px;
+        height: 72px;
+        border-radius: 13px;
+        background: color-mix(in srgb, var(--bg) 68%, transparent);
+      }
+      .source-name,
+      .row-title {
+        font-weight: 680;
+        letter-spacing: -0.015em;
+      }
+      .source-kind,
+      .source-path,
+      .row-sub,
+      .host-data,
+      .host-date,
+      .host-hash {
+        color: var(--muted);
+        font-family: 'SFMono-Regular', 'Cascadia Mono', monospace;
+      }
+      .source-kind {
+        color: color-mix(in srgb, var(--brand) 72%, var(--muted));
+        font-size: 9px;
+      }
+      .source-path {
+        font-size: 10px;
+      }
+      .source-remove-glyph {
+        bottom: 10px;
+        left: 11px;
+        border-color: color-mix(in srgb, var(--danger) 35%, transparent);
+        color: var(--danger);
+        background: color-mix(in srgb, var(--danger) 7%, transparent);
+      }
+      .rows {
+        gap: 9px;
+      }
+      .row-item {
+        min-height: 58px;
+        padding: 9px 10px;
+        border-color: var(--line);
+        border-radius: 14px;
+        background: color-mix(in srgb, var(--bg) 26%, transparent);
+        transition:
+          border-color 150ms ease,
+          background 150ms ease,
+          transform 150ms ease;
+      }
+      .row-item:hover {
+        border-color: color-mix(in srgb, var(--brand) 42%, var(--line));
+        background: color-mix(in srgb, var(--brand) 5%, var(--card));
+      }
+      .peer-activity-row {
+        grid-template-columns: minmax(0, 1fr) auto;
+      }
+      .muted-empty,
+      .source-empty-state {
+        min-height: 82px;
+        border: 1px dashed color-mix(in srgb, var(--line) 85%, transparent);
+        border-radius: 14px;
+        display: grid;
+        place-items: center;
+        color: color-mix(in srgb, var(--muted) 72%, transparent);
+        background: color-mix(in srgb, var(--bg) 20%, transparent);
+      }
+      .muted-empty ion-icon,
+      .source-empty-state ion-icon {
+        font-size: 26px;
+      }
+      .source-empty-state {
+        min-height: 342px;
+      }
+      .menu {
+        min-width: 112px;
+        padding: 7px;
+        border-color: var(--line);
+        border-radius: 14px;
+        background: var(--card);
+        box-shadow: var(--shadow);
+      }
+      .menu button {
+        display: grid;
+        min-height: 38px;
+        border-radius: 10px;
+        place-items: center;
+        color: var(--text);
+      }
+      .menu button:hover {
+        background: color-mix(in srgb, var(--brand) 10%, transparent);
+      }
+      .table {
+        border-collapse: separate;
+        border-spacing: 0 8px;
+      }
+      .table th,
+      .table td {
+        border: 0;
+      }
+      .table th {
+        padding: 4px 10px;
+        color: var(--muted);
+        font-size: 15px;
+      }
+      .table td {
+        padding: 9px 10px;
+        border-top: 1px solid var(--line);
+        border-bottom: 1px solid var(--line);
+        background: color-mix(in srgb, var(--bg) 26%, transparent);
+      }
+      .table td:first-child {
+        border-left: 1px solid var(--line);
+        border-radius: 14px 0 0 14px;
+      }
+      .table td:last-child {
+        border-right: 1px solid var(--line);
+        border-radius: 0 14px 14px 0;
+      }
+      .table tr:hover td {
+        background: color-mix(in srgb, var(--brand) 6%, var(--card));
+      }
+      .drive-preview-shell {
+        border-color: var(--line);
+        border-radius: 12px;
+        background: color-mix(in srgb, var(--bg) 70%, transparent);
+      }
+      body[data-theme='light'] .drive-preview-shell {
+        background: #eeeee5;
+      }
+      .download-progress {
+        border-color: color-mix(in srgb, var(--brand) 48%, var(--line));
+        border-radius: 15px;
+        background: color-mix(in srgb, var(--brand) 7%, var(--card));
+      }
+      .activity-track {
+        background: color-mix(in srgb, var(--line) 62%, transparent);
+      }
+      body[data-theme='light'] .activity-track {
+        background: #dfe2d4;
+      }
+      .activity-fill {
+        background: linear-gradient(90deg, #76ba23, var(--brand));
+        box-shadow: 0 0 14px color-mix(in srgb, var(--brand) 28%, transparent);
+      }
+      .session-editor {
+        padding: 0;
+      }
+      .session-editor-head {
+        min-height: 54px;
+        margin-bottom: 10px;
+      }
+      .modal-backdrop {
+        background: rgba(5, 16, 11, 0.58);
+        backdrop-filter: blur(12px);
+      }
+      .modal-card,
+      .shutdown-card,
+      .startup-card {
+        border-color: color-mix(in srgb, var(--line) 90%, transparent);
+        border-radius: 22px;
+        background: var(--card);
+        box-shadow: var(--shadow);
+      }
+      .modal-card {
+        padding: 18px;
+      }
+      .modal-title {
+        color: var(--text);
+        text-align: center;
+      }
+      .modal-title ion-icon {
+        padding: 10px;
+        border-radius: 13px;
+        color: var(--accent-ink);
+        background: var(--brand);
+      }
+      .modal-actions {
+        justify-content: flex-end;
+      }
+      .modal-packaging {
+        border-color: var(--line);
+        border-radius: 14px;
+        background: color-mix(in srgb, var(--bg) 48%, transparent);
+      }
+      .theme-choices {
+        display: grid;
+        padding: 8px;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 8px;
+      }
+      .theme-choices label {
+        min-height: 44px;
+        margin: 0;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        justify-content: center;
+        cursor: pointer;
+      }
+      .theme-choices label:has(input:checked) {
+        border-color: var(--brand);
+        color: var(--accent-ink);
+        background: var(--brand);
+      }
+      .theme-choices input {
+        position: absolute;
+        opacity: 0;
+      }
+      .startup-spinner,
+      .shutdown-spinner {
+        border-top-color: var(--brand);
+      }
+      @keyframes workspaceIn {
+        from {
+          opacity: 0;
+          transform: translateY(8px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+      @media (max-width: 900px) {
+        .app {
+          padding-inline: 14px;
+        }
+        .layout {
+          grid-template-columns: 1fr;
+        }
+        .source-panel {
+          min-height: auto;
+        }
+        .source-grid {
+          min-height: 240px;
+        }
+        .source-empty-state {
+          min-height: 240px;
+        }
+      }
+      @media (max-width: 620px) {
+        .app-dock {
+          margin-bottom: 12px;
+        }
+        .app {
+          padding: 12px 10px 20px;
+        }
+        .panel {
+          padding: 11px;
+          border-radius: 16px;
+        }
+        .input {
+          min-width: 0;
+        }
+        .table th:nth-child(4),
+        .table td:nth-child(4) {
+          display: none;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+          scroll-behavior: auto !important;
+          animation-duration: 0.01ms !important;
+          transition-duration: 0.01ms !important;
+        }
+      }
     </style>
   </head>
   <body>
     <main class="app">
-      <div class="mode-switch">
-        <div class="tabs">
-          <button id="tab-upload" class="tab-btn active" aria-label="Upload">
-            <ion-icon name="cloud-upload-outline"></ion-icon>
-          </button>
-          <button id="tab-download" class="tab-btn" aria-label="Download">
-            <ion-icon name="cloud-download-outline"></ion-icon>
-          </button>
+      <header class="app-dock">
+        <div class="brand-sigil" aria-hidden="true"><span></span></div>
+        <div class="mode-switch">
+          <div class="tabs">
+            <button id="tab-upload" class="tab-btn active" aria-label="Upload" title="Upload">
+              <ion-icon name="cloud-upload-outline"></ion-icon>
+            </button>
+            <button id="tab-download" class="tab-btn" aria-label="Download" title="Download">
+              <ion-icon name="cloud-download-outline"></ion-icon>
+            </button>
+          </div>
         </div>
-      </div>
+        <button id="theme-toggle" class="dock-action" aria-label="Theme" title="Theme">
+          <ion-icon name="contrast-outline"></ion-icon>
+        </button>
+      </header>
       <section id="update-banner" class="update-banner hidden">
         <div class="update-banner-copy">
           <p class="update-banner-title">Update applied and ready</p>
@@ -991,7 +1703,9 @@
             Shut down PearDrop to finish updating.
           </p>
         </div>
-        <button id="update-shutdown-btn" class="btn">Shutdown for update</button>
+        <button id="update-shutdown-btn" class="btn icon-square" aria-label="Restart for update">
+          <ion-icon name="power-outline"></ion-icon>
+        </button>
       </section>
       <section id="startup-gate" class="startup-gate" aria-live="polite" aria-busy="true">
         <div class="startup-card">
@@ -1008,17 +1722,24 @@
       <section id="upload-page" class="tab-page">
         <div id="upload-main-content">
           <section class="layout">
-            <article class="panel">
+            <article class="panel source-panel">
               <div class="panel-head">
-                <h2 class="panel-title">Local Sources</h2>
+                <div class="section-bar" aria-label="Local sources">
+                  <span><ion-icon name="documents-outline"></ion-icon></span>
+                  <span id="source-count" class="section-count">0</span>
+                </div>
                 <div class="controls">
                   <span class="menu-wrap">
                     <button id="source-add" class="btn icon-square" aria-label="Add source">
-                      ＋
+                      <ion-icon name="add-outline"></ion-icon>
                     </button>
                     <div id="source-add-menu" class="menu hidden">
-                      <button id="add-file-action">Add File(s)</button>
-                      <button id="add-folder-action">Add Folder</button>
+                      <button id="add-file-action" aria-label="Add files" title="Add files">
+                        <ion-icon name="document-outline"></ion-icon>
+                      </button>
+                      <button id="add-folder-action" aria-label="Add folder" title="Add folder">
+                        <ion-icon name="folder-open-outline"></ion-icon>
+                      </button>
                     </div>
                   </span>
                   <button
@@ -1050,7 +1771,7 @@
             </article>
 
             <div class="right-col">
-              <article class="panel">
+              <article class="panel compact-panel">
                 <div class="panel-head">
                   <div class="section-bar">
                     <span><ion-icon name="person-outline"></ion-icon></span
@@ -1060,7 +1781,7 @@
                 <div id="peer-activity-rows" class="rows"></div>
               </article>
 
-              <article class="panel">
+              <article class="panel compact-panel">
                 <div class="panel-head section-inline">
                   <div class="section-bar">
                     <span><ion-icon name="git-network-outline"></ion-icon></span
@@ -1080,14 +1801,14 @@
                       title="Stop Selected"
                       aria-label="Stop Selected"
                     >
-                      ⏹
+                      <ion-icon name="stop-outline"></ion-icon>
                     </button>
                   </div>
                 </div>
                 <div id="hosts-rows" class="rows"></div>
               </article>
 
-              <article class="panel">
+              <article class="panel compact-panel">
                 <div class="panel-head">
                   <div class="section-bar">
                     <span><ion-icon name="star-outline"></ion-icon></span
@@ -1099,7 +1820,7 @@
             </div>
           </section>
 
-          <section class="panel" style="margin-top: 12px">
+          <section class="panel history-panel">
             <div class="panel-head section-inline">
               <div class="section-bar">
                 <span><ion-icon name="time-outline"></ion-icon></span
@@ -1119,7 +1840,7 @@
                   title="Re-host Selected"
                   aria-label="Re-host Selected"
                 >
-                  ▶
+                  <ion-icon name="play-outline"></ion-icon>
                 </button>
                 <button
                   id="history-remove-selected"
@@ -1142,16 +1863,37 @@
 
         <section id="host-session-editor" class="session-editor hidden">
           <div class="session-editor-head">
-            <button id="session-editor-back" class="btn alt">← Back</button>
+            <button id="session-editor-back" class="btn alt icon-square" aria-label="Back">
+              <ion-icon name="arrow-back-outline"></ion-icon>
+            </button>
             <h2 id="session-editor-title" class="panel-title">Host Session</h2>
           </div>
-          <p id="session-editor-sub" class="status">Edit files and folders in this host session.</p>
+          <p id="session-editor-sub" class="sr-only">
+            Edit files and folders in this host session.
+          </p>
           <div class="panel">
             <div class="panel-head">
-              <h3 class="panel-title">Session Sources</h3>
+              <div class="section-bar" aria-label="Session sources">
+                <span><ion-icon name="layers-outline"></ion-icon></span>
+                <span id="session-source-count" class="section-count">0</span>
+              </div>
               <div class="controls">
-                <button id="session-editor-add-file" class="btn alt">Add File(s)</button>
-                <button id="session-editor-add-folder" class="btn alt">Add Folder</button>
+                <button
+                  id="session-editor-add-file"
+                  class="btn alt icon-square"
+                  aria-label="Add files"
+                  title="Add files"
+                >
+                  <ion-icon name="document-outline"></ion-icon>
+                </button>
+                <button
+                  id="session-editor-add-folder"
+                  class="btn alt icon-square"
+                  aria-label="Add folder"
+                  title="Add folder"
+                >
+                  <ion-icon name="folder-open-outline"></ion-icon>
+                </button>
                 <button
                   id="session-editor-select-toggle"
                   class="btn alt icon-square"
@@ -1159,7 +1901,19 @@
                 >
                   <ion-icon name="square-outline"></ion-icon>
                 </button>
-                <button id="session-editor-remove-selected" class="btn alt">Remove Selected</button>
+                <button
+                  id="session-editor-remove-selected"
+                  class="btn alt icon icon-danger icon-square"
+                  aria-label="Remove selected"
+                  title="Remove selected"
+                >
+                  <span class="mini-trash" aria-hidden="true"
+                    ><span class="mini-trash-lid"></span
+                    ><span class="mini-trash-body"
+                      ><span class="mini-trash-line"></span
+                      ><span class="mini-trash-line"></span></span
+                  ></span>
+                </button>
               </div>
             </div>
             <div id="session-editor-rows" class="rows"></div>
@@ -1167,7 +1921,9 @@
               <button id="session-editor-cancel" class="btn alt icon-square" aria-label="Cancel">
                 <ion-icon name="close-outline"></ion-icon>
               </button>
-              <button id="session-editor-apply" class="btn">Apply Changes</button>
+              <button id="session-editor-apply" class="btn icon-square" aria-label="Apply changes">
+                <ion-icon name="checkmark-outline"></ion-icon>
+              </button>
             </div>
           </div>
         </section>
@@ -1183,10 +1939,13 @@
           </div>
         </section>
 
-        <section style="margin-top: 12px">
+        <section class="download-content">
           <article class="panel">
             <div class="panel-head">
-              <h2 class="panel-title">Drive Files</h2>
+              <div class="section-bar" aria-label="Drive files">
+                <span><ion-icon name="folder-open-outline"></ion-icon></span>
+                <span id="drive-count" class="section-count">0</span>
+              </div>
               <div class="controls">
                 <button
                   id="download-selected"
@@ -1204,14 +1963,50 @@
                 </button>
               </div>
             </div>
+            <div
+              id="download-progress"
+              class="download-progress hidden"
+              role="status"
+              aria-live="polite"
+              aria-busy="false"
+            >
+              <div class="download-progress-head">
+                <span id="download-progress-label" class="download-progress-label"
+                  >Downloading selected files...</span
+                >
+                <span id="download-progress-value" class="download-progress-value">0%</span>
+              </div>
+              <div class="download-progress-meta">
+                <span id="download-progress-subtitle" class="download-progress-subtitle"
+                  >Preparing files...</span
+                >
+                <span id="download-progress-amount" class="download-progress-amount">0 B</span>
+              </div>
+              <div
+                id="download-progress-track"
+                class="activity-track"
+                role="progressbar"
+                aria-label="Download progress"
+                aria-valuemin="0"
+                aria-valuemax="100"
+                aria-valuenow="0"
+              >
+                <div id="download-progress-fill" class="activity-fill"></div>
+              </div>
+              <p id="download-progress-eta" class="download-progress-eta">
+                Calculating time remaining...
+              </p>
+            </div>
             <table class="table">
               <thead>
                 <tr>
                   <th><input id="check-all-drive" type="checkbox" /></th>
-                  <th class="drive-preview-col">Preview</th>
-                  <th>Name</th>
-                  <th>Path</th>
-                  <th>Size</th>
+                  <th class="drive-preview-col" aria-label="Preview">
+                    <ion-icon name="image-outline"></ion-icon>
+                  </th>
+                  <th aria-label="Name"><ion-icon name="document-text-outline"></ion-icon></th>
+                  <th aria-label="Path"><ion-icon name="git-branch-outline"></ion-icon></th>
+                  <th aria-label="Size"><ion-icon name="server-outline"></ion-icon></th>
                 </tr>
               </thead>
               <tbody id="drive-files"></tbody>
@@ -1225,8 +2020,8 @@
       <section id="host-name-modal" class="modal-root hidden">
         <div id="host-name-backdrop" class="modal-backdrop"></div>
         <div class="modal-card">
-          <h3 class="modal-title">Host session name</h3>
-          <p class="modal-sub">Choose a name for this host session.</p>
+          <h3 class="modal-title"><ion-icon name="rocket-outline"></ion-icon></h3>
+          <p class="sr-only">Choose a name for this host session.</p>
           <input id="host-name-input" class="input" value="Host Session" />
           <div class="modal-packaging">
             <div class="modal-hint">
@@ -1236,11 +2031,8 @@
                 nested folders.
               </div>
             </div>
-            <label
-              ><input type="radio" name="host-packaging" value="zip" checked /> Zip package
-              (Recommended)</label
-            >
-            <label><input type="radio" name="host-packaging" value="raw" /> Raw files</label>
+            <label><input type="radio" name="host-packaging" value="zip" checked /> ZIP</label>
+            <label><input type="radio" name="host-packaging" value="raw" /> RAW</label>
           </div>
           <div class="modal-actions">
             <button id="host-name-cancel" class="btn alt icon-square" aria-label="Cancel">
@@ -1264,18 +2056,32 @@
       <section id="onboarding-modal" class="modal-root hidden">
         <div class="modal-backdrop"></div>
         <div class="modal-card">
-          <h3 class="modal-title">Welcome to PearDrop</h3>
-          <p class="modal-sub">Choose your theme and set your peer name.</p>
-          <div class="modal-packaging">
-            <label
-              ><input type="radio" name="onboarding-theme" value="system" checked /> System</label
-            >
-            <label><input type="radio" name="onboarding-theme" value="dark" /> Dark</label>
-            <label><input type="radio" name="onboarding-theme" value="light" /> Light</label>
+          <h3 class="modal-title">
+            <span class="brand-sigil modal-sigil"><span></span></span>
+          </h3>
+          <p class="sr-only">Choose your theme and set your peer name.</p>
+          <div class="modal-packaging theme-choices">
+            <label aria-label="System theme" title="System theme"
+              ><input type="radio" name="onboarding-theme" value="system" checked /><ion-icon
+                name="contrast-outline"
+              ></ion-icon
+            ></label>
+            <label aria-label="Dark theme" title="Dark theme"
+              ><input type="radio" name="onboarding-theme" value="dark" /><ion-icon
+                name="moon-outline"
+              ></ion-icon
+            ></label>
+            <label aria-label="Light theme" title="Light theme"
+              ><input type="radio" name="onboarding-theme" value="light" /><ion-icon
+                name="sunny-outline"
+              ></ion-icon
+            ></label>
           </div>
           <input id="onboarding-peer-name" class="input" placeholder="Enter your name" />
           <div class="modal-actions">
-            <button id="onboarding-continue" class="btn" disabled>Continue</button>
+            <button id="onboarding-continue" class="btn icon-square" aria-label="Continue" disabled>
+              <ion-icon name="arrow-forward-outline"></ion-icon>
+            </button>
           </div>
         </div>
       </section>

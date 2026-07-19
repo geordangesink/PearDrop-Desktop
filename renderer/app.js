@@ -60,11 +60,20 @@ const SESSION_SWIPE_IDLE_MS = 220
 
 const uploadTabBtn = document.getElementById('tab-upload')
 const downloadTabBtn = document.getElementById('tab-download')
+const themeToggleBtn = document.getElementById('theme-toggle')
 const uploadPageEl = document.getElementById('upload-page')
 const downloadPageEl = document.getElementById('download-page')
 const inviteInputEl = document.getElementById('invite-input')
 const viewDriveBtn = document.getElementById('view-drive')
 const downloadSelectedBtn = document.getElementById('download-selected')
+const downloadProgressEl = document.getElementById('download-progress')
+const downloadProgressLabelEl = document.getElementById('download-progress-label')
+const downloadProgressValueEl = document.getElementById('download-progress-value')
+const downloadProgressSubtitleEl = document.getElementById('download-progress-subtitle')
+const downloadProgressAmountEl = document.getElementById('download-progress-amount')
+const downloadProgressEtaEl = document.getElementById('download-progress-eta')
+const downloadProgressTrackEl = document.getElementById('download-progress-track')
+const downloadProgressFillEl = document.getElementById('download-progress-fill')
 
 const sourceAddBtn = document.getElementById('source-add')
 const sourceAddMenuEl = document.getElementById('source-add-menu')
@@ -78,6 +87,7 @@ const sourcesGridEl = document.getElementById('sources-grid')
 const driveRowsEl = document.getElementById('drive-files')
 const checkAllDriveEl = document.getElementById('check-all-drive')
 const driveSelectToggleBtn = document.getElementById('drive-select-toggle')
+const driveCountEl = document.getElementById('drive-count')
 
 const hostsRowsEl = document.getElementById('hosts-rows')
 const peerActivityRowsEl = document.getElementById('peer-activity-rows')
@@ -93,6 +103,8 @@ const activeHostsCountEl = document.getElementById('active-hosts-count')
 const peerCountEl = document.getElementById('peer-count')
 const starredCountEl = document.getElementById('starred-count')
 const historyCountEl = document.getElementById('history-count')
+const sourceCountEl = document.getElementById('source-count')
+const sessionSourceCountEl = document.getElementById('session-source-count')
 
 const filePicker = document.getElementById('file-picker')
 const hostNameModalEl = document.getElementById('host-name-modal')
@@ -469,6 +481,13 @@ function withTimeout(promise, timeoutMs) {
 function wireUiEvents() {
   uploadTabBtn.addEventListener('click', () => setTab('upload'))
   downloadTabBtn.addEventListener('click', () => setTab('download'))
+  themeToggleBtn?.addEventListener('click', () => {
+    const modes = ['system', 'light', 'dark']
+    const currentIndex = Math.max(0, modes.indexOf(state.themeMode))
+    const nextMode = modes[(currentIndex + 1) % modes.length]
+    applyThemeMode(nextMode)
+    void bridge.setThemeMode?.(nextMode).catch?.(() => {})
+  })
   onboardingPeerNameEl?.addEventListener('input', () => renderOnboarding())
   onboardingContinueBtn?.addEventListener('click', () => {
     const peerName = String(onboardingPeerNameEl?.value || '').trim()
@@ -1255,7 +1274,8 @@ function renderPeerActivity() {
   const rows = Array.isArray(state.hostPeerRows) ? state.hostPeerRows : []
   if (peerCountEl) peerCountEl.textContent = String(rows.length)
   if (!rows.length) {
-    peerActivityRowsEl.innerHTML = '<div class="muted-empty">No peers connected</div>'
+    peerActivityRowsEl.innerHTML =
+      '<div class="muted-empty" aria-label="No peers connected"><ion-icon name="person-add-outline"></ion-icon></div>'
     return
   }
   peerActivityRowsEl.innerHTML = rows
@@ -1275,7 +1295,7 @@ function renderPeerActivity() {
       const bar = joined
         ? ''
         : `<div class="activity-track"><div class="activity-fill" style="width:${progress}%"></div></div>`
-      return `<div class="row-item"><div style="min-width:0;"><div class="row-title">${escapeHtml(formatPeerLabel(row?.peerName, row?.peerHex4))}</div><div class="row-sub">${escapeHtml(String(row?.sessionName || 'Host Session'))}</div>${bar}</div><div class="controls"><span class="btn alt" style="padding:4px 8px;cursor:default;">${escapeHtml(label)}</span></div></div>`
+      return `<div class="row-item peer-activity-row"><div style="min-width:0;"><div class="row-title">${escapeHtml(formatPeerLabel(row?.peerName, row?.peerHex4))}</div><div class="row-sub">${escapeHtml(String(row?.sessionName || 'Host Session'))}</div>${bar}</div><div class="controls"><span class="btn alt" style="padding:4px 8px;cursor:default;">${escapeHtml(label)}</span></div></div>`
     })
     .join('')
 }
@@ -1366,6 +1386,10 @@ function renderActionButtons() {
     const disabled =
       !state.downloadingSelected && (!state.inviteEntries.length || state.inviteSelected.size === 0)
     downloadSelectedBtn.disabled = disabled
+    downloadSelectedBtn.setAttribute(
+      'aria-label',
+      state.downloadingSelected ? 'Cancel download' : 'Download selected'
+    )
     downloadSelectedBtn.classList.toggle('loading-cancel', state.downloadingSelected)
     downloadSelectedBtn.innerHTML = state.downloadingSelected
       ? loadingCancelMarkup()
@@ -1374,13 +1398,17 @@ function renderActionButtons() {
   if (hostsStopSelectedBtn) {
     hostsStopSelectedBtn.disabled = !state.stoppingSelectedHosts && state.selectedHosts.size === 0
     hostsStopSelectedBtn.classList.toggle('loading-cancel', state.stoppingSelectedHosts)
-    hostsStopSelectedBtn.innerHTML = state.stoppingSelectedHosts ? loadingCancelMarkup() : '⏹'
+    hostsStopSelectedBtn.innerHTML = state.stoppingSelectedHosts
+      ? loadingCancelMarkup()
+      : '<ion-icon name="stop-outline"></ion-icon>'
   }
   if (historyRehostSelectedBtn) {
     historyRehostSelectedBtn.disabled =
       !state.rehostingSelectedBulk && state.selectedHistory.size === 0
     historyRehostSelectedBtn.classList.toggle('loading-cancel', state.rehostingSelectedBulk)
-    historyRehostSelectedBtn.innerHTML = state.rehostingSelectedBulk ? loadingCancelMarkup() : '▶'
+    historyRehostSelectedBtn.innerHTML = state.rehostingSelectedBulk
+      ? loadingCancelMarkup()
+      : '<ion-icon name="play-outline"></ion-icon>'
   }
   if (sessionEditorAddFileBtn) sessionEditorAddFileBtn.disabled = state.sessionEditorApplying
   if (sessionEditorAddFolderBtn) sessionEditorAddFolderBtn.disabled = state.sessionEditorApplying
@@ -1395,8 +1423,8 @@ function renderActionButtons() {
   if (sessionEditorApplyBtn) {
     sessionEditorApplyBtn.disabled = state.sessionEditorApplying || !state.sessionEditorRefs.length
     sessionEditorApplyBtn.innerHTML = state.sessionEditorApplying
-      ? '<span class="mini-spinner"></span> Applying...'
-      : 'Apply Changes'
+      ? '<span class="mini-spinner"></span>'
+      : '<ion-icon name="checkmark-outline"></ion-icon>'
   }
 }
 
@@ -1414,6 +1442,9 @@ function renderSessionEditor() {
       state.sessionEditorMode === 'active' ? 'active host session' : 'saved history session'
     sessionEditorSubEl.textContent = `Edit sources for this ${modeLabel}.`
   }
+  if (sessionSourceCountEl) {
+    sessionSourceCountEl.textContent = String(state.sessionEditorRefs.length)
+  }
   if (!sessionEditorRowsEl) return
   sessionEditorRowsEl.textContent = ''
 
@@ -1427,7 +1458,8 @@ function renderSessionEditor() {
   }
 
   if (!state.sessionEditorRefs.length) {
-    sessionEditorRowsEl.innerHTML = '<div class="muted-empty">No sources in this session.</div>'
+    sessionEditorRowsEl.innerHTML =
+      '<div class="muted-empty" aria-label="No sources in this session"><ion-icon name="layers-outline"></ion-icon></div>'
     return
   }
 
@@ -1653,6 +1685,7 @@ function renderSourceMenu() {
 
 function renderSources() {
   sourcesGridEl.textContent = ''
+  if (sourceCountEl) sourceCountEl.textContent = String(state.sources.length)
   const allSelected =
     state.sources.length > 0 && state.selectedSources.size === state.sources.length
   sourceSelectToggleBtn.innerHTML = allSelected
@@ -1748,7 +1781,8 @@ function renderHosts() {
   if (activeHostsCountEl) activeHostsCountEl.textContent = String(hosts.length)
 
   if (!hosts.length) {
-    hostsRowsEl.innerHTML = '<div class="muted-empty">No active hosts.</div>'
+    hostsRowsEl.innerHTML =
+      '<div class="muted-empty" aria-label="No active hosts"><ion-icon name="git-network-outline"></ion-icon></div>'
     renderStarredHosts()
     renderActionButtons()
     return
@@ -1780,15 +1814,15 @@ function renderHosts() {
     row.innerHTML = `
       <input type="checkbox" ${selected ? 'checked' : ''} />
       <div>
-        <div class="row-title">${starred ? '<span class="star">★</span> ' : ''}${escapeHtml(parsedLabel.title)}${parsedLabel.hash ? ` <span class="host-hash-inline">(${escapeHtml(parsedLabel.hash)})</span>` : ''}</div>
+        <div class="row-title">${starred ? '<ion-icon class="star" name="star"></ion-icon> ' : ''}${escapeHtml(parsedLabel.title)}${parsedLabel.hash ? ` <span class="host-hash-inline">(${escapeHtml(parsedLabel.hash)})</span>` : ''}</div>
         ${sessionDateTime ? `<div class="host-date">${escapeHtml(sessionDateTime)}</div>` : ''}
         <div class="host-data">${formatBytes(Number(host.totalBytes || 0))} • ${hostMode}</div>
       </div>
       <div class="controls">
-        <button class="btn alt icon" data-action="edit" aria-label="Edit" title="Edit">✎</button>
-        <button class="btn alt icon" data-action="copy" aria-label="Copy" title="Copy">${isCopyFeedbackActive(`host:${invite}`) ? '✓' : '⧉'}</button>
-        <button class="btn alt icon" data-action="star" aria-label="${starred ? 'Unstar' : 'Star'}" title="${starred ? 'Unstar' : 'Star'}">${starred ? '★' : '☆'}</button>
-        <button class="btn warn icon" data-action="stop" aria-label="Stop" title="Stop" ${isStopping ? 'disabled' : ''}>${isStopping ? '<span class="mini-spinner"></span>' : '⏹'}</button>
+        <button class="btn alt icon" data-action="edit" aria-label="Edit" title="Edit"><ion-icon name="pencil-outline"></ion-icon></button>
+        <button class="btn alt icon" data-action="copy" aria-label="Copy" title="Copy">${isCopyFeedbackActive(`host:${invite}`) ? '<ion-icon name="checkmark-outline"></ion-icon>' : '<ion-icon name="copy-outline"></ion-icon>'}</button>
+        <button class="btn alt icon" data-action="star" aria-label="${starred ? 'Unstar' : 'Star'}" title="${starred ? 'Unstar' : 'Star'}"><ion-icon name="${starred ? 'star' : 'star-outline'}"></ion-icon></button>
+        <button class="btn warn icon" data-action="stop" aria-label="Stop" title="Stop" ${isStopping ? 'disabled' : ''}>${isStopping ? '<span class="mini-spinner"></span>' : '<ion-icon name="stop-outline"></ion-icon>'}</button>
       </div>
     `
     hostsRowsEl.appendChild(row)
@@ -1803,7 +1837,8 @@ function renderStarredHosts() {
   const starredInvites = Array.from(state.starredHosts)
   if (starredCountEl) starredCountEl.textContent = String(starredInvites.length)
   if (!starredInvites.length) {
-    starredRowsEl.innerHTML = '<div class="muted-empty">No starred hosts.</div>'
+    starredRowsEl.innerHTML =
+      '<div class="muted-empty" aria-label="No starred hosts"><ion-icon name="star-outline"></ion-icon></div>'
     return
   }
 
@@ -1836,9 +1871,9 @@ function renderStarredHosts() {
         ? state.selectedHistory.has(String(historyItem.id || ''))
         : false
     const primaryActionHtml = canStop
-      ? `<button class="btn warn icon" data-action="stop" aria-label="Stop" title="Stop" ${isStopping ? 'disabled' : ''}>${isStopping ? '<span class="mini-spinner"></span>' : '⏹'}</button>`
+      ? `<button class="btn warn icon" data-action="stop" aria-label="Stop" title="Stop" ${isStopping ? 'disabled' : ''}>${isStopping ? '<span class="mini-spinner"></span>' : '<ion-icon name="stop-outline"></ion-icon>'}</button>`
       : canRehost
-        ? `<button class="btn alt icon" data-action="rehost" data-history-id="${escapeHtmlAttr(String(historyItem.id || ''))}" aria-label="Re-host" title="Re-host" ${isRehosting ? 'disabled' : ''}>${isRehosting ? '<span class="mini-spinner"></span>' : '▶'}</button>`
+        ? `<button class="btn alt icon" data-action="rehost" data-history-id="${escapeHtmlAttr(String(historyItem.id || ''))}" aria-label="Re-host" title="Re-host" ${isRehosting ? 'disabled' : ''}>${isRehosting ? '<span class="mini-spinner"></span>' : '<ion-icon name="play-outline"></ion-icon>'}</button>`
         : ''
 
     const row = document.createElement('div')
@@ -1847,15 +1882,15 @@ function renderStarredHosts() {
     row.dataset.shareInvite = shareInvite
     if (historyItem?.id) row.dataset.historyId = String(historyItem.id || '')
     row.innerHTML = `
-      <div class="star">★</div>
+      <div class="star"><ion-icon name="star"></ion-icon></div>
       <div>
         <div class="row-title">${escapeHtml(label)}</div>
         <div class="host-data">${escapeHtml(size)}</div>
       </div>
       <div class="controls">
-        <button class="btn alt icon" data-action="edit" aria-label="Edit" title="Edit">✎</button>
-        <button class="btn alt icon" data-action="copy" aria-label="Copy" title="Copy">${isCopyFeedbackActive(`starred:${invite}`) ? '✓' : '⧉'}</button>
-        <button class="btn alt icon" data-action="unstar" aria-label="Unstar" title="Unstar">★</button>
+        <button class="btn alt icon" data-action="edit" aria-label="Edit" title="Edit"><ion-icon name="pencil-outline"></ion-icon></button>
+        <button class="btn alt icon" data-action="copy" aria-label="Copy" title="Copy">${isCopyFeedbackActive(`starred:${invite}`) ? '<ion-icon name="checkmark-outline"></ion-icon>' : '<ion-icon name="copy-outline"></ion-icon>'}</button>
+        <button class="btn alt icon" data-action="unstar" aria-label="Unstar" title="Unstar"><ion-icon name="star"></ion-icon></button>
         ${primaryActionHtml}
       </div>
     `
@@ -1874,7 +1909,8 @@ function renderHistory() {
   if (historyCountEl) historyCountEl.textContent = String(state.hostHistory.length)
 
   if (!state.hostHistory.length) {
-    historyRowsEl.innerHTML = '<div class="muted-empty">No host history yet.</div>'
+    historyRowsEl.innerHTML =
+      '<div class="muted-empty" aria-label="No host history"><ion-icon name="time-outline"></ion-icon></div>'
     renderActionButtons()
     return
   }
@@ -1904,10 +1940,10 @@ function renderHistory() {
         <div class="row-sub">${sourceSummary}</div>
       </div>
       <div class="controls">
-        <button class="btn alt icon" data-action="edit" aria-label="Edit" title="Edit">✎</button>
-        <button class="btn alt icon" data-action="copy" aria-label="Copy" title="Copy" ${invite ? '' : 'disabled'}>${isCopyFeedbackActive(`history:${String(item.id || '')}`) ? '✓' : '⧉'}</button>
-        <button class="btn alt icon" data-action="star" aria-label="${isStarred ? 'Unstar' : 'Star'}" title="${isStarred ? 'Unstar' : 'Star'}" ${invite ? '' : 'disabled'}>${isStarred ? '★' : '☆'}</button>
-        <button class="btn alt icon" data-action="rehost" aria-label="Re-host" title="Re-host" ${isRehosting ? 'disabled' : ''}>${isRehosting ? '<span class="mini-spinner"></span>' : '▶'}</button>
+        <button class="btn alt icon" data-action="edit" aria-label="Edit" title="Edit"><ion-icon name="pencil-outline"></ion-icon></button>
+        <button class="btn alt icon" data-action="copy" aria-label="Copy" title="Copy" ${invite ? '' : 'disabled'}>${isCopyFeedbackActive(`history:${String(item.id || '')}`) ? '<ion-icon name="checkmark-outline"></ion-icon>' : '<ion-icon name="copy-outline"></ion-icon>'}</button>
+        <button class="btn alt icon" data-action="star" aria-label="${isStarred ? 'Unstar' : 'Star'}" title="${isStarred ? 'Unstar' : 'Star'}" ${invite ? '' : 'disabled'}><ion-icon name="${isStarred ? 'star' : 'star-outline'}"></ion-icon></button>
+        <button class="btn alt icon" data-action="rehost" aria-label="Re-host" title="Re-host" ${isRehosting ? 'disabled' : ''}>${isRehosting ? '<span class="mini-spinner"></span>' : '<ion-icon name="play-outline"></ion-icon>'}</button>
         <button class="btn alt icon icon-danger" data-action="remove" aria-label="Remove" title="Remove">${BIN_ICON}</button>
       </div>
     `
@@ -1936,6 +1972,7 @@ function renderHistorySourceSummary(sourceRefs) {
 
 function renderDriveRows() {
   driveRowsEl.textContent = ''
+  if (driveCountEl) driveCountEl.textContent = String(state.inviteEntries.length)
 
   const allSelected =
     state.inviteEntries.length > 0 && state.inviteSelected.size === state.inviteEntries.length
@@ -1945,7 +1982,8 @@ function renderDriveRows() {
 
   if (!state.inviteEntries.length) {
     const tr = document.createElement('tr')
-    tr.innerHTML = '<td colspan="5" class="small">No drive loaded.</td>'
+    tr.innerHTML =
+      '<td colspan="5"><div class="muted-empty" aria-label="No drive loaded"><ion-icon name="folder-open-outline"></ion-icon></div></td>'
     driveRowsEl.appendChild(tr)
     checkAllDriveEl.checked = false
     checkAllDriveEl.indeterminate = false
@@ -4148,7 +4186,48 @@ function clearWorkerActivityBar(id) {
 }
 
 function renderWorkerActivityBars() {
-  return
+  if (!downloadProgressEl) return
+  const bar = workerActivityBars.get('download-selected')
+  if (!bar) {
+    downloadProgressEl.classList.add('hidden')
+    downloadProgressEl.setAttribute('aria-busy', 'false')
+    if (downloadProgressTrackEl) {
+      downloadProgressTrackEl.setAttribute('aria-valuenow', '0')
+      downloadProgressTrackEl.setAttribute('aria-valuetext', '0% complete')
+    }
+    if (downloadProgressFillEl) downloadProgressFillEl.style.width = '0%'
+    return
+  }
+
+  const done = Number(bar.done || 0)
+  const total = Math.max(1, Number(bar.total || 1))
+  const percent = Math.max(0, Math.min(100, Math.round((done / total) * 100)))
+  const amount =
+    bar.displayMode === 'bytes'
+      ? `${formatBytes(done)} / ${formatBytes(total)}`
+      : `${Math.round(done)} / ${Math.round(total)} files`
+
+  downloadProgressEl.classList.remove('hidden')
+  downloadProgressEl.setAttribute('aria-busy', 'true')
+  if (downloadProgressLabelEl) downloadProgressLabelEl.textContent = bar.label
+  if (downloadProgressValueEl) downloadProgressValueEl.textContent = `${percent}%`
+  if (downloadProgressSubtitleEl) {
+    downloadProgressSubtitleEl.textContent = bar.subtitle || 'Preparing files...'
+  }
+  if (downloadProgressAmountEl) downloadProgressAmountEl.textContent = amount
+  if (downloadProgressEtaEl) {
+    downloadProgressEtaEl.textContent =
+      percent >= 100
+        ? 'Download complete'
+        : Number.isFinite(Number(bar.etaMs)) && Number(bar.etaMs) > 0
+          ? `About ${formatEta(Number(bar.etaMs))} remaining`
+          : 'Calculating time remaining...'
+  }
+  if (downloadProgressTrackEl) {
+    downloadProgressTrackEl.setAttribute('aria-valuenow', String(percent))
+    downloadProgressTrackEl.setAttribute('aria-valuetext', `${percent}% complete`)
+  }
+  if (downloadProgressFillEl) downloadProgressFillEl.style.width = `${percent}%`
 }
 
 function applyThemeMode(mode) {
@@ -4158,6 +4237,21 @@ function applyThemeMode(mode) {
   state.themeMode = raw === 'dark' || raw === 'light' ? raw : 'system'
   const next = state.themeMode === 'system' ? resolveSystemTheme() : state.themeMode
   document.body.setAttribute('data-theme', next)
+  renderThemeToggle()
+}
+
+function renderThemeToggle() {
+  if (!themeToggleBtn) return
+  const iconName =
+    state.themeMode === 'dark'
+      ? 'moon-outline'
+      : state.themeMode === 'light'
+        ? 'sunny-outline'
+        : 'contrast-outline'
+  const label = `${state.themeMode[0].toUpperCase()}${state.themeMode.slice(1)} theme`
+  themeToggleBtn.innerHTML = `<ion-icon name="${iconName}"></ion-icon>`
+  themeToggleBtn.setAttribute('aria-label', label)
+  themeToggleBtn.setAttribute('title', label)
 }
 
 function resolveSystemTheme() {
@@ -4310,6 +4404,16 @@ function formatBytes(value = 0) {
   if (n < 1024) return `${n} B`
   if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`
   return `${(n / (1024 * 1024)).toFixed(1)} MB`
+}
+
+function formatEta(ms) {
+  const totalSeconds = Math.max(0, Math.ceil(Number(ms || 0) / 1000))
+  const minutes = Math.floor(totalSeconds / 60)
+  const seconds = totalSeconds % 60
+  if (minutes <= 0) return `${seconds}s`
+  if (minutes < 60) return `${minutes}m ${seconds}s`
+  const hours = Math.floor(minutes / 60)
+  return `${hours}h ${minutes % 60}m`
 }
 
 function estimateRemainingMs(done, total, startedAtMs) {
