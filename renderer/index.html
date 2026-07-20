@@ -1098,67 +1098,60 @@
         box-shadow: none;
         scrollbar-color: color-mix(in srgb, var(--muted) 45%, transparent) transparent;
       }
-      .app-dock {
-        position: sticky;
-        z-index: 40;
+      .titlebar-drag-region {
+        display: none;
+      }
+      html[data-platform='darwin'] .titlebar-drag-region {
+        position: fixed;
+        z-index: 45;
         top: 0;
+        right: 0;
+        left: 0;
+        display: block;
+        height: 42px;
+        background: linear-gradient(
+          180deg,
+          color-mix(in srgb, var(--bg) 96%, transparent),
+          color-mix(in srgb, var(--bg) 70%, transparent) 64%,
+          transparent
+        );
+        -webkit-app-region: drag;
+      }
+      html[data-platform='darwin'] .app {
+        padding-top: 52px;
+      }
+      html[data-platform='darwin'] .app-dock {
+        top: auto;
+      }
+      html[data-platform='darwin'] button,
+      html[data-platform='darwin'] input {
+        -webkit-app-region: no-drag;
+      }
+      .app-dock {
+        position: relative;
+        z-index: 40;
+        top: auto;
         display: grid;
-        width: min(560px, 100%);
-        min-height: 62px;
-        margin: 0 auto 18px;
-        padding: 8px;
+        width: min(440px, 100%);
+        min-height: 58px;
+        margin: 0 auto 16px;
+        padding: 7px;
         border: 1px solid color-mix(in srgb, var(--line) 88%, transparent);
-        border-radius: 22px;
-        grid-template-columns: 46px 1fr 46px;
+        border-radius: 19px;
+        grid-template-columns: minmax(0, 1fr) 42px;
         align-items: center;
-        gap: 10px;
+        gap: 8px;
         background: color-mix(in srgb, var(--card) 92%, transparent);
         box-shadow: var(--shadow-soft);
         backdrop-filter: blur(22px);
       }
-      .brand-sigil {
-        position: relative;
-        display: grid;
-        width: 42px;
-        height: 42px;
-        overflow: hidden;
-        border-radius: 14px;
-        place-items: center;
-        background: #123326;
-        box-shadow: inset 0 0 0 1px rgba(197, 255, 84, 0.18);
-      }
-      .brand-sigil::before {
-        width: 20px;
-        height: 20px;
-        border: 2px solid var(--brand);
-        border-radius: 50%;
-        content: '';
-      }
-      .brand-sigil::after,
-      .brand-sigil span::before,
-      .brand-sigil span::after {
-        position: absolute;
-        width: 6px;
-        height: 6px;
-        border-radius: 50%;
-        background: var(--brand);
-        box-shadow: 0 0 12px color-mix(in srgb, var(--brand) 55%, transparent);
-        content: '';
-      }
-      .brand-sigil::after {
-        top: 8px;
-        right: 9px;
-      }
-      .brand-sigil span::before {
-        right: 8px;
-        bottom: 9px;
-      }
-      .brand-sigil span::after {
-        bottom: 8px;
-        left: 9px;
-      }
-      .modal-sigil {
-        margin: 0 auto 8px;
+      .onboarding-logo {
+        display: block;
+        width: 112px;
+        height: 112px;
+        margin: 0 auto 2px;
+        object-fit: contain;
+        filter: drop-shadow(0 16px 24px rgba(0, 0, 0, 0.2));
       }
       .mode-switch {
         margin: 0;
@@ -1234,10 +1227,11 @@
       .layout {
         margin-top: 0;
         grid-template-columns: minmax(0, 1.45fr) minmax(320px, 0.75fr);
+        align-items: stretch;
         gap: 14px;
       }
       .right-col {
-        gap: 14px;
+        display: block;
       }
       .panel,
       .hero {
@@ -1250,9 +1244,28 @@
       .panel {
         padding: 14px;
       }
-      .compact-panel {
+      .activity-panel {
+        overflow: hidden;
+        padding: 0;
+      }
+      .activity-section {
         padding: 12px;
-        border-radius: 17px;
+      }
+      .activity-section + .activity-section {
+        border-top: 1px solid color-mix(in srgb, var(--line) 82%, transparent);
+      }
+      .activity-section .panel-head {
+        min-height: 34px;
+        margin-bottom: 7px;
+      }
+      .activity-section .muted-empty {
+        min-height: 52px;
+        border: 0;
+        background: transparent;
+      }
+      .activity-section .muted-empty ion-icon {
+        font-size: 21px;
+        opacity: 0.7;
       }
       .source-panel {
         min-height: 430px;
@@ -1621,6 +1634,262 @@
       .shutdown-spinner {
         border-top-color: var(--brand);
       }
+      .app-dock {
+        border-color: color-mix(in srgb, var(--line) 72%, rgba(255, 255, 255, 0.22));
+        background: linear-gradient(
+          180deg,
+          color-mix(in srgb, var(--card) 96%, white 4%),
+          color-mix(in srgb, var(--card) 91%, transparent)
+        );
+        box-shadow:
+          0 20px 54px rgba(3, 14, 9, 0.17),
+          inset 0 1px 0 color-mix(in srgb, white 10%, transparent);
+      }
+      body[data-theme='light'] .app-dock {
+        box-shadow:
+          0 20px 54px rgba(31, 49, 37, 0.11),
+          inset 0 1px 0 rgba(255, 255, 255, 0.9);
+      }
+      .startup-card {
+        border-color: #2e5946;
+        color: #f3f8f0;
+        background:
+          radial-gradient(circle at 88% 0, rgba(197, 255, 84, 0.13), transparent 36%),
+          linear-gradient(145deg, #102c21, #091b14 74%);
+        box-shadow: 0 28px 70px rgba(3, 14, 9, 0.3);
+      }
+      .startup-card .startup-message {
+        color: #8fa198;
+      }
+      #onboarding-modal {
+        overflow: auto;
+        padding: 28px;
+      }
+      #onboarding-modal .modal-backdrop {
+        background: color-mix(in srgb, var(--bg) 84%, transparent);
+        backdrop-filter: blur(26px) saturate(120%);
+      }
+      #onboarding-modal .modal-card {
+        display: grid;
+        width: min(420px, calc(100vw - 32px));
+        max-height: calc(100vh - 64px);
+        overflow: auto;
+        padding: 28px;
+        border-color: color-mix(in srgb, var(--brand) 24%, var(--line));
+        border-radius: 28px;
+        gap: 14px;
+        color: var(--text);
+        background:
+          radial-gradient(
+            circle at 88% 0,
+            color-mix(in srgb, var(--brand) 13%, transparent),
+            transparent 38%
+          ),
+          color-mix(in srgb, var(--card) 96%, var(--bg));
+        box-shadow:
+          0 30px 80px rgba(3, 14, 9, 0.28),
+          inset 0 1px 0 color-mix(in srgb, white 8%, transparent);
+      }
+      #onboarding-modal .modal-title,
+      #onboarding-modal .modal-packaging,
+      #onboarding-modal .modal-actions {
+        margin: 0;
+      }
+      #onboarding-modal .modal-packaging {
+        border-color: var(--line);
+        background: color-mix(in srgb, var(--bg) 48%, transparent);
+      }
+      #onboarding-modal .theme-choices label {
+        border-color: var(--line);
+        color: var(--muted);
+      }
+      #onboarding-modal .input {
+        width: 100%;
+        min-height: 50px;
+        border-color: var(--line);
+        border-radius: 16px;
+        color: var(--text);
+        background: color-mix(in srgb, var(--bg) 54%, transparent);
+        text-align: center;
+      }
+      #onboarding-modal .modal-actions {
+        justify-content: flex-end;
+      }
+      #onboarding-continue {
+        width: 50px;
+        min-width: 50px;
+        height: 50px;
+      }
+      .transfer-stage {
+        position: relative;
+        overflow: hidden;
+        padding: 0;
+        border-color: #2e5946;
+        color: #f3f8f0;
+        background:
+          radial-gradient(circle at 94% 0, rgba(197, 255, 84, 0.11), transparent 32%),
+          linear-gradient(145deg, #102c21, #091b14 74%);
+        box-shadow:
+          0 22px 54px rgba(3, 14, 9, 0.22),
+          inset 0 1px 0 rgba(231, 255, 223, 0.055);
+        isolation: isolate;
+      }
+      .transfer-stage::before {
+        display: none;
+      }
+      .transfer-stage-body {
+        position: relative;
+        z-index: 1;
+        padding: 16px;
+      }
+      .source-panel .transfer-stage-body {
+        display: flex;
+        min-height: 352px;
+        flex: 1;
+        flex-direction: column;
+      }
+      .source-panel {
+        min-height: 354px;
+      }
+      .transfer-stage .panel-head {
+        margin-bottom: 12px;
+      }
+      .transfer-stage .section-bar > span:first-child {
+        border-color: rgba(197, 255, 84, 0.34);
+        color: #c5ff54;
+        background: rgba(164, 236, 44, 0.08);
+      }
+      .transfer-stage .section-count {
+        border-color: rgba(221, 244, 213, 0.13);
+        color: #a4b8ac;
+        background: rgba(255, 255, 255, 0.04);
+      }
+      .transfer-stage .btn.alt,
+      body[data-theme='light'] .transfer-stage .btn.alt {
+        border-color: rgba(221, 244, 213, 0.14);
+        color: #f3f8f0;
+        background: rgba(255, 255, 255, 0.055);
+      }
+      .transfer-stage .btn.alt:not(:disabled):hover {
+        border-color: rgba(197, 255, 84, 0.36);
+        background: rgba(197, 255, 84, 0.08);
+      }
+      .transfer-stage .source-grid {
+        min-height: 268px;
+        flex: 1;
+        align-content: start;
+        grid-auto-rows: minmax(132px, max-content);
+      }
+      .transfer-stage .source-card {
+        border-color: rgba(221, 244, 213, 0.12);
+        color: #f3f8f0;
+        background: rgba(255, 255, 255, 0.045);
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.025);
+      }
+      .transfer-stage .source-card:hover {
+        border-color: rgba(197, 255, 84, 0.36);
+        background: rgba(197, 255, 84, 0.065);
+      }
+      .transfer-stage .source-card.selected {
+        border-color: rgba(197, 255, 84, 0.66);
+        background: rgba(197, 255, 84, 0.09);
+        box-shadow: inset 0 0 0 1px rgba(197, 255, 84, 0.17);
+      }
+      .transfer-stage .source-preview,
+      .transfer-stage .drive-preview-shell {
+        border-color: rgba(197, 255, 84, 0.2);
+        color: #a9bcb1;
+        background: rgba(164, 236, 44, 0.055);
+      }
+      body[data-theme='light'] .transfer-stage .source-preview,
+      body[data-theme='light'] .transfer-stage .drive-preview-shell {
+        color: #a9bcb1;
+        background: rgba(164, 236, 44, 0.055);
+      }
+      .transfer-stage .source-name,
+      .transfer-stage .row-title,
+      .transfer-stage .table {
+        color: #f3f8f0;
+      }
+      .transfer-stage .source-path,
+      .transfer-stage .source-kind,
+      .transfer-stage .row-sub {
+        color: #8fa198;
+      }
+      .transfer-stage .source-empty-state,
+      .transfer-stage .muted-empty {
+        border-color: rgba(197, 255, 84, 0.2);
+        color: #8fa198;
+        background:
+          radial-gradient(circle at 50% 50%, rgba(197, 255, 84, 0.07), transparent 34%),
+          rgba(255, 255, 255, 0.025);
+      }
+      .source-panel .source-empty-state {
+        min-height: 268px;
+      }
+      .transfer-stage .source-empty-state ion-icon {
+        display: grid;
+        width: 68px;
+        height: 68px;
+        border: 1px solid rgba(197, 255, 84, 0.34);
+        border-radius: 22px;
+        place-items: center;
+        color: #c5ff54;
+        background: rgba(164, 236, 44, 0.075);
+        box-shadow: 0 0 34px rgba(164, 236, 44, 0.08);
+      }
+      .join-panel {
+        width: min(760px, 100%);
+        margin: 0 auto;
+        border-radius: 19px;
+        box-shadow:
+          0 18px 46px rgba(3, 14, 9, 0.2),
+          inset 0 1px 0 rgba(231, 255, 223, 0.055);
+      }
+      .join-panel .row {
+        gap: 10px;
+      }
+      .join-panel .input {
+        min-height: 48px;
+        border-radius: 14px;
+      }
+      .drive-stage {
+        width: min(1080px, 100%);
+        margin: 0 auto;
+      }
+      .drive-stage .table th {
+        color: #8fa198;
+      }
+      .drive-stage .table td {
+        border-color: rgba(221, 244, 213, 0.11);
+        color: #f3f8f0;
+        background: rgba(255, 255, 255, 0.04);
+      }
+      .drive-stage .table tr:hover td {
+        background: rgba(197, 255, 84, 0.06);
+      }
+      .drive-stage .download-progress {
+        border-color: rgba(197, 255, 84, 0.31);
+        color: #f3f8f0;
+        background: rgba(255, 255, 255, 0.05);
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.025);
+      }
+      .drive-stage .download-progress-meta,
+      .drive-stage .download-progress-eta {
+        color: #8fa198;
+      }
+      .drive-stage .activity-track,
+      body[data-theme='light'] .drive-stage .activity-track {
+        background: rgba(255, 255, 255, 0.1);
+      }
+      .activity-panel,
+      .history-panel {
+        position: relative;
+        overflow: hidden;
+        box-shadow:
+          0 15px 38px rgba(3, 14, 9, 0.11),
+          inset 0 1px 0 color-mix(in srgb, white 7%, transparent);
+      }
       @keyframes workspaceIn {
         from {
           opacity: 0;
@@ -1629,6 +1898,11 @@
         to {
           opacity: 1;
           transform: translateY(0);
+        }
+      }
+      @media (min-width: 1081px) {
+        .activity-panel {
+          height: 100%;
         }
       }
       @media (max-width: 900px) {
@@ -1640,6 +1914,9 @@
         }
         .source-panel {
           min-height: auto;
+        }
+        .source-panel .transfer-stage-body {
+          min-height: 290px;
         }
         .source-grid {
           min-height: 240px;
@@ -1659,12 +1936,44 @@
           padding: 11px;
           border-radius: 16px;
         }
+        .transfer-stage {
+          padding: 0;
+          border-radius: 19px;
+        }
+        .transfer-stage-body {
+          padding: 13px;
+        }
         .input {
           min-width: 0;
         }
         .table th:nth-child(4),
         .table td:nth-child(4) {
           display: none;
+        }
+      }
+      @media (max-height: 620px) {
+        #onboarding-modal {
+          align-items: flex-start;
+          padding: 48px 16px 16px;
+        }
+        #onboarding-modal .modal-card {
+          max-height: calc(100vh - 64px);
+          padding: 18px;
+          border-radius: 22px;
+          gap: 10px;
+        }
+        .onboarding-logo {
+          width: 78px;
+          height: 78px;
+        }
+        #onboarding-modal .theme-choices label,
+        #onboarding-modal .input {
+          min-height: 42px;
+        }
+        #onboarding-continue {
+          width: 44px;
+          min-width: 44px;
+          height: 44px;
         }
       }
       @media (prefers-reduced-motion: reduce) {
@@ -1679,9 +1988,9 @@
     </style>
   </head>
   <body>
+    <div class="titlebar-drag-region" aria-hidden="true"></div>
     <main class="app">
       <header class="app-dock">
-        <div class="brand-sigil" aria-hidden="true"><span></span></div>
         <div class="mode-switch">
           <div class="tabs">
             <button id="tab-upload" class="tab-btn active" aria-label="Upload" title="Upload">
@@ -1722,100 +2031,104 @@
       <section id="upload-page" class="tab-page">
         <div id="upload-main-content">
           <section class="layout">
-            <article class="panel source-panel">
-              <div class="panel-head">
-                <div class="section-bar" aria-label="Local sources">
-                  <span><ion-icon name="documents-outline"></ion-icon></span>
-                  <span id="source-count" class="section-count">0</span>
-                </div>
-                <div class="controls">
-                  <span class="menu-wrap">
-                    <button id="source-add" class="btn icon-square" aria-label="Add source">
-                      <ion-icon name="add-outline"></ion-icon>
-                    </button>
-                    <div id="source-add-menu" class="menu hidden">
-                      <button id="add-file-action" aria-label="Add files" title="Add files">
-                        <ion-icon name="document-outline"></ion-icon>
-                      </button>
-                      <button id="add-folder-action" aria-label="Add folder" title="Add folder">
-                        <ion-icon name="folder-open-outline"></ion-icon>
-                      </button>
-                    </div>
-                  </span>
-                  <button
-                    id="source-select-toggle"
-                    class="btn alt icon-square"
-                    aria-label="Select all sources"
-                  >
-                    <ion-icon name="square-outline"></ion-icon>
-                  </button>
-                  <button
-                    id="source-remove-all"
-                    class="btn alt icon icon-danger icon-square"
-                    title="Clear Selected"
-                    aria-label="Clear Selected"
-                  >
-                    <span class="mini-trash" aria-hidden="true"
-                      ><span class="mini-trash-lid"></span
-                      ><span class="mini-trash-body"
-                        ><span class="mini-trash-line"></span
-                        ><span class="mini-trash-line"></span></span
-                    ></span>
-                  </button>
-                  <button id="host-selected" class="btn icon-square" aria-label="Host selected">
-                    <ion-icon name="rocket-outline"></ion-icon>
-                  </button>
-                </div>
-              </div>
-              <div id="sources-grid" class="source-grid"></div>
-            </article>
-
-            <div class="right-col">
-              <article class="panel compact-panel">
+            <article class="panel source-panel transfer-stage">
+              <div class="transfer-stage-body">
                 <div class="panel-head">
-                  <div class="section-bar">
-                    <span><ion-icon name="person-outline"></ion-icon></span
-                    ><span id="peer-count" class="section-count">0</span>
-                  </div>
-                </div>
-                <div id="peer-activity-rows" class="rows"></div>
-              </article>
-
-              <article class="panel compact-panel">
-                <div class="panel-head section-inline">
-                  <div class="section-bar">
-                    <span><ion-icon name="git-network-outline"></ion-icon></span
-                    ><span id="active-hosts-count" class="section-count">0</span>
+                  <div class="section-bar" aria-label="Local sources">
+                    <span><ion-icon name="documents-outline"></ion-icon></span>
+                    <span id="source-count" class="section-count">0</span>
                   </div>
                   <div class="controls">
+                    <span class="menu-wrap">
+                      <button id="source-add" class="btn icon-square" aria-label="Add source">
+                        <ion-icon name="add-outline"></ion-icon>
+                      </button>
+                      <div id="source-add-menu" class="menu hidden">
+                        <button id="add-file-action" aria-label="Add files" title="Add files">
+                          <ion-icon name="document-outline"></ion-icon>
+                        </button>
+                        <button id="add-folder-action" aria-label="Add folder" title="Add folder">
+                          <ion-icon name="folder-open-outline"></ion-icon>
+                        </button>
+                      </div>
+                    </span>
                     <button
-                      id="hosts-select-toggle"
+                      id="source-select-toggle"
                       class="btn alt icon-square"
-                      aria-label="Select all hosts"
+                      aria-label="Select all sources"
                     >
                       <ion-icon name="square-outline"></ion-icon>
                     </button>
                     <button
-                      id="hosts-stop-selected"
-                      class="btn warn icon icon-square"
-                      title="Stop Selected"
-                      aria-label="Stop Selected"
+                      id="source-remove-all"
+                      class="btn alt icon icon-danger icon-square"
+                      title="Clear Selected"
+                      aria-label="Clear Selected"
                     >
-                      <ion-icon name="stop-outline"></ion-icon>
+                      <span class="mini-trash" aria-hidden="true"
+                        ><span class="mini-trash-lid"></span
+                        ><span class="mini-trash-body"
+                          ><span class="mini-trash-line"></span
+                          ><span class="mini-trash-line"></span></span
+                      ></span>
+                    </button>
+                    <button id="host-selected" class="btn icon-square" aria-label="Host selected">
+                      <ion-icon name="rocket-outline"></ion-icon>
                     </button>
                   </div>
                 </div>
-                <div id="hosts-rows" class="rows"></div>
-              </article>
+                <div id="sources-grid" class="source-grid"></div>
+              </div>
+            </article>
 
-              <article class="panel compact-panel">
-                <div class="panel-head">
-                  <div class="section-bar">
-                    <span><ion-icon name="star-outline"></ion-icon></span
-                    ><span id="starred-count" class="section-count">0</span>
+            <div class="right-col">
+              <article class="panel activity-panel">
+                <section class="activity-section">
+                  <div class="panel-head">
+                    <div class="section-bar">
+                      <span><ion-icon name="person-outline"></ion-icon></span
+                      ><span id="peer-count" class="section-count">0</span>
+                    </div>
                   </div>
-                </div>
-                <div id="starred-rows" class="rows"></div>
+                  <div id="peer-activity-rows" class="rows"></div>
+                </section>
+
+                <section class="activity-section">
+                  <div class="panel-head section-inline">
+                    <div class="section-bar">
+                      <span><ion-icon name="git-network-outline"></ion-icon></span
+                      ><span id="active-hosts-count" class="section-count">0</span>
+                    </div>
+                    <div class="controls">
+                      <button
+                        id="hosts-select-toggle"
+                        class="btn alt icon-square"
+                        aria-label="Select all hosts"
+                      >
+                        <ion-icon name="square-outline"></ion-icon>
+                      </button>
+                      <button
+                        id="hosts-stop-selected"
+                        class="btn warn icon icon-square"
+                        title="Stop Selected"
+                        aria-label="Stop Selected"
+                      >
+                        <ion-icon name="stop-outline"></ion-icon>
+                      </button>
+                    </div>
+                  </div>
+                  <div id="hosts-rows" class="rows"></div>
+                </section>
+
+                <section class="activity-section">
+                  <div class="panel-head">
+                    <div class="section-bar">
+                      <span><ion-icon name="star-outline"></ion-icon></span
+                      ><span id="starred-count" class="section-count">0</span>
+                    </div>
+                  </div>
+                  <div id="starred-rows" class="rows"></div>
+                </section>
               </article>
             </div>
           </section>
@@ -1930,7 +2243,7 @@
       </section>
 
       <section id="download-page" class="tab-page hidden">
-        <section class="hero">
+        <section class="hero join-panel">
           <div class="row">
             <input id="invite-input" class="input" placeholder="Paste peardrops://invite..." />
             <button id="view-drive" class="btn alt icon-square" aria-label="Join drive">
@@ -1940,77 +2253,79 @@
         </section>
 
         <section class="download-content">
-          <article class="panel">
-            <div class="panel-head">
-              <div class="section-bar" aria-label="Drive files">
-                <span><ion-icon name="folder-open-outline"></ion-icon></span>
-                <span id="drive-count" class="section-count">0</span>
-              </div>
-              <div class="controls">
-                <button
-                  id="download-selected"
-                  class="btn icon-square"
-                  aria-label="Download selected"
-                >
-                  <ion-icon name="download-outline"></ion-icon>
-                </button>
-                <button
-                  id="drive-select-toggle"
-                  class="btn alt icon-square"
-                  aria-label="Select all drive files"
-                >
-                  <ion-icon name="square-outline"></ion-icon>
-                </button>
-              </div>
-            </div>
-            <div
-              id="download-progress"
-              class="download-progress hidden"
-              role="status"
-              aria-live="polite"
-              aria-busy="false"
-            >
-              <div class="download-progress-head">
-                <span id="download-progress-label" class="download-progress-label"
-                  >Downloading selected files...</span
-                >
-                <span id="download-progress-value" class="download-progress-value">0%</span>
-              </div>
-              <div class="download-progress-meta">
-                <span id="download-progress-subtitle" class="download-progress-subtitle"
-                  >Preparing files...</span
-                >
-                <span id="download-progress-amount" class="download-progress-amount">0 B</span>
+          <article class="panel transfer-stage drive-stage">
+            <div class="transfer-stage-body">
+              <div class="panel-head">
+                <div class="section-bar" aria-label="Drive files">
+                  <span><ion-icon name="folder-open-outline"></ion-icon></span>
+                  <span id="drive-count" class="section-count">0</span>
+                </div>
+                <div class="controls">
+                  <button
+                    id="download-selected"
+                    class="btn icon-square"
+                    aria-label="Download selected"
+                  >
+                    <ion-icon name="download-outline"></ion-icon>
+                  </button>
+                  <button
+                    id="drive-select-toggle"
+                    class="btn alt icon-square"
+                    aria-label="Select all drive files"
+                  >
+                    <ion-icon name="square-outline"></ion-icon>
+                  </button>
+                </div>
               </div>
               <div
-                id="download-progress-track"
-                class="activity-track"
-                role="progressbar"
-                aria-label="Download progress"
-                aria-valuemin="0"
-                aria-valuemax="100"
-                aria-valuenow="0"
+                id="download-progress"
+                class="download-progress hidden"
+                role="status"
+                aria-live="polite"
+                aria-busy="false"
               >
-                <div id="download-progress-fill" class="activity-fill"></div>
+                <div class="download-progress-head">
+                  <span id="download-progress-label" class="download-progress-label"
+                    >Downloading selected files...</span
+                  >
+                  <span id="download-progress-value" class="download-progress-value">0%</span>
+                </div>
+                <div class="download-progress-meta">
+                  <span id="download-progress-subtitle" class="download-progress-subtitle"
+                    >Preparing files...</span
+                  >
+                  <span id="download-progress-amount" class="download-progress-amount">0 B</span>
+                </div>
+                <div
+                  id="download-progress-track"
+                  class="activity-track"
+                  role="progressbar"
+                  aria-label="Download progress"
+                  aria-valuemin="0"
+                  aria-valuemax="100"
+                  aria-valuenow="0"
+                >
+                  <div id="download-progress-fill" class="activity-fill"></div>
+                </div>
+                <p id="download-progress-eta" class="download-progress-eta">
+                  Calculating time remaining...
+                </p>
               </div>
-              <p id="download-progress-eta" class="download-progress-eta">
-                Calculating time remaining...
-              </p>
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th><input id="check-all-drive" type="checkbox" /></th>
+                    <th class="drive-preview-col" aria-label="Preview">
+                      <ion-icon name="image-outline"></ion-icon>
+                    </th>
+                    <th aria-label="Name"><ion-icon name="document-text-outline"></ion-icon></th>
+                    <th aria-label="Path"><ion-icon name="git-branch-outline"></ion-icon></th>
+                    <th aria-label="Size"><ion-icon name="server-outline"></ion-icon></th>
+                  </tr>
+                </thead>
+                <tbody id="drive-files"></tbody>
+              </table>
             </div>
-            <table class="table">
-              <thead>
-                <tr>
-                  <th><input id="check-all-drive" type="checkbox" /></th>
-                  <th class="drive-preview-col" aria-label="Preview">
-                    <ion-icon name="image-outline"></ion-icon>
-                  </th>
-                  <th aria-label="Name"><ion-icon name="document-text-outline"></ion-icon></th>
-                  <th aria-label="Path"><ion-icon name="git-branch-outline"></ion-icon></th>
-                  <th aria-label="Size"><ion-icon name="server-outline"></ion-icon></th>
-                </tr>
-              </thead>
-              <tbody id="drive-files"></tbody>
-            </table>
           </article>
         </section>
       </section>
@@ -2056,9 +2371,7 @@
       <section id="onboarding-modal" class="modal-root hidden">
         <div class="modal-backdrop"></div>
         <div class="modal-card">
-          <h3 class="modal-title">
-            <span class="brand-sigil modal-sigil"><span></span></span>
-          </h3>
+          <img class="onboarding-logo" src="../assets/icons/transparent.png" alt="PearDrop" />
           <p class="sr-only">Choose your theme and set your peer name.</p>
           <div class="modal-packaging theme-choices">
             <label aria-label="System theme" title="System theme"

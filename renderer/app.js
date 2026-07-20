@@ -55,6 +55,7 @@ const BIN_ICON =
   '<span class="mini-trash" aria-hidden="true"><span class="mini-trash-lid"></span><span class="mini-trash-body"><span class="mini-trash-line"></span><span class="mini-trash-line"></span></span></span>'
 const SESSION_EDITOR_HISTORY_MARKER = '__peardropSessionEditor'
 const IS_MAC = process.platform === 'darwin'
+document.documentElement.dataset.platform = process.platform
 const SESSION_SWIPE_TRIGGER_PX = 180
 const SESSION_SWIPE_IDLE_MS = 220
 
@@ -1370,6 +1371,10 @@ function renderActionButtons() {
     '<span class="loading-swap"><span class="spinner-glyph mini-spinner"></span><span class="cancel-glyph"><ion-icon name="close-outline"></ion-icon></span></span>'
   if (hostSelectedBtn) {
     hostSelectedBtn.disabled = !state.hostingSelected && state.selectedSources.size === 0
+    hostSelectedBtn.classList.toggle(
+      'hidden',
+      !state.hostingSelected && state.selectedSources.size === 0
+    )
     hostSelectedBtn.classList.toggle('loading-cancel', state.hostingSelected)
     hostSelectedBtn.innerHTML = state.hostingSelected
       ? loadingCancelMarkup()
@@ -1386,6 +1391,10 @@ function renderActionButtons() {
     const disabled =
       !state.downloadingSelected && (!state.inviteEntries.length || state.inviteSelected.size === 0)
     downloadSelectedBtn.disabled = disabled
+    downloadSelectedBtn.classList.toggle(
+      'hidden',
+      !state.downloadingSelected && state.inviteSelected.size === 0
+    )
     downloadSelectedBtn.setAttribute(
       'aria-label',
       state.downloadingSelected ? 'Cancel download' : 'Download selected'
@@ -1397,6 +1406,10 @@ function renderActionButtons() {
   }
   if (hostsStopSelectedBtn) {
     hostsStopSelectedBtn.disabled = !state.stoppingSelectedHosts && state.selectedHosts.size === 0
+    hostsStopSelectedBtn.classList.toggle(
+      'hidden',
+      !state.stoppingSelectedHosts && state.selectedHosts.size === 0
+    )
     hostsStopSelectedBtn.classList.toggle('loading-cancel', state.stoppingSelectedHosts)
     hostsStopSelectedBtn.innerHTML = state.stoppingSelectedHosts
       ? loadingCancelMarkup()
@@ -1405,6 +1418,10 @@ function renderActionButtons() {
   if (historyRehostSelectedBtn) {
     historyRehostSelectedBtn.disabled =
       !state.rehostingSelectedBulk && state.selectedHistory.size === 0
+    historyRehostSelectedBtn.classList.toggle(
+      'hidden',
+      !state.rehostingSelectedBulk && state.selectedHistory.size === 0
+    )
     historyRehostSelectedBtn.classList.toggle('loading-cancel', state.rehostingSelectedBulk)
     historyRehostSelectedBtn.innerHTML = state.rehostingSelectedBulk
       ? loadingCancelMarkup()
@@ -1688,6 +1705,8 @@ function renderSources() {
   if (sourceCountEl) sourceCountEl.textContent = String(state.sources.length)
   const allSelected =
     state.sources.length > 0 && state.selectedSources.size === state.sources.length
+  sourceSelectToggleBtn.classList.toggle('hidden', state.sources.length < 2)
+  sourceRemoveAllBtn.classList.toggle('hidden', state.selectedSources.size === 0)
   sourceSelectToggleBtn.innerHTML = allSelected
     ? '<ion-icon name="checkbox-outline"></ion-icon>'
     : '<ion-icon name="square-outline"></ion-icon>'
@@ -1775,6 +1794,7 @@ function renderHosts() {
   })
 
   const allSelected = hosts.length > 0 && state.selectedHosts.size === hosts.length
+  hostsSelectToggleBtn.classList.toggle('hidden', hosts.length < 2)
   hostsSelectToggleBtn.innerHTML = allSelected
     ? '<ion-icon name="checkbox-outline"></ion-icon>'
     : '<ion-icon name="square-outline"></ion-icon>'
@@ -1903,6 +1923,8 @@ function renderHistory() {
 
   const allSelected =
     state.hostHistory.length > 0 && state.selectedHistory.size === state.hostHistory.length
+  historySelectToggleBtn.classList.toggle('hidden', state.hostHistory.length < 2)
+  historyRemoveSelectedBtn.classList.toggle('hidden', state.selectedHistory.size === 0)
   historySelectToggleBtn.innerHTML = allSelected
     ? '<ion-icon name="checkbox-outline"></ion-icon>'
     : '<ion-icon name="square-outline"></ion-icon>'
@@ -1976,6 +1998,7 @@ function renderDriveRows() {
 
   const allSelected =
     state.inviteEntries.length > 0 && state.inviteSelected.size === state.inviteEntries.length
+  driveSelectToggleBtn.classList.toggle('hidden', state.inviteEntries.length < 2)
   driveSelectToggleBtn.innerHTML = allSelected
     ? '<ion-icon name="checkbox-outline"></ion-icon>'
     : '<ion-icon name="square-outline"></ion-icon>'

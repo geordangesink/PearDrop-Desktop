@@ -787,12 +787,26 @@ async function createWindow() {
   const win = new BrowserWindow({
     width: 1120,
     height: 720,
+    minWidth: 680,
+    minHeight: 560,
+    show: false,
+    backgroundColor: '#0b2018',
+    ...(process.platform === 'darwin'
+      ? {
+          titleBarStyle: 'hiddenInset',
+          trafficLightPosition: { x: 16, y: 18 }
+        }
+      : {}),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       sandbox: false,
       contextIsolation: false,
       nodeIntegration: true
     }
+  })
+
+  win.once('ready-to-show', () => {
+    if (!win.isDestroyed()) win.show()
   })
 
   win.on('close', (event) => {
