@@ -27,6 +27,11 @@ npm start -- --storage /custom/path --relay ws://localhost:49443
 npm test
 ```
 
+## Release
+
+stage to pear://gcczmxycaa1bo56943bn8zg1f4ci8ngpaye3mz4u4wocb6br56by
+-> multisig
+
 ## Notes for Contributors
 
 - Keep renderer and worker responsibilities separated.

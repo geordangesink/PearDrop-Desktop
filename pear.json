@@ -1,0 +1,7 @@
+{
+  "multisig": {
+    "publicKeys": ["kxzpu6rzem4kb7d9ea9dqmzk7r4is4wnsu4ooaef6mcbcbsihfwo", "j1895xujrmgo7dfg7rtz81wo3k9s5ddee331gpupdxi9jx11urzo"],
+    "namespace": "PearDrop/Desktop",
+    "quorum": 1
+  }
+}
