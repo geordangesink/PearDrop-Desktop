@@ -1698,6 +1698,7 @@ function renderTabs() {
 
 function renderSourceMenu() {
   sourceAddMenuEl.classList.toggle('hidden', !state.sourceMenuOpen)
+  sourceAddMenuEl.closest('.source-panel')?.classList.toggle('menu-open', state.sourceMenuOpen)
 }
 
 function renderSources() {

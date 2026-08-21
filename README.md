@@ -29,7 +29,7 @@ npm test
 
 ## Release
 
-stage to pear://gcczmxycaa1bo56943bn8zg1f4ci8ngpaye3mz4u4wocb6br56by
+stage to pear://kziu5nt8dqyznrit8w8hkgppuuhk4weipwgjjsmcggyuixag46ny
 -> multisig
 
 ## Notes for Contributors

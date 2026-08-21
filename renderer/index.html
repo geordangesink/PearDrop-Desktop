@@ -804,7 +804,7 @@
       .menu {
         position: absolute;
         top: calc(100% + 6px);
-        left: 0;
+        right: 0;
         border: 1px solid var(--line);
         border-radius: 10px;
         background: var(--card);
@@ -1751,6 +1751,10 @@
       .source-panel {
         min-height: 354px;
       }
+      .source-panel.menu-open {
+        z-index: 50;
+        overflow: visible;
+      }
       .transfer-stage .panel-head {
         margin-bottom: 12px;
       }
@@ -2371,7 +2375,7 @@
       <section id="onboarding-modal" class="modal-root hidden">
         <div class="modal-backdrop"></div>
         <div class="modal-card">
-          <img class="onboarding-logo" src="../assets/icons/transparent.png" alt="PearDrop" />
+          <img class="onboarding-logo" src="./assets/logo.png" alt="PearDrop" />
           <p class="sr-only">Choose your theme and set your peer name.</p>
           <div class="modal-packaging theme-choices">
             <label aria-label="System theme" title="System theme"
